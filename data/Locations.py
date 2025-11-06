@@ -17,7 +17,7 @@ def get_pickpocket_region_and_location(i: int, loot: str, eps: List[List[int]]) 
         region_name = f"Episodes "
         for ep in eps:
             region_name = region_name + f"{ep[0]} ({ep[1]}), "
-        region_name = region_name[:-7] + "or " + region_name[-6:-2]
+        region_name = region_name[:-7] + "or " + region_name[-7:-2]
         location_name = f"Pickpocket {loot} - " + region_name
     return [region_name, location_name]
 
