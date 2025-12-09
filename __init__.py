@@ -265,5 +265,6 @@ class Sly2World(World):
         slot_data = self.get_options_as_dict()
         slot_data["thiefnet_costs"] = self.thiefnet_costs
         slot_data["skip_intro"] = True
+        slot_data["world_version"] = self.world_version
 
         return slot_data

@@ -122,6 +122,7 @@ class Sly2Context(CommonContext):
 
     def __init__(self, server_address, password):
         super().__init__(server_address, password)
+        self.version = [0,6,0]
         self.game_interface = Sly2Interface(logger)
 
     def notification(self, text: str):
@@ -146,6 +147,9 @@ class Sly2Context(CommonContext):
     def on_package(self, cmd: str, args: dict):
         if cmd == "Connected":
             self.slot_data = args["slot_data"]
+
+            if self.version != args["slot_data"]["world_version"]:
+                raise Exception(f"World generation version and client version don't match up. The world was generated with version {args["slot_data"]["world_version"]}, but the client is version {self.version}")
 
             self.thiefnet_purchases = PowerUps(*[
                 Locations.location_dict[f"ThiefNet {i+1:02}"].code in self.checked_locations
