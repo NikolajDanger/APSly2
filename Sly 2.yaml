@@ -124,13 +124,18 @@ requires:
 
   ## Items
 
-  # Add the TOM ability to the pool.
+  # Add the TOM ability/gadget to the pool.
   include_tom:
     'false': 50
     'true': 0
 
-  # Add the Mega Jump ability to the pool.
+  # Add the Mega Jump ability/gadget to the pool.
   include_mega_jump:
+    'false': 50
+    'true': 0
+
+  # Add the Time Rush ability/gadget to the pool.
+  include_time_rush:
     'false': 50
     'true': 0
 

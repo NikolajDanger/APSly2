@@ -15,7 +15,8 @@ def gen_powerups(world: "Sly2World") -> list[Item]:
     for item_name in item_groups["Power-Up"]:
         if (
             (item_name == "TOM" and not world.options.include_tom) or
-            (item_name == "Mega Jump" and not world.options.include_mega_jump)
+            (item_name == "Mega Jump" and not world.options.include_mega_jump) or
+            (item_name == "Time Rush" and not world.options.include_time_rush)
         ):
             continue
         else:

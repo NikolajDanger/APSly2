@@ -39,6 +39,7 @@ powerup_list = [
     ("Shadow Power",            ItemClassification.useful,      "Power-Up"),
     ("TOM",                     ItemClassification.useful,      "Power-Up"),
     ("Mega Jump",               ItemClassification.progression, "Power-Up"),
+    ("Time Rush",               ItemClassification.useful,      "Power-Up"),
 
     ("Trigger Bomb",            ItemClassification.useful,      "Power-Up"),
     ("Size Destabilizer",       ItemClassification.useful,      "Power-Up"),

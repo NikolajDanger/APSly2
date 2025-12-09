@@ -110,7 +110,7 @@ class RequiredKeysGoal(Range):
 
 class IncludeTOM(Toggle):
     """
-    Add the TOM ability to the pool.
+    Add the TOM ability/gadget to the pool.
     """
 
     display_name = "Include TOM"
@@ -118,10 +118,18 @@ class IncludeTOM(Toggle):
 
 class IncludeMegaJump(Toggle):
     """
-    Add the Mega Jump ability to the pool.
+    Add the Mega Jump ability/gadget to the pool.
     """
 
     display_name = "Include Mega Jump"
+
+
+class IncludeTimeRush(Toggle):
+    """
+    Add the Time Rush ability/gadget to the pool.
+    """
+
+    display_name = "Include Time Rush"
 
 
 class CoinsMinimum(Range):
@@ -235,6 +243,7 @@ class Sly2Options(PerGameCommonOptions):
     required_keys_goal: RequiredKeysGoal
     include_tom: IncludeTOM
     include_mega_jump: IncludeMegaJump
+    include_time_rush: IncludeTimeRush
     coins_minimum: CoinsMinimum
     coins_maximum: CoinsMaximum
     include_vaults: IncludeVaults
@@ -259,6 +268,7 @@ sly2_option_groups = [
     OptionGroup("Items",[
         IncludeTOM,
         IncludeMegaJump,
+        IncludeTimeRush,
         CoinsMinimum,
         CoinsMaximum,
         BottleItemBundleSize

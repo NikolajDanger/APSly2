@@ -186,15 +186,16 @@ class Sly2World(World):
                     self.options.required_keys_goal.value = slot_data["required_keys_goal"]
                     self.options.include_tom.value = slot_data["include_tom"]
                     self.options.include_mega_jump.value = slot_data["include_mega_jump"]
+                    self.options.include_time_rush.value = slot_data["include_time_rush"]
                     self.options.coins_minimum.value = slot_data["coins_minimum"]
                     self.options.coins_maximum.value = slot_data["coins_maximum"]
                     self.options.thiefnet_minimum.value = slot_data["thiefnet_minimum"]
                     self.options.thiefnet_maximum.value = slot_data["thiefnet_maximum"]
                     self.options.include_vaults.value = slot_data["include_vaults"]
+                    self.options.bottle_item_bundle_size.value = slot_data["bottle_item_bundle_size"]
                     self.options.bottle_location_bundle_size.value = slot_data["bottle_location_bundle_size"]
                     self.options.bottlesanity.value = slot_data["bottlesanity"]
                     self.options.scout_thiefnet.value = slot_data["scout_thiefnet"]
-                    self.options.bottle_item_bundle_size.value = slot_data["bottle_item_bundle_size"]
             return
 
         self.validate_options(self.options)
@@ -245,6 +246,7 @@ class Sly2World(World):
             "required_keys_goal",
             "include_tom",
             "include_mega_jump",
+            "include_time_rush",
             "coins_minimum",
             "coins_maximum",
             "thiefnet_minimum",

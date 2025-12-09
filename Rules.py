@@ -89,7 +89,8 @@ def set_rules(world: "Sly2World"):
                     state.has("Feral Pounce", player) or
                     state.has("Hover Pack", player)  or
                     state.has("Turnbuckle Launch", player) # or
-                    # state.has("Progressive Anatomy for Disaster", player, 3) # Obtainable during Mega Jump Job
+                    # state.has("Progressive Anatomy for Disaster", player, 3)
+                    # Obtainable during Mega Jump Job. If jobs were replayable, this rule COULD be applied if desired.
                 )
             )
         else:
@@ -110,7 +111,8 @@ def set_rules(world: "Sly2World"):
                     state.has("Feral Pounce", player) or
                     state.has("Hover Pack", player) or
                     state.has("Turnbuckle Launch", player) # or
-                    # state.has("Progressive Anatomy for Disaster", player, 3) # Obtainable during Mega Jump Job
+                    # state.has("Progressive Anatomy for Disaster", player, 3)
+                    # Obtainable during Mega Jump Job. If jobs were replayable, this rule COULD be applied if desired.
                     
                 )
             )
