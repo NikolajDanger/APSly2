@@ -226,7 +226,7 @@ ADDRESSES = {
         "reload values": 0x3E1088,
         "camera focus": 0x2DE258,
         "fade type": 0x443798,
-        "items received": 0x3D4C08,
+        "items received": 0x3D57FC,
         "coins": 0x3D4B00,
         "gadgets": 0x3D4AF8,
         "active character": 0x3D4A6C,
