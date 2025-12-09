@@ -6,7 +6,6 @@ from NetUtils import ClientStatus
 
 from .data import Items, Locations
 from .data.Constants import EPISODES, POWERUP_TEXT, OTHER_POWERUPS, TREASURES, DEATH_TYPES, LOOT
-from .data.Locations import get_pickpocket_region_and_location
 from .Sly2Interface import Sly2Episode, PowerUps
 
 if TYPE_CHECKING:
@@ -472,10 +471,10 @@ async def handle_checks(ctx: 'Sly2Context') -> None:
                 ctx.locations_checked.add(location_code)
 
     # Loot
-    for i, (loot, eps) in enumerate(LOOT.items()):
+    for i, loot in enumerate(LOOT.keys()):
         address = ctx.game_interface.addresses["loot"][i]
         if ctx.game_interface.treasure_or_loot_stolen(address):
-            location_name = get_pickpocket_region_and_location(i, loot, eps)[1]
+            location_name = f"Pickpocket {loot}"
             location_code = Locations.location_dict[location_name].code
             ctx.locations_checked.add(location_code)
 

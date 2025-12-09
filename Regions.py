@@ -2,8 +2,7 @@ import typing
 
 from BaseClasses import Region, CollectionState, Location
 
-from .data.Locations import location_dict, location_groups, get_pickpocket_region_and_location
-from .data.Items import item_groups
+from .data.Locations import location_dict
 from .data.Constants import EPISODES, TREASURES, LOOT
 
 if typing.TYPE_CHECKING:
@@ -48,12 +47,6 @@ def create_access_rule(episode: str, n: int, options: "Sly2Options", player: int
 
         return access
 
-    return rule
-
-# Likely don't need these definition inputs, but IDK.
-def create_pickpocket_access_rule(region: str, options: "Sly2Options", player: int):
-    """Returns a function that checks if the player has access to a specific region"""
-    def rule(state: CollectionState): return True
     return rule
 
 def create_regions(world: "Sly2World"):
@@ -140,8 +133,9 @@ def create_regions(world: "Sly2World"):
         # Because loot can be found in multiple episodes but AP locations can only be in 1 region, we make "hybrid-
         # regions" for these loot locations that can be accessed if the player has access to any 1 of the "base regions"
         hybrid_region_names = []
-        for i, (loot, eps) in enumerate(LOOT.items()):
-            region_name, location_name = get_pickpocket_region_and_location(i, loot, eps)
+        for loot, eps in LOOT.items():
+            location_name = f"Pickpocket {loot}"
+            region_name = "/".join([f"Episode {i} ({j})" for i,j in eps])
 
             # If it is in only 1 episode or a hybrid region that's already made, then add that location to that region.
             if len(eps) == 1 or region_name in hybrid_region_names:
@@ -159,10 +153,6 @@ def create_regions(world: "Sly2World"):
                 world.multiworld.regions.append(region)
                 for ep in eps:
                     other_region = world.get_region(f"Episode {ep[0]} ({ep[1]})")
-                    other_region.connect(
-                        world.get_region(region_name),
-                        None,
-                        create_pickpocket_access_rule(region_name, world.options, world.player)
-                    )
+                    other_region.connect(region)
 
                 hybrid_region_names.append(region_name)
