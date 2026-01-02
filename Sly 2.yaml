@@ -6,7 +6,7 @@ description: 'Default Sly 2: Band of Thieves Template'
 game:
   'Sly 2: Band of Thieves': 0.7.0
 requires:
-  version: 0.6.1 # Version of Archipelago required for this yaml to work as expected.
+  version: 0.6.5 # Version of Archipelago required for this yaml to work as expected.
 
 'Sly 2: Band of Thieves':
   ## Game Options
