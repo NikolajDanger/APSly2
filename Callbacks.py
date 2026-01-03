@@ -513,29 +513,8 @@ async def handle_check_goal(ctx: 'Sly2Context') -> None:
     if ctx.slot_data is None:
         return
 
-    if ctx.slot_data["goal"] < 5:
-        victory_name = [
-            "The Black Chateau - Operation: Thunder Beak",
-            "The Predator Awakens - Operation: Wet Tiger",
-            "A Tangled Web - Operation: High Road",
-            "Menace from the North, Eh! - Operation: Canada Games",
-            "Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la"
-        ][ctx.slot_data["goal"]]
-        victory_code = Locations.location_dict[victory_name].code
-        if victory_code in ctx.locations_checked:
-            await ctx.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
-
-    elif ctx.slot_data["goal"] == 5:
-        victory_names = [
-            "The Black Chateau - Operation: Thunder Beak",
-            "The Predator Awakens - Operation: Wet Tiger",
-            "A Tangled Web - Operation: High Road",
-            "Menace from the North, Eh! - Operation: Canada Games",
-            "Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la"
-        ]
-        victory_codes = [Locations.location_dict[name].code for name in victory_names]
-
-        if all(code in ctx.checked_locations for code in victory_codes):
+    if ctx.slot_data["goal"] < 6:
+        if ctx.game_interface.is_goaled(ctx.slot_data["goal"]):
             await ctx.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
     elif ctx.slot_data["goal"] == 6:
         clockwerk_parts = [i for i in ctx.items_received if Items.from_id(i.item).category == "Clockwerk Part"]

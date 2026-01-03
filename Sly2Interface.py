@@ -177,6 +177,15 @@ class Sly2Interface(GameInterface):
 
         return pointer
 
+    def is_goaled(self, condition: int) -> bool:
+        if condition < 5:
+            address = self.addresses["victory completion"][condition]
+            return self._read32(address) == 1
+        elif condition == 5:
+            return all(self._read32(address) == 1 for address in self.addresses["victory completion"])
+        else:
+            return False
+
     def vault_opened(self, vault: int) -> bool:
         return self._read32(self.addresses["vaults"][vault-1]) == 1
 
