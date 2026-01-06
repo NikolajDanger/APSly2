@@ -14,7 +14,8 @@ from dataclasses import dataclass
 class StartingEpisode(Choice):
     """
     Select Which episode to start with. Starting with Anatomy for disaster
-    is not compatible with "Episode 8 Keys".
+    is not compatible with the "first section" and "whole episode" options for
+    "Episode 8 Keys".
     """
 
     display_name = "Starting Episode"
