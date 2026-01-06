@@ -222,6 +222,13 @@ requires:
     'false': 50
     'true': 0
 
+  # Whether to shuffle all pickpocketing loot locations. A guard could have the
+  # same piece of loot multiple times on their table, so there is no
+  # guaranteeing that each guard will have exactly 6 different pieces of loot.
+  randomize_loot:
+    'false': 50
+    'true': 0
+
   # How many bottles you need to collect for each check. Set to 0 to disable
   # bottles as checks.
   #

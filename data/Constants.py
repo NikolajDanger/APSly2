@@ -192,39 +192,50 @@ TREASURES = {
     ],
 }
 
-# (episode, section)
+# (episode, large guard, table slot)
 LOOT = {
-   "Bronze Comb": [(1,1)],
-   "Silver Comb": [(1,1)],
-   "Gold Comb": [(1,1)],
-   "Bronze Watch": [(1,2)],
-   "Silver Watch": [(1,2)],
-   "Gold Watch": [(1,2)],
-   "Bronze Ring": [(1,3), (2,1), (3,1)],
-   "Silver Ring": [(1,3), (2,1), (3,1)],
-   "Gold Ring": [(1,3), (2,1), (3,1)],
-   "Bronze Pen": [(2,2), (3,2)],
-   "Silver Pen": [(2,2), (3,2)],
-   "Gold Pen": [(2,2), (3,2)],
-   "Bronze Medal": [(2,3), (3,3), (4,1), (5,1)],
-   "Silver Medal": [(2,3), (3,3), (4,1), (5,1)],
-   "Gold Medal": [(2,3), (3,3), (4,1), (5,1)],
-   "Bronze Pocket Watch": [(4,2), (5,2)],
-   "Silver Pocket Watch": [(4,2), (5,2)],
-   "Gold Pocket Watch": [(4,2), (5,2)],
-   "Topaz": [(4,3), (5,3), (6,1), (7,1)],
-   "Sapphire": [(4,3), (5,3), (6,1), (7,1)],
-   "Ruby": [(4,3), (5,3), (6,1), (7,1)],
-   "Small Nugget": [(6,2), (7,2), (8,1)],
-   "Medium Nugget": [(6,2), (7,2), (8,1)],
-   "Large Gold Bar": [(6,2), (7,2), (8,1)],
-   "Small Necklace": [(6,3), (7,3), (8,2)],
-   "Medium Necklace": [(6,3), (7,3), (8,2)],
-   "Large Necklace": [(6,3), (7,3), (8,2)],
-   "Small Diamond": [(8,3)],
-   "Medium Diamond": [(8,3)],
-   "Large Diamond": [(8,3)],
+    "Bronze Comb": [(1,False,1)],
+    "Silver Comb": [(1,False,2),(1,True,2)],
+    "Gold Comb": [(1,True,1)],
+
+    "Bronze Ring": [(1,False,5), (2,False,1), (3,False,1)],
+    "Silver Ring": [(1,False,6), (1,True,6), (2,False,2), (2,True,2), (3,False,2), (3,True,2)],
+    "Gold Ring": [(1,True,5), (2,True,1), (3,True,1)],
+
+    "Bronze Watch": [(1,False,3)],
+    "Silver Watch": [(1,False,4),(1,True,4)],
+    "Gold Watch": [(1,True,3)],
+
+    "Bronze Pen": [(2,False,3), (3,False,3)],
+    "Silver Pen": [(2,False,4), (2,True,4), (3,False,4), (3,True,4)],
+    "Gold Pen": [(2,True,3), (3,True,3)],
+
+    "Bronze Medal": [(2,False,5), (3,False,5), (4,False,1), (5,False,1)],
+    "Silver Medal": [(2,False,6), (2,True,6), (3,False,6), (3,True,6), (4,False,2), (4,True,2), (5,False,2), (5,True,2)],
+    "Gold Medal": [(2,True,5), (3,True,5), (4,True,1), (5,True,1)],
+
+    "Bronze Pocket Watch": [(4,False,3), (5,False,3)],
+    "Silver Pocket Watch": [(4,False,4), (4,True,4), (5,False,4), (5,True,4)],
+    "Gold Pocket Watch": [(4,True,3), (5,True,3)],
+
+    "Small Nugget": [(6,False,3), (7,False,3), (8,False,1)],
+    "Medium Nugget": [(6,False,4), (6,True,4), (7,False,4), (7,True,4), (8,False,2), (8,True,2)],
+    "Large Gold Bar": [(6,True,3), (7,True,3), (8,True,1)],
+
+    "Topaz": [(4,False,5), (5,False,5), (6,False,1), (7,False,1)],
+    "Sapphire": [(4,False,6), (4,True,6), (5,False,6), (5,True,6), (6,False,2), (6,True,2), (7,False,2), (7,True,2)],
+    "Ruby": [(4,True,5), (5,True,5), (6,True,1), (7,True,1)],
+
+    "Small Diamond": [(8,False,5)],
+    "Medium Diamond": [(8,False,6),(8,True,6)],
+    "Large Diamond": [(8,True,5)],
+
+    "Small Necklace": [(6,False,5), (7,False,5), (8,False,3)],
+    "Medium Necklace": [(6,False,6), (6,True,6), (7,False,6), (7,True,6), (8,False,4), (8,True,4)],
+    "Large Necklace": [(6,True,5), (7,True,5), (8,True,3)],
 }
+
+LOOT_IDS = {loot: 0x45A+i for i, loot in enumerate(LOOT.keys())}
 
 HUB_MAPS = [
     2,
@@ -486,10 +497,17 @@ ADDRESSES = {
             0x3D4B6C
         ],
         "loot chance": [(0x2C378C+i*0x3c, 0x2C378C+i*0x3c+0x220) for i in range(8)],
+        "loot table odds": [
+            (
+                (0x2C3790+i*0x3c+j*0x8 for j in range(6)),
+                (0x2C3790+i*0x3c+0x220+j*0x8 for j in range(6)),
+            )
+            for i in range(8)
+        ],
         "loot table": [
             (
-                (0x2C39B0+i*0x3c+j*0x8 for j in range(6)),
-                (0x2C39B0+i*0x3c+0x220+j*0x8 for j in range(6)),
+                (0x2C3794+i*0x3c+j*0x8 for j in range(6)),
+                (0x2C3794+i*0x3c+0x220+j*0x8 for j in range(6)),
             )
             for i in range(8)
         ],

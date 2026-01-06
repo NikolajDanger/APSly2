@@ -18,7 +18,7 @@ from .Sly2Options import Sly2Options, StartingEpisode, sly2_option_groups
 from .Regions import create_regions
 from .data.Items import item_dict, item_groups, Sly2Item
 from .data.Locations import location_dict, location_groups
-from .data.Constants import EPISODES
+from .data.Constants import EPISODES, LOOT
 from .ItemPool import gen_pool
 from .Rules import set_rules
 
@@ -68,6 +68,7 @@ class Sly2World(World):
     location_name_groups = location_groups
 
     thiefnet_costs: List[int] = []
+    loot_table: dict[str, list[tuple[int,bool,int]]] = {}
 
     # this is how we tell the Universal Tracker we want to use re_gen_passthrough
     @staticmethod
@@ -167,6 +168,23 @@ class Sly2World(World):
             #     f"Thiefnet minimum cannot be larger than maximum (min: {opt.thiefnet_minimum}, max: {opt.thiefnet_maximum})"
             # )
 
+    def randomize_loot_table(self) -> dict[str, list[tuple[int,bool,int]]]:
+        all_locations = [loc for locations in LOOT.values() for loc in locations]
+        loot_table = {loot: [] for loot in LOOT.keys()}
+
+        # First make sure each item is at least one place
+        for loot in loot_table.keys():
+            loc_index = self.random.randint(0,len(all_locations)-1)
+            loc = all_locations.pop(loc_index)
+            loot_table[loot].append(loc)
+
+        # Then randomly distribute the others
+        for loc in all_locations:
+            loot = self.random.choice(list(loot_table.keys()))
+            loot_table[loot].append(loc)
+
+        return loot_table
+
     def generate_early(self) -> None:
 
         # implement .yaml-less Universal Tracker support
@@ -178,6 +196,7 @@ class Sly2World(World):
                 if "Sly 2: Band of Thieves" in re_gen_passthrough:
                     slot_data = re_gen_passthrough["Sly 2: Band of Thieves"]
                     self.thiefnet_costs = slot_data["thiefnet_costs"]
+                    self.loot_table = slot_data["loot_table"]
                     self.options.starting_episode.value = slot_data["starting_episode"]
                     self.options.goal.value = slot_data["goal"]
                     self.options.keys_in_pool.value = slot_data["keys_in_pool"]
@@ -194,6 +213,7 @@ class Sly2World(World):
                     self.options.include_vaults.value = slot_data["include_vaults"]
                     self.options.include_pickpocketing.value = slot_data["include_pickpocketing"]
                     self.options.rebalance_pickpocketing.value = slot_data["rebalance_pickpocketing"]
+                    self.options.randomize_loot.value = slot_data["randomize_loot"]
                     self.options.bottle_item_bundle_size.value = slot_data["bottle_item_bundle_size"]
                     self.options.bottle_location_bundle_size.value = slot_data["bottle_location_bundle_size"]
                     self.options.bottlesanity.value = slot_data["bottlesanity"]
@@ -208,6 +228,11 @@ class Sly2World(World):
             self.random.randint(thiefnet_min,thiefnet_max)
             for _ in range(24)
         ])
+
+        if self.options.randomize_loot:
+            self.loot_table = self.randomize_loot_table()
+        else:
+            self.loot_table = LOOT
 
     def get_filler_item_name(self) -> str:
         # Currently just coins
@@ -256,6 +281,7 @@ class Sly2World(World):
             "include_vaults",
             "include_pickpocketing",
             "rebalance_pickpocketing",
+            "randomize_loot",
             "bottle_location_bundle_size",
             "bottlesanity",
             "bottle_item_bundle_size",
@@ -266,6 +292,7 @@ class Sly2World(World):
     def fill_slot_data(self) -> Mapping[str, Any]:
         slot_data = self.get_options_as_dict()
         slot_data["thiefnet_costs"] = self.thiefnet_costs
+        slot_data["loot_table"] = self.loot_table
         slot_data["skip_intro"] = True
         slot_data["world_version"] = self.world_version
 

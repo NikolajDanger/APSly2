@@ -6,7 +6,7 @@ from logging import Logger
 from time import sleep, time
 
 from .pcsx2_interface.pine import Pine
-from .data.Constants import MENU_RETURN_DATA, CAIRO_RETURN_DATA, ADDRESSES, POWERUP_TEXT, HUB_MAPS
+from .data.Constants import MENU_RETURN_DATA, CAIRO_RETURN_DATA, ADDRESSES, POWERUP_TEXT, HUB_MAPS, LOOT_IDS
 
 class Sly2Episode(IntEnum):
     Title_Screen = 0
@@ -322,11 +322,22 @@ class Sly2Interface(GameInterface):
         self._write_float(addresses[0], loot_chances[0])
         self._write_float(addresses[1], loot_chances[1])
 
-    def set_loot_table(self, episode: Sly2Episode, loot_tables: tuple[tuple[int,int,int,int,int,int],tuple[int,int,int,int,int,int]]):
-        addresses = self.addresses["loot table"][episode.value-1]
-        for i, table in enumerate(loot_tables):
+    def set_loot_table_odds(self, episode: Sly2Episode, loot_table: tuple[tuple[int,int,int,int,int,int],tuple[int,int,int,int,int,int]]):
+        addresses = self.addresses["loot table odds"][episode.value-1]
+        for i, table in enumerate(loot_table):
             for j, chance in enumerate(table):
                 self._write32(addresses[i][j], chance)
+
+    def set_loot_table(self, episode: Sly2Episode, loot_table: dict[str, list[tuple[int,bool,int]]]):
+        addresses = self.addresses["loot table odds"][episode.value-1]
+
+        for loot, locations in loot_table.items():
+            for ep, large, slot in locations:
+                if ep != episode.value:
+                    continue
+                address = addresses[int(large)][slot-1]
+                loot_id = LOOT_IDS[loot]
+                self._write32(address, loot_id)
 
     def in_safehouse(self) -> bool:
         # Some of these checks are not necessary, but I absolutely can't be

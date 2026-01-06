@@ -1,4 +1,5 @@
 import typing
+from math import ceil
 
 from BaseClasses import Region, CollectionState, Location
 
@@ -133,12 +134,12 @@ def create_regions(world: "Sly2World"):
         # Because loot can be found in multiple episodes but AP locations can only be in 1 region, we make "hybrid-
         # regions" for these loot locations that can be accessed if the player has access to any 1 of the "base regions"
         hybrid_region_names = []
-        for loot, eps in LOOT.items():
+        for loot, eps in world.loot_table.items():
             location_name = f"Pickpocket {loot}"
             if hasattr(world.multiworld, "generation_is_fake"):
-                regions = [f"Episode {i} (1)" for i,j in eps]
+                regions = list(set([f"Episode {i} (1)" for i,_,_ in eps]))
             else:
-                regions = [f"Episode {i} ({j})" for i,j in eps]
+                regions = list(set([f"Episode {i} ({ceil(j/2)})" for i,_,j in eps]))
 
             region_name = "/".join(regions)
 

@@ -203,6 +203,14 @@ class RebalancePickpocketing(Toggle):
     """
     display_name = "Rebalance Pickpocketing"
 
+class RandomizeLoot(Toggle):
+    """
+    Whether to shuffle all pickpocketing loot locations. A guard could have the
+    same piece of loot multiple times on their table, so there is no
+    guaranteeing that each guard will have exactly 6 different pieces of loot.
+    """
+    display_name = "Randomize Loot"
+
 class BottleLocationBundleSize(Range):
     """
     How many bottles you need to collect for each check. Set to 0 to disable
@@ -283,6 +291,7 @@ class Sly2Options(PerGameCommonOptions):
     include_vaults: IncludeVaults
     include_pickpocketing: IncludePickpocketing
     rebalance_pickpocketing: RebalancePickpocketing
+    randomize_loot: RandomizeLoot
     thiefnet_minimum: ThiefNetCostMinimum
     thiefnet_maximum: ThiefNetCostMaximum
     bottle_location_bundle_size: BottleLocationBundleSize
@@ -315,6 +324,8 @@ sly2_option_groups = [
         ThiefNetCostMaximum,
         IncludeVaults,
         IncludePickpocketing,
+        RebalancePickpocketing,
+        RandomizeLoot,
         BottleLocationBundleSize,
         BottleSanity,
         ScoutThiefnet

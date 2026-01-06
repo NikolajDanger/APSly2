@@ -61,6 +61,9 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
             if ctx.slot_data["rebalance_pickpocketing"]:
                 set_pickpocketing(ctx)
 
+            if ctx.slot_data["randomize_loot"]:
+                set_loot_table(ctx)
+
             check_jobs(ctx)
 
             if not in_safehouse:
@@ -92,14 +95,20 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
 
     boot_from_invalid_episode(ctx, ap_connected)
 
-
 def set_pickpocketing(ctx: 'Sly2Context'):
     """Set pickpocking chances to be higher"""
     if ctx.current_episode is None:
         return
     ctx.game_interface.set_loot_chance(ctx.current_episode, (0.5, 1.0))
     loot_table = (17,17,17,17,16,16)
-    ctx.game_interface.set_loot_table(ctx.current_episode, (loot_table, loot_table))
+    ctx.game_interface.set_loot_table_odds(ctx.current_episode, (loot_table, loot_table))
+
+def set_loot_table(ctx: 'Sly2Context'):
+    if ctx.slot_data is None or ctx.current_episode is None:
+        return
+
+    loot_table = ctx.slot_data["loot_table"]
+    ctx.game_interface.set_loot_table(ctx.current_episode, loot_table)
 
 def fix_mega_jump(ctx: 'Sly2Context'):
     if ctx.powerups.mega_jump:
