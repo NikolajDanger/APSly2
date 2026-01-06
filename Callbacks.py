@@ -48,6 +48,12 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
         if in_hub and not ctx.in_hub:
             ctx.in_hub = True
 
+        if ctx.slot_data["rebalance_pickpocketing"]:
+            set_pickpocketing(ctx)
+
+        if ctx.slot_data["randomize_loot"]:
+            set_loot_table(ctx)
+
         # The DAG unloads before the client can see that the clock-la mission
         # is finished. That's why we need to check it directly.
         check_clockla(ctx)
@@ -57,12 +63,6 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
             in_hub = ctx.game_interface.in_hub()
             if in_hub and current_job == 0xffffffff:
                 set_jobs(ctx)
-
-            if ctx.slot_data["rebalance_pickpocketing"]:
-                set_pickpocketing(ctx)
-
-            if ctx.slot_data["randomize_loot"]:
-                set_loot_table(ctx)
 
             check_jobs(ctx)
 
