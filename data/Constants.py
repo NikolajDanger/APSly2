@@ -510,15 +510,15 @@ ADDRESSES = {
         "loot chance": [(0x2C378C+i*0x3c, 0x2C378C+i*0x3c+0x220) for i in range(8)],
         "loot table odds": [
             (
-                (0x2C3790+i*0x3c+j*0x8 for j in range(6)),
-                (0x2C3790+i*0x3c+0x220+j*0x8 for j in range(6)),
+                tuple(0x2C3790+i*0x3c+j*0x8 for j in range(6)),
+                tuple(0x2C3790+i*0x3c+0x220+j*0x8 for j in range(6)),
             )
             for i in range(8)
         ],
         "loot table": [
             (
-                (0x2C3794+i*0x3c+j*0x8 for j in range(6)),
-                (0x2C3794+i*0x3c+0x220+j*0x8 for j in range(6)),
+                tuple(0x2C3794+i*0x3c+j*0x8 for j in range(6)),
+                tuple(0x2C3794+i*0x3c+0x220+j*0x8 for j in range(6)),
             )
             for i in range(8)
         ],
