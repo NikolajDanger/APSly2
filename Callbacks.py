@@ -98,7 +98,7 @@ def set_pickpocketing(ctx: 'Sly2Context'):
     if ctx.current_episode is None:
         return
     ctx.game_interface.set_loot_chance(ctx.current_episode, (0.5, 1.0))
-    loot_table = (18,18,16,16,16,16)
+    loot_table = (17,17,17,17,16,16)
     ctx.game_interface.set_loot_table(ctx.current_episode, (loot_table, loot_table))
 
 def fix_mega_jump(ctx: 'Sly2Context'):
