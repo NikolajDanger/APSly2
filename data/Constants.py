@@ -485,6 +485,14 @@ ADDRESSES = {
             0x3D4B68,
             0x3D4B6C
         ],
+        "loot chance": [(0x2C378C+i*0x3c, 0x2C378C+i*0x3c+0x220) for i in range(8)],
+        "loot table": [
+            (
+                (0x2C39B0+i*0x3c+j*0x8 for j in range(6)),
+                (0x2C39B0+i*0x3c+0x220+j*0x8 for j in range(6)),
+            )
+            for i in range(8)
+        ],
         "text": {
             "infobox": [0x14,0x14,0x1c,0x24,0x24,0x1c,0x1c,0x14],
             "Press START (new)": 0x4b3970,

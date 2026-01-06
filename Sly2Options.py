@@ -191,6 +191,17 @@ class IncludePickpocketing(Toggle):
     """
     display_name = "Include Pickpocketing"
 
+class RebalancePickpocketing(Toggle):
+    """
+    Change the loot table chances. If enabled, will take effect even if
+    pickpocketing is not included as checks.
+
+    Increases the chances that enemies will have loot (20% -> 50% for small
+    guards and 40% -> 100% for big guards).
+    Also flattens the loot table drop rates from (30%/30%/15%/15%/5%/5%) to
+    (17%/17%/17%/17%/16%/16%).
+    """
+    display_name = "Rebalance Pickpocketing"
 
 class BottleLocationBundleSize(Range):
     """
@@ -271,6 +282,7 @@ class Sly2Options(PerGameCommonOptions):
     coins_maximum: CoinsMaximum
     include_vaults: IncludeVaults
     include_pickpocketing: IncludePickpocketing
+    rebalance_pickpocketing: RebalancePickpocketing
     thiefnet_minimum: ThiefNetCostMinimum
     thiefnet_maximum: ThiefNetCostMaximum
     bottle_location_bundle_size: BottleLocationBundleSize

@@ -211,6 +211,17 @@ requires:
     'false': 50
     'true': 0
 
+  # Change the loot table chances. If enabled, will take effect even if
+  # pickpocketing is not included as checks.
+
+  # Increases the chances that enemies will have loot (20% -> 50% for small
+  # guards and 40% -> 100% for big guards).
+  # Also flattens the loot table drop rates from (30%/30%/15%/15%/5%/5%) to
+  # (17%/17%/17%/17%/16%/16%).
+  rebalance_pickpocketing:
+    'false': 50
+    'true': 0
+
   # How many bottles you need to collect for each check. Set to 0 to disable
   # bottles as checks.
   #

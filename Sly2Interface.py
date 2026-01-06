@@ -103,6 +103,9 @@ class GameInterface():
     def _write_bytes(self, address: int, value: bytes):
         self.pcsx2_interface.write_bytes(address, value)
 
+    def _write_float(self, address: int, value: float):
+        self.pcsx2_interface.write_float(address, value)
+
     def connect_to_game(self):
         """
         Initializes the connection to PCSX2 and verifies it is connected to the
@@ -313,6 +316,17 @@ class Sly2Interface(GameInterface):
 
     def set_current_job(self, job: int) -> None:
         self._write32(self.addresses["job id"], job)
+
+    def set_loot_chance(self, episode: Sly2Episode, loot_chances: tuple[float, float]):
+        addresses = self.addresses["loot chance"][episode.value-1]
+        self._write_float(addresses[0], loot_chances[0])
+        self._write_float(addresses[1], loot_chances[1])
+
+    def set_loot_table(self, episode: Sly2Episode, loot_tables: tuple[tuple[int,int,int,int,int,int],tuple[int,int,int,int,int,int]]):
+        addresses = self.addresses["loot table"][episode.value-1]
+        for i, table in enumerate(loot_tables):
+            for j, chance in enumerate(table):
+                self._write32(addresses[i][j], chance)
 
     def in_safehouse(self) -> bool:
         # Some of these checks are not necessary, but I absolutely can't be
