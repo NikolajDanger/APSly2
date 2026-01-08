@@ -31,6 +31,9 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
 
         replace_text(ctx)
 
+        if ctx.game_interface.stuck_in_cairo():
+            ctx.game_interface.to_episode_menu()
+
         if ctx.slot_data["bottle_location_bundle_size"] != 0:
             set_bottles(ctx)
 

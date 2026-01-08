@@ -423,6 +423,12 @@ class Sly2Interface(GameInterface):
 
         self._reload(bytes.fromhex(MENU_RETURN_DATA))
 
+    def stuck_in_cairo(self) -> bool:
+        return (
+            self.get_current_map() == 0 and
+            self._read32(self.addresses["savefile last world"]) != 0
+        )
+
     def unlock_episodes(self) -> None:
         self._write8(self.addresses["episode unlocks"], 8)
 

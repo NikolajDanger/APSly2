@@ -273,6 +273,7 @@ ADDRESSES = {
         "unload mega jump": 0x20ECD4,
         "loading": 0x3D3980,
         "world id": 0x3D4A60,
+        "savefile last world": 0x3D4A64,
         "map id": 0x3E1110,
         "job id": 0x2DEB44,
         "DAG root": 0x3E0B04,
