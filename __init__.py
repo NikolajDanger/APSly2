@@ -1,5 +1,6 @@
 from typing import Dict, Optional, Mapping, Any, List, ClassVar, TextIO
 import logging
+from math import ceil
 
 from BaseClasses import Item, ItemClassification
 from Options import OptionError
@@ -166,6 +167,65 @@ class Sly2World(World):
             # raise OptionError(
             #     f"Thiefnet minimum cannot be larger than maximum (min: {opt.thiefnet_minimum}, max: {opt.thiefnet_maximum})"
             # )
+
+        # Checking number of locations and items
+        n_locations = (
+            69 + # jobs
+            24 + # treasures
+            24 + # thiefnet
+            (8 if opt.include_vaults else 0) +
+            (30 if opt.include_pickpocketing else 0)
+        )
+        if opt.bottle_location_bundle_size != 0:
+            n_locations += ceil(30/opt.bottle_location_bundle_size)*8
+        if opt.goal < 5:
+            n_locations -= 1 # If the goal is a check, there can't be an item there
+
+        using_parts = opt.episode_8_keys.value != 3 or opt.goal.value == 6
+        n_items = (
+            32 + # Power-ups
+            int(opt.include_tom.value) +
+            int(opt.include_time_rush.value) +
+            int(opt.include_mega_jump.value) +
+            26 + # Episodes (27 without ep8, minus the one you start with)
+            (opt.keys_in_pool.value if using_parts else 0)
+        )
+        if opt.episode_8_keys.value in [0,1]:
+            n_items += 3
+        elif opt.episode_8_keys.value == 3:
+            n_items += 4
+
+        if opt.bottle_item_bundle_size.value != 0:
+            n_items += ceil(30/opt.bottle_item_bundle_size.value)*8
+
+        if n_items > n_locations:
+            logging.warning(
+                f"{self.player_name}: " +
+                f"More items than locations ({n_items} items; {n_locations} locations)\n"+
+                "Adjusting Clockwerk part amounts."
+            )
+            overflow = n_items - n_locations
+            if (opt.keys_in_pool.value - overflow < 1) or not using_parts:
+                logging.warning(
+                    f"{self.player_name}: " +
+                    "Too many items, even when reducing Clockwerk part amounts."
+                )
+                n_items = n_items - opt.keys_in_pool.value + 1
+                raise OptionError(
+                    "There are more items than locations"+
+                    f"({n_items} items; {n_locations} locations)"
+                )
+            print(opt.keys_in_pool)
+            opt.keys_in_pool.value = opt.keys_in_pool.value - overflow
+            print(opt.keys_in_pool)
+            opt.required_keys_episode_8.value = min(
+                opt.required_keys_episode_8.value,
+                opt.keys_in_pool.value
+            )
+            opt.required_keys_goal.value = min(
+                opt.required_keys_goal.value,
+                opt.keys_in_pool.value
+            )
 
     def randomize_loot_table(self) -> dict[str, list[tuple[int,bool,int]]]:
         all_locations = [loc for locations in LOOT.values() for loc in locations]
