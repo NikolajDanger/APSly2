@@ -1,6 +1,7 @@
 from typing import Dict, Optional, Mapping, Any, List, ClassVar, TextIO
 import logging
 from math import ceil
+import inspect
 
 from BaseClasses import Item, ItemClassification
 from Options import OptionError
@@ -97,76 +98,100 @@ class Sly2World(World):
     }
 
     def validate_options(self, opt: Sly2Options):
+        # This part is in order to get a better, more representative sample
+        # from the fuzzer. Any yaml with a bunch of random values _should_ be
+        # called with permissive_yaml on.
+        generation_caller = inspect.stack()[6]
+        if generation_caller.function == "call_generate":
+            opt.permissive_yaml.value = True
+
         if opt.episode_8_keys.value != 3 and opt.required_keys_episode_8 > opt.keys_in_pool:
-            logging.warning(
-                f"{self.player_name}: " +
-                f"Episode 8 requires {opt.required_keys_episode_8} keys but only {opt.keys_in_pool} keys in pool. Increasing number of keys in pool."
-            )
-            opt.keys_in_pool.value = opt.required_keys_episode_8.value
-            # raise OptionError(
-            #     f"Episode 8 requires {opt.required_keys_episode_8} keys but only {opt.keys_in_pool} keys in pool"
-            # )
+            if opt.permissive_yaml:
+                logging.warning(
+                    f"{self.player_name}: " +
+                    f"Episode 8 requires {opt.required_keys_episode_8} keys but only {opt.keys_in_pool} keys in pool. "+
+                    "Increasing number of keys in pool."
+                )
+                opt.keys_in_pool.value = opt.required_keys_episode_8.value
+            else:
+                raise OptionError(
+                    f"Episode 8 requires {opt.required_keys_episode_8} keys but only {opt.keys_in_pool} keys in pool."
+                )
 
         if opt.goal == 6 and opt.required_keys_goal > opt.keys_in_pool:
-            logging.warning(
-                f"{self.player_name}: " +
-                f"Clockwerk Hunt goal requires {opt.required_keys_goal} keys but only {opt.keys_in_pool} keys in pool. Increasing number of keys in pool."
-            )
-            opt.keys_in_pool.value = opt.required_keys_goal.value
-
-            # raise OptionError(
-            #     f"Clockwerk Hunt goal requires {opt.required_keys_goal} keys but only {opt.keys_in_pool} keys in pool"
-            # )
+            if opt.permissive_yaml:
+                logging.warning(
+                    f"{self.player_name}: " +
+                    f"Clockwerk Hunt goal requires {opt.required_keys_goal} keys but only {opt.keys_in_pool} keys in pool. "+
+                    "Increasing number of keys in pool."
+                )
+                opt.keys_in_pool.value = opt.required_keys_goal.value
+            else:
+                raise OptionError(
+                    f"Clockwerk Hunt goal requires {opt.required_keys_goal} keys but only {opt.keys_in_pool} keys in pool"
+                )
 
         if opt.episode_8_keys.value in [0,2] and (
             opt.starting_episode == StartingEpisode.option_Anatomy_for_Disaster
         ):
-            logging.warning(
-                f"{self.player_name}: " +
-                f"Incompatible options: Episode 8 Keys: ({opt.episode_8_keys}) and Starting Episode: ({opt.starting_episode}). Changing Episode 8 Keys to \"Last Section\"."
-            )
-            opt.episode_8_keys.value = 1
-            # raise OptionError(
-            #     f"Incompatible options: Episode 8 Keys: ({opt.episode_8_keys}) and Starting Episode: ({opt.starting_episode})"
-            # )
+            if opt.permissive_yaml:
+                logging.warning(
+                    f"{self.player_name}: " +
+                    f"Incompatible options: Episode 8 Keys: ({opt.episode_8_keys}) and Starting Episode: ({opt.starting_episode}). "+
+                    "Changing Episode 8 Keys to \"Last Section\"."
+                )
+                opt.episode_8_keys.value = 1
+            else:
+                raise OptionError(
+                    f"Incompatible options: Episode 8 Keys: ({opt.episode_8_keys}) and Starting Episode: ({opt.starting_episode})"
+                )
 
         if (
             (opt.bottle_item_bundle_size == 0 and opt.bottle_location_bundle_size != 0) or
             (opt.bottle_item_bundle_size != 0 and opt.bottle_location_bundle_size == 0)
         ):
-            logging.warning(
-                f"{self.player_name}: " +
-                f"Bottle item bundle size and bottle location bundle size should either both be zero or both be non-zero. Setting both to 0."
-            )
-            opt.bottle_item_bundle_size.value = 0
-            opt.bottle_location_bundle_size.value = 0
-            # raise OptionError(
-            #     f"Bottle item bundle size and bottle location bundle size should either both be zero or both be non-zero"
-            # )
+            if opt.permissive_yaml:
+                logging.warning(
+                    f"{self.player_name}: " +
+                    f"Bottle item bundle size and bottle location bundle size should either both be zero or both be non-zero. "+
+                    "Setting both to 0."
+                )
+                opt.bottle_item_bundle_size.value = 0
+                opt.bottle_location_bundle_size.value = 0
+            else:
+                raise OptionError(
+                    f"Bottle item bundle size and bottle location bundle size should either both be zero or both be non-zero"
+                )
 
         if opt.coins_maximum < opt.coins_minimum:
-            logging.warning(
-                f"{self.player_name}: " +
-                f"Coins minimum cannot be larger than maximum (min: {opt.coins_minimum}, max: {opt.coins_maximum}). Swapping values."
-            )
-            temp = opt.coins_minimum.value
-            opt.coins_minimum.value = opt.coins_maximum.value
-            opt.coins_maximum.value = temp
-            # raise OptionError(
-            #     f"Coins minimum cannot be larger than maximum (min: {opt.coins_minimum}, max: {opt.coins_maximum})"
-            # )
+            if opt.permissive_yaml:
+                logging.warning(
+                    f"{self.player_name}: " +
+                    f"Coins minimum cannot be larger than maximum (min: {opt.coins_minimum}, max: {opt.coins_maximum}). "+
+                    "Swapping values."
+                )
+                temp = opt.coins_minimum.value
+                opt.coins_minimum.value = opt.coins_maximum.value
+                opt.coins_maximum.value = temp
+            else:
+                raise OptionError(
+                    f"Coins minimum cannot be larger than maximum (min: {opt.coins_minimum}, max: {opt.coins_maximum})"
+                )
 
         if opt.thiefnet_maximum < opt.thiefnet_minimum:
-            logging.warning(
-                f"{self.player_name}: " +
-                f"Thiefnet minimum cannot be larger than maximum (min: {opt.thiefnet_minimum}, max: {opt.thiefnet_maximum}). Swapping values."
-            )
-            temp = opt.thiefnet_minimum.value
-            opt.thiefnet_minimum.value = opt.thiefnet_maximum.value
-            opt.thiefnet_maximum.value = temp
-            # raise OptionError(
-            #     f"Thiefnet minimum cannot be larger than maximum (min: {opt.thiefnet_minimum}, max: {opt.thiefnet_maximum})"
-            # )
+            if opt.permissive_yaml:
+                logging.warning(
+                    f"{self.player_name}: " +
+                    f"Thiefnet minimum cannot be larger than maximum (min: {opt.thiefnet_minimum}, max: {opt.thiefnet_maximum}). "+
+                    "Swapping values."
+                )
+                temp = opt.thiefnet_minimum.value
+                opt.thiefnet_minimum.value = opt.thiefnet_maximum.value
+                opt.thiefnet_maximum.value = temp
+            else:
+                raise OptionError(
+                    f"Thiefnet minimum cannot be larger than maximum (min: {opt.thiefnet_minimum}, max: {opt.thiefnet_maximum})"
+                )
 
         # Checking number of locations and items
         n_locations = (
@@ -199,6 +224,10 @@ class Sly2World(World):
             n_items += ceil(30/opt.bottle_item_bundle_size.value)*8
 
         if n_items > n_locations:
+            if not opt.permissive_yaml:
+                raise OptionError(
+                    f"More items than locations ({n_items} items; {n_locations} locations)"
+                )
             logging.warning(
                 f"{self.player_name}: " +
                 f"More items than locations ({n_items} items; {n_locations} locations)\n"+
@@ -215,9 +244,7 @@ class Sly2World(World):
                     "There are more items than locations"+
                     f"({n_items} items; {n_locations} locations)"
                 )
-            print(opt.keys_in_pool)
             opt.keys_in_pool.value = opt.keys_in_pool.value - overflow
-            print(opt.keys_in_pool)
             opt.required_keys_episode_8.value = min(
                 opt.required_keys_episode_8.value,
                 opt.keys_in_pool.value
@@ -257,6 +284,7 @@ class Sly2World(World):
                     self.thiefnet_costs = slot_data["thiefnet_costs"]
                     self.loot_table = slot_data["loot_table"]
                     self.options.starting_episode.value = slot_data["starting_episode"]
+                    self.options.permissive_yaml = slot_data["permissive_yaml"]
                     self.options.goal.value = slot_data["goal"]
                     self.options.keys_in_pool.value = slot_data["keys_in_pool"]
                     self.options.episode_8_keys.value = slot_data["episode_8_keys"]
@@ -324,6 +352,7 @@ class Sly2World(World):
     def get_options_as_dict(self) -> Dict[str, Any]:
         return self.options.as_dict(
             "death_link",
+            "permissive_yaml",
             "starting_episode",
             "goal",
             "keys_in_pool",

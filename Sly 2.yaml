@@ -41,6 +41,16 @@ requires:
     'false': 50
     'true': 0
 
+  # If permissive yaml is on, incompatible yaml options will be changed to more
+  # suitable ones. If turned off, these yaml options will throw an error and
+  # cause generation to halt.
+
+  # This is intended for yamls with random values. If you're not randomizing
+  # any options, it's recommended that you turn permissive yaml off.
+  permissive_yaml:
+    'false': 50
+    'true': 0
+
   # Select Which episode to start with. Starting with Anatomy for disaster
   # is not compatible with the "first section" and "whole episode" options for
   # "Episode 8 Keys".

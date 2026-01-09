@@ -10,6 +10,17 @@ from Options import (
 )
 from dataclasses import dataclass
 
+class PermissiveYaml(Toggle):
+    """
+    If permissive yaml is on, incompatible yaml options will be changed to more
+    suitable ones. If turned off, these yaml options will throw an error and
+    cause generation to halt.
+
+    This is intended for yamls with random values. If you're not randomizing
+    any options, it's recommended that you turn permissive yaml off.
+    """
+
+    display_name = "Permissive Yaml"
 
 class StartingEpisode(Choice):
     """
@@ -278,6 +289,7 @@ class SkipIntro(DefaultOnToggle):
 class Sly2Options(PerGameCommonOptions):
     start_inventory_from_pool: StartInventoryPool
     death_link: DeathLink
+    permissive_yaml: PermissiveYaml
     starting_episode: StartingEpisode
     goal: Goal
     keys_in_pool: KeysInPool
