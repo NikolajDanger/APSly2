@@ -7,7 +7,7 @@ from CommonClient import get_base_parser, logger, server_loop, gui_enabled
 import Utils
 
 from .data import Locations, Items
-from .data.Constants import EPISODES
+from .data.Constants import EPISODES, ENEMIES, PICKPOCKET_LOOT_TABLE_CHANCES
 from .Sly2Interface import Sly2Interface, Sly2Episode, PowerUps
 from .Callbacks import init, update
 
@@ -70,6 +70,31 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
 
             if self.ctx.slot_data["goal"] == 6:
                 logger.info(f"Clockwerk parts needed to complete Clockwerk Hunt goal: {self.ctx.slot_data['required_keys_goal']}")
+
+    def _cmd_loot_tables(self):
+        """Get the loot tables for each episode"""
+        if self.ctx.slot_data is None:
+            return
+
+        slot_data = self.ctx.slot_data
+        loot_table_distribution = slot_data["loot_table_distribution"]
+        loot_table = slot_data["loot_table"]
+        loot_table_text = ""
+        for i in range(8):
+            loot_table_text += f"\n== Episode {i+1} =="
+            for j in range(2):
+                enemy = ENEMIES[i][j]
+                loot = []
+                for k in range(1,7):
+                    for loot_name, loot_locations in loot_table.items():
+                        if [i+1,bool(j),k] in loot_locations:
+                            loot.append(loot_name)
+                            break
+                loot_odds = PICKPOCKET_LOOT_TABLE_CHANCES[loot_table_distribution-1]
+                loot_text = ", ".join(f"{l} ({loot_odds[i]}%)" for i, l in enumerate(loot))
+                loot_table_text += f"\n- {enemy}: {loot_text}"
+
+        logger.info(loot_table_text)
 
     def _cmd_goal(self):
         """Show what the goal is set to"""
@@ -135,7 +160,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
 
     def __init__(self, server_address, password):
         super().__init__(server_address, password)
-        self.version = [0,8,0]
+        self.version = [0,8,1]
         self.game_interface = Sly2Interface(logger)
 
     def notification(self, text: str):
