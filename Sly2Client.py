@@ -160,7 +160,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
 
     def __init__(self, server_address, password):
         super().__init__(server_address, password)
-        self.version = [0,8,1]
+        self.version = [0,8,2]
         self.game_interface = Sly2Interface(logger)
 
     def notification(self, text: str):

@@ -3,48 +3,48 @@
         "name": "The Black Chateau",
         "location_size": 20,
         "location_border_thickness": 6,
-        "img": "maps/sly2_bc_map.png"
+        "img": "maps/sly2_bc_map.jpg"
     },
     {
         "name": "A Starry Eyed Encounter",
         "location_size": 20,
         "location_border_thickness": 6,
-        "img": "maps/sly2_asee_map.png"
+        "img": "maps/sly2_asee_map.jpg"
     },
     {
         "name": "The Predator Awakes",
         "location_size": 20,
         "location_border_thickness": 6,
-        "img": "maps/sly2_tpa_map.png"
+        "img": "maps/sly2_tpa_map.jpg"
     },
     {
         "name": "Jailbreak",
         "location_size": 20,
         "location_border_thickness": 6,
-        "img": "maps/sly2_jb_map.png"
+        "img": "maps/sly2_jb_map.jpg"
     },
     {
         "name": "A Tangled Web",
         "location_size": 20,
         "location_border_thickness": 6,
-        "img": "maps/sly2_atw_map.png"
+        "img": "maps/sly2_atw_map.jpg"
     },
     {
         "name": "He Who Tames the Iron Horse",
         "location_size": 20,
         "location_border_thickness": 6,
-        "img": "maps/sly2_hwttih_map.png"
+        "img": "maps/sly2_hwttih_map.jpg"
     },
     {
         "name": "Menace from the North, eh!",
         "location_size": 20,
         "location_border_thickness": 6,
-        "img": "maps/sly2_mftne_map.png"
+        "img": "maps/sly2_mftne_map.jpg"
     },
     {
         "name": "Anatomy for Disaster",
         "location_size": 20,
         "location_border_thickness": 6,
-        "img": "maps/sly2_afd_map.png"
+        "img": "maps/sly2_afd_map.jpg"
     }
 ]
