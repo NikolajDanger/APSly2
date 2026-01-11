@@ -167,3 +167,19 @@ def set_rules(world: "Sly2World"):
             world.player,
             world.options.required_keys_goal.value
         )
+    elif world.options.goal.value == 7:
+        def access_rule(state: CollectionState):
+            victory_conditions = [
+                "The Black Chateau - Vault",
+                "The Predator Awakens - Vault",
+                "A Tangled Web - Vault",
+                "Menace from the North, Eh! - Vault",
+                "Anatomy for Disaster - Vault"
+            ]
+
+            return all(
+                world.multiworld.get_location(cond,world.player).access_rule(state)
+                for cond in victory_conditions
+            )
+
+        world.multiworld.completion_condition[world.player] = access_rule
