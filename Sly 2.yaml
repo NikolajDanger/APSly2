@@ -7,7 +7,7 @@ game: 'Sly 2: Band of Thieves'
 requires:
   version: 0.6.5 # Version of Archipelago required for this yaml to work as expected.
   game:
-    'Sly 2: Band of Thieves': 0.8.3 # Version of the world required for this yaml to work as expected.
+    'Sly 2: Band of Thieves': 0.8.4 # Version of the world required for this yaml to work as expected.
 
 'Sly 2: Band of Thieves':
   ## Game Options
