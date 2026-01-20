@@ -166,7 +166,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     def run_generator(self):
         if tracker_loaded:
             super().run_generator()
-            Utils.init_logging("Sly 2 Client")
+            # Utils.init_logging("Sly 2 Client")
 
     def notification(self, text: str):
         self.notification_queue.append(text)
