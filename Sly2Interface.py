@@ -197,8 +197,13 @@ class Sly2Interface(GameInterface):
     def vault_opened(self, vault: int) -> bool:
         return self._read32(self.addresses["vaults"][vault-1]) == 1
 
+    def all_vault_statuses(self) -> list[bool]:
+        vault_addresses = self.addresses["vaults"]
+        vault_values = self.pcsx2_interface.batch_read_int32(vault_addresses)
+        return [value == 1 for value in vault_values]
+
     def all_vaults_opened(self) -> bool:
-        return all(self._read32(address) == 1 for address in self.addresses["vaults"])
+        return all(self.all_vault_statuses())
 
     def fix_jobs(self) -> None:
         current_job = self.get_current_job()
@@ -230,60 +235,76 @@ class Sly2Interface(GameInterface):
                     self._write_job_status(job+i,0)
 
     def alive(self) -> bool:
-        active_character = self._read32(self.addresses["active character"])
+        # Batch read all needed addresses at once
+        addresses_to_read = [
+            self.addresses["active character"],
+            self.addresses["world id"],
+            self.addresses["map id"]
+        ]
 
-        character_alive = True
-        episode = self.get_current_episode()
-        current_map = self.get_current_map()
+        results = self.pcsx2_interface.batch_read_int32(addresses_to_read)
+        active_character = results[0]
+        episode = Sly2Episode(results[1])
+        current_map = results[2]
+
+        # Collect health addresses to check based on character/episode/map
+        health_checks = []
 
         if active_character == 7:
-            character_alive = character_alive and (self._read32(self.addresses["health"]["Sly"]) != 0)
+            health_checks.append(self.addresses["health"]["Sly"])
             if episode == Sly2Episode.He_Who_Tames_the_Iron_Horse and current_map == 30:
-                character_alive = character_alive and (self._read32(self.addresses["health"]["ChopperCanada2"]) != 0)
+                health_checks.append(self.addresses["health"]["ChopperCanada2"])
             elif episode == Sly2Episode.Anatomy_for_Disaster and current_map == 38:
-                character_alive = character_alive and (self._read32(self.addresses["health"]["ChopperCarmelita"]) != 0)
+                health_checks.append(self.addresses["health"]["ChopperCarmelita"])
         elif active_character == 8:
-            character_alive = character_alive and (self._read32(self.addresses["health"]["Bentley"]) != 0)
+            health_checks.append(self.addresses["health"]["Bentley"])
             if episode == Sly2Episode.Jailbreak and current_map == 14:
-                character_alive = character_alive and (self._read32(self.addresses["health"]["ChopperPrague"]) != 0)
+                health_checks.append(self.addresses["health"]["ChopperPrague"])
             elif episode == Sly2Episode.A_Tangled_Web and current_map == 17:
-                character_alive = character_alive and (self._read32(self.addresses["health"]["Blimp"]) != 0)
+                health_checks.append(self.addresses["health"]["Blimp"])
             elif episode == Sly2Episode.He_Who_Tames_the_Iron_Horse and current_map == 29:
-                character_alive = character_alive and (self._read32(self.addresses["health"]["ChopperCanada1"]) != 0)
+                health_checks.append(self.addresses["health"]["ChopperCanada1"])
             elif episode == Sly2Episode.A_Starry_Eyed_Encounter and current_map == 8:
-                character_alive = character_alive and (self._read32(self.addresses["health"]["ChopperIndia"]) != 0)
-                character_alive = character_alive and (self._read32(self.addresses["health"]["Murray"]) != 0)
+                health_checks.append(self.addresses["health"]["ChopperIndia"])
+                health_checks.append(self.addresses["health"]["Murray"])
             elif episode == Sly2Episode.The_Predator_Awakens and current_map == 12:
-                character_alive = character_alive and (self._read32(self.addresses["health"]["TurretIndia2"]) != 0)
+                health_checks.append(self.addresses["health"]["TurretIndia2"])
         elif active_character == 9:
-            character_alive = character_alive and (self._read32(self.addresses["health"]["Murray"]) != 0)
+            health_checks.append(self.addresses["health"]["Murray"])
             if episode == Sly2Episode.A_Starry_Eyed_Encounter and current_map == 8:
-                character_alive = character_alive and (self._read32(self.addresses["health"]["TurretIndia"]) != 0)
+                health_checks.append(self.addresses["health"]["TurretIndia"])
             elif episode == Sly2Episode.A_Tangled_Web and current_map == 17:
-                character_alive = character_alive and (self._read32(self.addresses["health"]["Tank"]) != 0)
+                health_checks.append(self.addresses["health"]["Tank"])
             elif episode == Sly2Episode.Menace_from_the_North_Eh and current_map == 33:
-                character_alive = character_alive and (self._read32(self.addresses["health"]["RCTank"]) != 0)
+                health_checks.append(self.addresses["health"]["RCTank"])
 
-        if (
-            (
-                episode == Sly2Episode.Jailbreak and
-                current_map in [14,15]
-            ) or
-            (
-                episode == Sly2Episode.A_Tangled_Web and
-                current_map == 22
-            ) or
-            (
-                episode == Sly2Episode.Menace_from_the_North_Eh and
-                current_map == 32
-            ) or
-            (
-                episode == Sly2Episode.Anatomy_for_Disaster and
-                current_map == 38
-            )
-            ):
-            character_alive = character_alive and (self._read32(self._read32(self.addresses["hackpack"])+0x184) != 0)
-        return character_alive
+        # Check if hackpack health needs to be checked
+        needs_hackpack = (
+            (episode == Sly2Episode.Jailbreak and current_map in [14,15]) or
+            (episode == Sly2Episode.A_Tangled_Web and current_map == 22) or
+            (episode == Sly2Episode.Menace_from_the_North_Eh and current_map == 32) or
+            (episode == Sly2Episode.Anatomy_for_Disaster and current_map == 38)
+        )
+
+        if needs_hackpack:
+            health_checks.append(self.addresses["hackpack"])
+
+        # Batch read all health values
+        if not health_checks:
+            return True
+
+        health_values = self.pcsx2_interface.batch_read_int32(health_checks)
+
+        # If hackpack needed, the last value is hackpack pointer, need to read its health
+        if needs_hackpack:
+            hackpack_pointer = health_values[-1]
+            hackpack_health = self._read32(hackpack_pointer + 0x184)
+            if hackpack_health == 0:
+                return False
+            health_values = health_values[:-1]  # Remove hackpack pointer from health checks
+
+        # All health values must be non-zero
+        return all(health > 0 for health in health_values)
 
     def get_damage_type(self) -> int:
         active_character = self._read32(self.addresses["active character pointer"])
@@ -302,6 +323,16 @@ class Sly2Interface(GameInterface):
 
     def job_completed(self, task: int) -> bool:
         return self._read_job_status(task) == 3
+
+    def jobs_completed(self, tasks: list[int]) -> list[bool]:
+        # Get job addresses
+        job_status_addresses = []
+        for job_id in tasks:
+            job_address = self._get_job_address(job_id)
+            job_status_addresses.append(job_address + 0x54)
+
+        # Batch read all statuses
+        return [i == 3 for i in self.pcsx2_interface.batch_read_int32(job_status_addresses)]
 
     def set_items_received(self, n:int) -> None:
         self._write32(self.addresses["items received"], n)
@@ -324,25 +355,36 @@ class Sly2Interface(GameInterface):
 
     def set_loot_chance(self, episode: Sly2Episode, loot_chances: tuple[float, float]):
         addresses = self.addresses["loot chance"][episode.value-1]
-        self._write_float(addresses[0], loot_chances[0])
-        self._write_float(addresses[1], loot_chances[1])
+        # Batch write both loot chances
+        self.pcsx2_interface.batch_write_float([
+            (addresses[0], loot_chances[0]),
+            (addresses[1], loot_chances[1])
+        ])
 
     def set_loot_table_odds(self, episode: Sly2Episode, loot_table: tuple[tuple[int,int,int,int,int,int],tuple[int,int,int,int,int,int]]):
         addresses = self.addresses["loot table odds"][episode.value-1]
+        # Batch write all loot table odds at once
+        write_operations = []
         for i, table in enumerate(loot_table):
             for j, chance in enumerate(table):
-                self._write32(addresses[i][j], chance)
+                write_operations.append((addresses[i][j], chance))
+        self.pcsx2_interface.batch_write_int32(write_operations)
 
     def set_loot_table(self, episode: Sly2Episode, loot_table: dict[str, list[tuple[int,bool,int]]]):
         addresses = self.addresses["loot table"][episode.value-1]
 
+        # Batch write all loot table values
+        write_operations = []
         for loot, locations in loot_table.items():
             for ep, large, slot in locations:
                 if ep != episode.value:
                     continue
                 address = addresses[int(large)][slot-1]
                 loot_id = LOOT_IDS[loot]
-                self._write32(address, loot_id)
+                write_operations.append((address, loot_id))
+
+        if write_operations:
+            self.pcsx2_interface.batch_write_int32(write_operations)
 
     def in_safehouse(self) -> bool:
         # Some of these checks are not necessary, but I absolutely can't be
@@ -486,14 +528,35 @@ class Sly2Interface(GameInterface):
     def treasure_or_loot_stolen(self, address: int) -> bool:
         return self._read32(address) > 0x00000000
 
+    def all_treasures_stolen(self) -> list[list[bool]]:
+        """Batch read all treasure statuses across all episodes"""
+        all_addresses = []
+        for episode_treasures in self.addresses["treasures"]:
+            all_addresses += episode_treasures
+
+        values = self.pcsx2_interface.batch_read_int32(all_addresses)
+
+        result = [[v > 0 for v in values[i*3:i*3+3]] for i in range(8)]
+
+        return result
+
+    def all_loot_stolen(self) -> list[bool]:
+        """Batch read all loot statuses"""
+        loot_addresses = self.addresses["loot"]
+        values = self.pcsx2_interface.batch_read_int32(loot_addresses)
+        return [value > 0 for value in values]
+
     def set_thiefnet_cost(self, powerup: int, cost: int) -> None:
         address = self.addresses["thiefnet costs"][powerup]
         self._write32(address, cost)
 
     def set_thiefnet_unlock(self) -> None:
-        for i in range(24):
-            address = self.addresses["thiefnet unlock"][i]
-            self._write32(address,1)
+        # Batch write all thiefnet unlocks at once
+        write_operations = [
+            (self.addresses["thiefnet unlock"][i], 1)
+            for i in range(24)
+        ]
+        self.pcsx2_interface.batch_write_int32(write_operations)
 
     def reset_thiefnet(self) -> None:
         powerups = self.addresses["text"]["powerups"][self.get_current_episode()-1]

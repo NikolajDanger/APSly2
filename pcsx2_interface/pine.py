@@ -189,6 +189,118 @@ class Pine:
                 self._send_request(request)
                 bytes_written += 1
 
+    def batch_read_int32(self, addresses: list[int]) -> list[int]:
+        """Read multiple int32 values in a single request. Much faster than individual reads."""
+        if not addresses:
+            return []
+
+        # Build batched request
+        request = b''
+        for address in addresses:
+            request += Pine.to_bytes(Pine.IPCCommand.READ32, 1)
+            request += Pine.to_bytes(address, 4)
+
+        # Prepend total size
+        total_size = len(request) + 4
+        request = Pine.to_bytes(total_size, 4) + request
+
+        response = self._send_request(request)
+
+        # Parse results - one status byte for the entire batch, then data
+        results = []
+        offset = 4  # Skip overall size header
+        offset += 1  # Skip single status byte for entire batch
+        for _ in addresses:
+            value = Pine.from_bytes(response[offset:offset + 4])
+            results.append(value)
+            offset += 4
+
+        return results
+
+    def batch_read_int16(self, addresses: list[int]) -> list[int]:
+        """Read multiple int16 values in a single request."""
+        if not addresses:
+            return []
+
+        request = b''
+        for address in addresses:
+            request += Pine.to_bytes(Pine.IPCCommand.READ16, 1)
+            request += Pine.to_bytes(address, 4)
+
+        total_size = len(request) + 4
+        request = Pine.to_bytes(total_size, 4) + request
+
+        response = self._send_request(request)
+
+        # Parse results - one status byte for the entire batch, then data
+        results = []
+        offset = 4  # Skip overall size header
+        offset += 1  # Skip single status byte for entire batch
+        for _ in addresses:
+            value = Pine.from_bytes(response[offset:offset + 2])
+            results.append(value)
+            offset += 2
+
+        return results
+
+    def batch_read_int8(self, addresses: list[int]) -> list[int]:
+        """Read multiple int8 values in a single request."""
+        if not addresses:
+            return []
+
+        request = b''
+        for address in addresses:
+            request += Pine.to_bytes(Pine.IPCCommand.READ8, 1)
+            request += Pine.to_bytes(address, 4)
+
+        total_size = len(request) + 4
+        request = Pine.to_bytes(total_size, 4) + request
+
+        response = self._send_request(request)
+
+        # Parse results - one status byte for the entire batch, then data
+        results = []
+        offset = 4  # Skip overall size header
+        offset += 1  # Skip single status byte for entire batch
+        for _ in addresses:
+            value = Pine.from_bytes(response[offset:offset + 1])
+            results.append(value)
+            offset += 1
+
+        return results
+
+    def batch_write_int32(self, operations: list[tuple[int, int]]) -> None:
+        """Write multiple int32 values in a single request. Each operation is (address, value)."""
+        if not operations:
+            return
+
+        request = b''
+        for address, value in operations:
+            request += Pine.to_bytes(Pine.IPCCommand.WRITE32, 1)
+            request += Pine.to_bytes(address, 4)
+            request += value.to_bytes(length=4, byteorder="little")
+
+        total_size = len(request) + 4
+        request = Pine.to_bytes(total_size, 4) + request
+
+        self._send_request(request)
+
+    def batch_write_float(self, operations: list[tuple[int, float]]) -> None:
+        """Write multiple float values in a single request. Each operation is (address, value)."""
+        if not operations:
+            return
+
+        request = b''
+        for address, value in operations:
+            request += Pine.to_bytes(Pine.IPCCommand.WRITE32, 1)
+            request += Pine.to_bytes(address, 4)
+            request += struct.pack("<f", value)
+
+        total_size = len(request) + 4
+        request = Pine.to_bytes(total_size, 4) + request
+
+        self._send_request(request)
+
     def get_game_id(self) -> str:
         request = Pine.to_bytes(5, 4) + Pine.to_bytes(Pine.IPCCommand.ID, 1)
         try:
@@ -250,4 +362,3 @@ class Pine:
     @staticmethod
     def from_bytes(arr: bytes) -> int:
         return int.from_bytes(arr, byteorder="little")
-

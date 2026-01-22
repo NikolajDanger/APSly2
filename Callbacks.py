@@ -196,7 +196,7 @@ def unset_thiefnet(ctx: 'Sly2Context'):
 
 def check_vaults(ctx: 'Sly2Context') -> None:
     """Checks if the vaults are opened"""
-    ctx.vaults = [ctx.game_interface.vault_opened(i) for i in range(1,9)]
+    ctx.vaults = ctx.game_interface.all_vault_statuses()
 
 def replace_text(ctx: 'Sly2Context') -> None:
     """Replaces the text in the game"""
@@ -279,15 +279,28 @@ def check_jobs(ctx: 'Sly2Context') -> None:
 
     chapters = ctx.game_interface.addresses["jobs"][episode-1]
 
+    # Collect all job addresses to check
+    jobs_to_check = []
+    job_positions = []  # Track (chapter_idx, job_idx) for each job
+
     for j, chapter in enumerate(chapters):
         for k, job in enumerate(chapter):
+            # Skip if already marked as completed
+            if ctx.jobs_completed[episode-1][j][k]:
+                continue
+
             if isinstance(job, tuple):
                 job = job[1]
 
-            ctx.jobs_completed[episode-1][j][k] = (
-                ctx.jobs_completed[episode-1][j][k] or
-                ctx.game_interface.job_completed(job)
-            )
+            jobs_to_check.append(job)
+            job_positions.append((j, k))
+
+    if jobs_to_check:
+        statuses = ctx.game_interface.jobs_completed(jobs_to_check)
+
+        # Update completion status
+        for (j, k), status in zip(job_positions, statuses):
+            ctx.jobs_completed[episode-1][j][k] = status
 
 def set_jobs(ctx: 'Sly2Context') -> None:
     """Sets jobs to available/unavailable"""
@@ -487,18 +500,20 @@ async def handle_checks(ctx: 'Sly2Context') -> None:
                     ctx.locations_checked.add(location_code)
 
     # Treasures
+    treasures_stolen = ctx.game_interface.all_treasures_stolen()
     for i, (episode_name,episode_treasures) in enumerate(TREASURES.items()):
         for j, treasure in enumerate(episode_treasures):
-            address = ctx.game_interface.addresses["treasures"][i][j]
-            if ctx.game_interface.treasure_or_loot_stolen(address):
+            stolen = treasures_stolen[i][j]
+            if stolen:
                 location_name = f"{episode_name} - {treasure[0]}"
                 location_code = Locations.location_dict[location_name].code
                 ctx.locations_checked.add(location_code)
 
     # Loot
+    loot_stolen = ctx.game_interface.all_loot_stolen()
     for i, loot in enumerate(LOOT.keys()):
-        address = ctx.game_interface.addresses["loot"][i]
-        if ctx.game_interface.treasure_or_loot_stolen(address):
+        stolen = loot_stolen[i]
+        if stolen:
             location_name = f"Pickpocket {loot}"
             location_code = Locations.location_dict[location_name].code
             ctx.locations_checked.add(location_code)
@@ -553,5 +568,3 @@ async def handle_check_goal(ctx: 'Sly2Context') -> None:
 
     if goaled:
         await ctx.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
-
-
