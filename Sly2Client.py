@@ -102,17 +102,34 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
             if self.ctx.slot_data is None:
                 return
 
-            goal = [
-                "Beat Dimitri",
-                "Beat Rajan",
-                "Beat The Contessa",
-                "Beat Jean Bison",
-                "Beat ClockLa",
-                "Beat All Bosses",
-                "Clockwerk Hunt",
-            ][self.ctx.slot_data['goal']]
+            goal_idx = self.ctx.slot_data['goal']
+            goal_text = f"Error with goal index {goal_idx}"
+            if goal_idx < 5:
+                goal = [
+                    "Beat Dimitri",
+                    "Beat Rajan",
+                    "Beat The Contessa",
+                    "Beat Jean Bison",
+                    "Beat ClockLa",
+                ][self.ctx.slot_data['goal']]
 
-            logger.info(f"Goal: {goal}")
+                goal_text = f"Goal: {goal}"
+            elif goal_idx == 5:
+                goal_text = "Goal: All Bosses"
+                ## TODO: Progress
+            elif goal_idx == 6:
+                goal_text = "Goal: Clockwerk Hunt"
+                current = [
+                    i for i in self.ctx.items_received
+                    if Items.from_id(i.item).category == "Clockwerk Part"
+                ]
+                needed = self.ctx.slot_data['required_keys_goal']
+                goal_text += f"\nProgress: {current}/{needed} Clockwerk Parts"
+            elif goal_idx == 7:
+                goal_text = "Goal: All Vaults"
+                ## TODO: Progress
+
+            logger.info(goal_text)
 
     # def _cmd_coins(self, amount: str):
     #     """Add coins to game."""
