@@ -116,7 +116,17 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
                 goal_text = f"Goal: {goal}"
             elif goal_idx == 5:
                 goal_text = "Goal: All Bosses"
-                ## TODO: Progress
+                if self.ctx.game_interface.get_connection_state():
+                    statuses = self.ctx.game_interface.get_operation_completion()
+                    bosses = [
+                        ("Dimitri", 0),
+                        ("Rajan", 2),
+                        ("The Contessa", 4),
+                        ("Jean Bison", 6),
+                        ("Clock-La", 7)
+                    ]
+                    for boss, ep in bosses:
+                        goal_text += f"\n{boss}: {'X' if statuses[ep] else ''}"
             elif goal_idx == 6:
                 goal_text = "Goal: Clockwerk Hunt"
                 current = [
@@ -127,7 +137,10 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
                 goal_text += f"\nProgress: {current}/{needed} Clockwerk Parts"
             elif goal_idx == 7:
                 goal_text = "Goal: All Vaults"
-                ## TODO: Progress
+                if self.ctx.game_interface.get_connection_state():
+                    vaults = self.ctx.game_interface.all_vault_statuses()
+                    for i in range(8):
+                        goal_text += f"\nEpisode {i+1}: {vaults[i]}"
 
             logger.info(goal_text)
 

@@ -297,10 +297,13 @@ ADDRESSES = {
         "infobox string": 0x3DA0D8,
         "infobox duration": 0x3DA0DC,
         "hackpack": 0x3E0828,
-        "victory completion": [
+        "operation completion": [
           0x3D5810, # Operation: Thunder Beak
+          0x3D5910, # Operation: Hippo Drop
           0x3D5980, # Operation: Wet Tiger
+          0x3D5A50, # Operation: Trojan Tank
           0x3D5AF0, # Operation: High Road
+          0x3D5B40, # Operation: Choo-Choo
           0x3D5BE0, # Operation: Canada Games
           0x3D5C50  # Defeat Clock-la
         ],

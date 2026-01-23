@@ -185,12 +185,24 @@ class Sly2Interface(GameInterface):
 
         return pointer
 
+    def get_operation_completion(self) -> list[bool]:
+        statuses = self.pcsx2_interface.batch_read_int32(self.addresses["operation completion"])
+        return [s == 1 for s in statuses]
+
     def is_goaled(self, condition: int) -> bool:
-        if condition < 5:
-            address = self.addresses["victory completion"][condition]
-            return self._read32(address) == 1
+        statuses = self.get_operation_completion()
+        if condition == 0:
+            return statuses[0]
+        elif condition == 1:
+            return statuses[2]
+        elif condition == 2:
+            return statuses[4]
+        elif condition == 3:
+            return statuses[6]
+        elif condition == 4:
+            return statuses[7]
         elif condition == 5:
-            return all(self._read32(address) == 1 for address in self.addresses["victory completion"])
+            return all(statuses[i] for i in [0,2,4,6,7])
         else:
             return False
 
