@@ -3,7 +3,7 @@ from typing import Optional, NamedTuple, Tuple, Dict, List
 from math import ceil
 import struct
 from logging import Logger
-from time import time
+from time import time, sleep
 import traceback
 
 from .pcsx2_interface.pine import Pine
@@ -668,3 +668,28 @@ class Sly2Interface(GameInterface):
 
         active_character_pointer = self._read32(self.addresses["active character pointer"])
         self._write32(active_character_pointer+0xdf4,8)
+
+    def despawn_guards(self):
+        for guard in self.addresses["guard structs"]:
+            pointer = self._read32(guard)
+            while pointer != 0:
+                transform_component = self._read32(pointer + 0x54)
+                disable_pointer = transform_component + 0xA0
+                pointer = self._read32(pointer + 0x20)
+                self._write32(disable_pointer, 1)
+
+    def respawn_guards(self):
+        for guard in self.addresses["guard structs"]:
+            pointer = self._read32(guard)
+            while pointer != 0:
+                transform_component = self._read32(pointer + 0x54)
+                disable_pointer = transform_component + 0xA0
+                pointer = self._read32(pointer + 0x20)
+                self._write32(disable_pointer, 0)
+
+if __name__ == "__main__":
+    interf = Sly2Interface(Logger("Test"))
+    interf.connect_to_game()
+    interf.despawn_guards()
+    sleep(1)
+    interf.respawn_guards()

@@ -123,6 +123,18 @@ def fix_mega_jump(ctx: 'Sly2Context'):
 async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
     """Called when the player connects to the AP server or enters a new episode"""
     if ap_connected and ctx.current_episode:
+        if ctx.slot_data is None:
+            return
+        
+        # In case guards spawned with the old loot:
+        ctx.game_interface.despawn_guards()
+
+        set_pickpocketing(ctx)
+
+        if ctx.slot_data["randomize_loot"]:
+            set_loot_table(ctx)
+
+        ctx.game_interface.respawn_guards()
 
         # Stop mega jump from being unselected
         fix_mega_jump(ctx)

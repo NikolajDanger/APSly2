@@ -321,7 +321,12 @@ ADDRESSES = {
             "ChopperIndia": 0x5A68F0,
             "TurretIndia2": 0x525600,
             "ChopperCarmelita": 0x50EE50
-          },
+        },
+        "guard structs": [
+            0x3E0774,  # swarmer 1
+            0x3E0778,  # swarmer 2
+            0x3E0780,  # flashlight guard
+        ],
         "bottle flags": [
             0x3D4CD8,
             0x3D4E78,
