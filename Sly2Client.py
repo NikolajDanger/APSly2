@@ -129,12 +129,8 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
                         goal_text += f"\n{boss}: {'X' if statuses[ep] else ''}"
             elif goal_idx == 6:
                 goal_text = "Goal: Clockwerk Hunt"
-                current = [
-                    i for i in self.ctx.items_received
-                    if Items.from_id(i.item).category == "Clockwerk Part"
-                ]
                 needed = self.ctx.slot_data['required_keys_goal']
-                goal_text += f"\nProgress: {current}/{needed} Clockwerk Parts"
+                goal_text += f"\nProgress: {self.ctx.clockwerk_parts_count}/{needed} Clockwerk Parts"
             elif goal_idx == 7:
                 goal_text = "Goal: All Vaults"
                 if self.ctx.game_interface.get_connection_state():
@@ -187,6 +183,8 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     vaults: list[bool] = [
         False for _ in EPISODES
     ]
+    clockwerk_parts_count: int = 0  # Cached count to avoid repeated filtering
+    last_checked_locations: set[int] = set()  # Track what was already sent
 
     def __init__(self, server_address, password):
         super().__init__(server_address, password)

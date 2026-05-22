@@ -236,12 +236,8 @@ def replace_text(ctx: 'Sly2Context') -> None:
             rep_text = "Unlocked"
         else:
             if i == 8 and ctx.slot_data["episode_8_keys"] != 3:
-                obtained_keys = len([
-                    i for i in ctx.items_received
-                    if Items.from_id(i.item).category == "Clockwerk Part"
-                ])
                 required_keys = ctx.slot_data["required_keys_episode_8"]
-                rep_text = f"{obtained_keys}/{required_keys} Clockwerk parts"
+                rep_text = f"{ctx.clockwerk_parts_count}/{required_keys} Clockwerk parts"
             else:
                 rep_text = "Locked"
         ctx.game_interface.set_text(
@@ -381,9 +377,16 @@ async def handle_received(ctx: 'Sly2Context') -> None:
     available_episodes = {e: 0 for e in Sly2Episode}
     bottles = {e: 0 for e in Sly2Episode}
     network_items = ctx.items_received
+
+    # Update cached Clockwerk parts count only when processing new items
+    if len(network_items) > items_n:
+        ctx.clockwerk_parts_count = sum(
+            1 for i in network_items
+            if Items.from_id(i.item).category == "Clockwerk Part"
+        )
+
     if ctx.slot_data["episode_8_keys"] in [0,2]:
-        clockwerk_parts = [i for i in ctx.items_received if Items.from_id(i.item).category == "Clockwerk Part"]
-        if len(clockwerk_parts) >= ctx.slot_data["required_keys_episode_8"]:
+        if ctx.clockwerk_parts_count >= ctx.slot_data["required_keys_episode_8"]:
             if ctx.slot_data["episode_8_keys"] == 0:
                 available_episodes[Sly2Episode.Anatomy_for_Disaster] = 1
             else:
@@ -442,8 +445,7 @@ async def handle_received(ctx: 'Sly2Context') -> None:
             ctx.game_interface.add_coins(amount)
 
     if ctx.slot_data["episode_8_keys"] == 1 and available_episodes[Sly2Episode.Anatomy_for_Disaster] == 3:
-        clockwerk_parts = [i for i in ctx.items_received if Items.from_id(i.item).category == "Clockwerk Part"]
-        if len(clockwerk_parts) >= ctx.slot_data["required_keys_episode_8"]:
+        if ctx.clockwerk_parts_count >= ctx.slot_data["required_keys_episode_8"]:
             available_episodes[Sly2Episode.Anatomy_for_Disaster] = 4
 
     if ctx.current_episode != 0 and not ctx.in_safehouse:
@@ -540,7 +542,11 @@ async def handle_checks(ctx: 'Sly2Context') -> None:
             location_code = Locations.location_dict[location_name].code
             ctx.locations_checked.add(location_code)
 
-    await ctx.send_msgs([{"cmd": 'LocationChecks', "locations": ctx.locations_checked}])
+    # Only send location checks if there are new locations
+    new_locations = ctx.locations_checked - ctx.last_checked_locations
+    if new_locations:
+        await ctx.send_msgs([{"cmd": 'LocationChecks', "locations": ctx.locations_checked}])
+        ctx.last_checked_locations = ctx.locations_checked.copy()
 
 
 async def handle_deathlink(ctx: 'Sly2Context') -> None:
@@ -573,9 +579,7 @@ async def handle_check_goal(ctx: 'Sly2Context') -> None:
     if goal < 6:
         goaled = ctx.game_interface.is_goaled(goal)
     elif goal == 6:
-        clockwerk_parts = [i for i in ctx.items_received if Items.from_id(i.item).category == "Clockwerk Part"]
-
-        goaled = len(clockwerk_parts) >= ctx.slot_data["required_keys_goal"]
+        goaled = ctx.clockwerk_parts_count >= ctx.slot_data["required_keys_goal"]
     elif goal == 7:
         goaled = ctx.game_interface.all_vaults_opened()
 
