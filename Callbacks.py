@@ -78,16 +78,6 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
                 if in_hub:
                     set_bottles_collected(ctx)
 
-            await ctx.send_msgs([{
-                "cmd": "Set",
-                "key": f"Slot:{ctx.slot}:Episode",
-                "default": {},
-                "want_reply": False,
-                "operations": [
-                    {"operation": "replace",  "value": list(EPISODES.keys())[ctx.current_episode-1]}
-                ]
-            }])
-
         # If not in the tutorial or a cutscene, do Archipelago stuff.
         # This part is separate from the other "handle_*" functions because
         # episodes should be able to be unlocked and victory should be able
@@ -143,6 +133,16 @@ async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
 
         if ctx.current_episode != 0:
             fix_jobs(ctx)
+
+            await ctx.send_msgs([{
+                "cmd": "Set",
+                "key": f"Slot:{ctx.slot}:Episode",
+                "default": {},
+                "want_reply": False,
+                "operations": [
+                    {"operation": "replace",  "value": list(EPISODES.keys())[ctx.current_episode-1]}
+                ]
+            }])
 
 def set_bottles_collected(ctx: 'Sly2Context'):
     """Sets the "Bottles Collected" text in the pause menu"""
