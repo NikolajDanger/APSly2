@@ -361,7 +361,7 @@ async def handle_notifications(ctx: 'Sly2Context') -> None:
     ctx.game_interface.disable_infobox()
     ctx.showing_notification = False
     if len(ctx.notification_queue) > 0 and ctx.game_interface.in_hub():
-        new_notification = ctx.notification_queue.pop(0)
+        new_notification = ctx.notification_queue.popleft()
         ctx.notification_timestamp = time()
         ctx.showing_notification = True
         ctx.game_interface.set_infobox(new_notification)
@@ -374,12 +374,14 @@ async def handle_received(ctx: 'Sly2Context') -> None:
 
     items_n = ctx.game_interface.read_items_received()
 
+    notify_from = max(items_n, ctx.notified_items)
+
     available_episodes = {e: 0 for e in Sly2Episode}
     bottles = {e: 0 for e in Sly2Episode}
     network_items = ctx.items_received
 
     # Update cached Clockwerk parts count only when processing new items
-    if len(network_items) > items_n:
+    if len(network_items) > notify_from:
         ctx.clockwerk_parts_count = sum(
             1 for i in network_items
             if Items.from_id(i.item).category == "Clockwerk Part"
@@ -396,7 +398,7 @@ async def handle_received(ctx: 'Sly2Context') -> None:
         item = Items.from_id(network_item.item)
         player = ctx.player_names[network_item.player]
 
-        if i >= items_n:
+        if i >= notify_from:
             ctx.inventory[network_item.item] += 1
             ctx.notification(f"Received {item.name} from {player}")
 
@@ -437,7 +439,7 @@ async def handle_received(ctx: 'Sly2Context') -> None:
                 count = int(amount[:-8])
 
             bottles[episode] += count
-        elif item.name == "Coins" and i >= items_n:
+        elif item.name == "Coins" and i >= notify_from:
             amount = randint(
                 ctx.slot_data["coins_minimum"],
                 ctx.slot_data["coins_maximum"]
@@ -453,6 +455,7 @@ async def handle_received(ctx: 'Sly2Context') -> None:
 
     ctx.all_bottles = bottles
     ctx.game_interface.set_items_received(len(network_items))
+    ctx.notified_items = len(network_items)
     ctx.available_episodes = available_episodes
 
 async def handle_checks(ctx: 'Sly2Context') -> None:

@@ -1,4 +1,5 @@
 from typing import Optional, Dict
+from collections import deque
 import asyncio
 import multiprocessing
 import traceback
@@ -156,7 +157,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     is_connected_to_server: bool = False
     slot_data: Optional[dict[str, Utils.Any]] = None
     last_error_message: Optional[str] = None
-    notification_queue: list[str] = []
+    notification_queue: deque[str]
     notification_timestamp: float = 0
     showing_notification: bool = False
     deathlink_timestamp: float = 0
@@ -170,26 +171,33 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     current_episode: Optional[Sly2Episode] = None
 
     # Items and checks
-    inventory: Dict[int,int] = {l.code: 0 for l in Items.item_dict.values()}
-    available_episodes: Dict[Sly2Episode,int] = {e: 0 for e in Sly2Episode}
-    all_bottles: Dict[Sly2Episode,int] = {e: 0 for e in Sly2Episode}
+    inventory: Dict[int,int]
+    available_episodes: Dict[Sly2Episode,int]
+    all_bottles: Dict[Sly2Episode,int]
     thiefnet_items: Optional[list[str]] = None
     powerups: PowerUps = PowerUps()
     thiefnet_purchases: PowerUps = PowerUps()
-    jobs_completed: list[list[list[bool]]] = [
-        [[False for _ in chapter] for chapter in episode]
-        for episode in EPISODES.values()
-    ]
-    vaults: list[bool] = [
-        False for _ in EPISODES
-    ]
+    jobs_completed: list[list[list[bool]]]
+    vaults: list[bool]
     clockwerk_parts_count: int = 0  # Cached count to avoid repeated filtering
-    last_checked_locations: set[int] = set()  # Track what was already sent
+    notified_items: int = 0  # Session high-water of items already notified/counted
+    last_checked_locations: set[int]  # Track what was already sent
 
     def __init__(self, server_address, password):
         super().__init__(server_address, password)
         self.version = [0,8,6]
         self.game_interface = Sly2Interface(logger)
+
+        self.notification_queue = deque(maxlen=200)
+        self.inventory = {l.code: 0 for l in Items.item_dict.values()}
+        self.available_episodes = {e: 0 for e in Sly2Episode}
+        self.all_bottles = {e: 0 for e in Sly2Episode}
+        self.jobs_completed = [
+            [[False for _ in chapter] for chapter in episode]
+            for episode in EPISODES.values()
+        ]
+        self.vaults = [False for _ in EPISODES]
+        self.last_checked_locations = set()
 
     def run_generator(self):
         if tracker_loaded:
