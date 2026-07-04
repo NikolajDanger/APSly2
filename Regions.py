@@ -136,7 +136,7 @@ def create_regions(world: "Sly2World"):
         hybrid_region_names = []
         for loot, eps in world.loot_table.items():
             location_name = f"Pickpocket {loot}"
-            if hasattr(world.multiworld, "generation_is_fake"):
+            if getattr(world.multiworld, "generation_is_fake", False):
                 regions = list(set([f"Episode {i} (1)" for i,_,_ in eps]))
             else:
                 regions = list(set([f"Episode {i} ({ceil(j/2)})" for i,_,j in eps]))

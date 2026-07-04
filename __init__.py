@@ -287,39 +287,37 @@ class Sly2World(World):
     def generate_early(self) -> None:
 
         # implement .yaml-less Universal Tracker support
-        if hasattr(self.multiworld, "generation_is_fake"):
-            if hasattr(self.multiworld, "re_gen_passthrough"):
-                # I'm doing getattr purely so pylance stops being mad at me
-                re_gen_passthrough = getattr(self.multiworld, "re_gen_passthrough")
+        if getattr(self.multiworld, "generation_is_fake", False):
+            re_gen_passthrough = getattr(self.multiworld, "re_gen_passthrough", {})
 
-                if "Sly 2: Band of Thieves" in re_gen_passthrough:
-                    slot_data = re_gen_passthrough["Sly 2: Band of Thieves"]
-                    self.thiefnet_costs = slot_data["thiefnet_costs"]
-                    self.loot_table = slot_data["loot_table"]
-                    self.options.starting_episode.value = slot_data["starting_episode"]
-                    self.options.permissive_yaml.value = slot_data["permissive_yaml"]
-                    self.options.goal.value = slot_data["goal"]
-                    self.options.keys_in_pool.value = slot_data["keys_in_pool"]
-                    self.options.episode_8_keys.value = slot_data["episode_8_keys"]
-                    self.options.required_keys_episode_8.value = slot_data["required_keys_episode_8"]
-                    self.options.required_keys_goal.value = slot_data["required_keys_goal"]
-                    self.options.include_tom.value = slot_data["include_tom"]
-                    self.options.include_mega_jump.value = slot_data["include_mega_jump"]
-                    self.options.include_time_rush.value = slot_data["include_time_rush"]
-                    self.options.coins_minimum.value = slot_data["coins_minimum"]
-                    self.options.coins_maximum.value = slot_data["coins_maximum"]
-                    self.options.thiefnet_minimum.value = slot_data["thiefnet_minimum"]
-                    self.options.thiefnet_maximum.value = slot_data["thiefnet_maximum"]
-                    self.options.include_vaults.value = slot_data["include_vaults"]
-                    self.options.include_pickpocketing.value = slot_data["include_pickpocketing"]
-                    self.options.small_guard_loot_chance.value = slot_data["small_guard_loot_chance"]
-                    self.options.large_guard_loot_chance.value = slot_data["large_guard_loot_chance"]
-                    self.options.loot_table_distribution.value = slot_data["loot_table_distribution"]
-                    self.options.randomize_loot.value = slot_data["randomize_loot"]
-                    self.options.bottle_item_bundle_size.value = slot_data["bottle_item_bundle_size"]
-                    self.options.bottle_location_bundle_size.value = slot_data["bottle_location_bundle_size"]
-                    self.options.bottlesanity.value = slot_data["bottlesanity"]
-                    self.options.scout_thiefnet.value = slot_data["scout_thiefnet"]
+            if "Sly 2: Band of Thieves" in re_gen_passthrough:
+                slot_data = re_gen_passthrough["Sly 2: Band of Thieves"]
+                self.thiefnet_costs = slot_data["thiefnet_costs"]
+                self.loot_table = slot_data["loot_table"]
+                self.options.starting_episode.value = slot_data["starting_episode"]
+                self.options.permissive_yaml.value = slot_data["permissive_yaml"]
+                self.options.goal.value = slot_data["goal"]
+                self.options.keys_in_pool.value = slot_data["keys_in_pool"]
+                self.options.episode_8_keys.value = slot_data["episode_8_keys"]
+                self.options.required_keys_episode_8.value = slot_data["required_keys_episode_8"]
+                self.options.required_keys_goal.value = slot_data["required_keys_goal"]
+                self.options.include_tom.value = slot_data["include_tom"]
+                self.options.include_mega_jump.value = slot_data["include_mega_jump"]
+                self.options.include_time_rush.value = slot_data["include_time_rush"]
+                self.options.coins_minimum.value = slot_data["coins_minimum"]
+                self.options.coins_maximum.value = slot_data["coins_maximum"]
+                self.options.thiefnet_minimum.value = slot_data["thiefnet_minimum"]
+                self.options.thiefnet_maximum.value = slot_data["thiefnet_maximum"]
+                self.options.include_vaults.value = slot_data["include_vaults"]
+                self.options.include_pickpocketing.value = slot_data["include_pickpocketing"]
+                self.options.small_guard_loot_chance.value = slot_data["small_guard_loot_chance"]
+                self.options.large_guard_loot_chance.value = slot_data["large_guard_loot_chance"]
+                self.options.loot_table_distribution.value = slot_data["loot_table_distribution"]
+                self.options.randomize_loot.value = slot_data["randomize_loot"]
+                self.options.bottle_item_bundle_size.value = slot_data["bottle_item_bundle_size"]
+                self.options.bottle_location_bundle_size.value = slot_data["bottle_location_bundle_size"]
+                self.options.bottlesanity.value = slot_data["bottlesanity"]
+                self.options.scout_thiefnet.value = slot_data["scout_thiefnet"]
             return
 
         self.validate_options(self.options)
