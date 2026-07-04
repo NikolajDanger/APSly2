@@ -678,6 +678,52 @@ class Sly2Interface(GameInterface):
                 self._write32(disable_pointer, 0)
 
     # =====================================================
+    # Traps
+    # =====================================================
+
+    def set_current_health(self, value: int) -> None:
+        active_character_pointer = self._read32(
+            self.addresses["active character pointer"])
+        health_pointer = self._read32(active_character_pointer + 0xe00)
+        if health_pointer != 0:
+            self._write32(health_pointer, value)
+
+    def set_current_gadget_power(self, value: int) -> None:
+        active_character_pointer = self._read32(
+            self.addresses["active character pointer"])
+        gadget_power = self._read32(active_character_pointer + 0x12fc)
+        if gadget_power != 0:
+            self._write32(gadget_power, value)
+
+    def set_clock_speed(self, speed: float) -> None:
+        self._write_float(self.addresses["clock speed"], speed)
+
+    def set_friction(self, friction: float) -> None:
+        self._write_float(self.addresses["friction"], friction)
+
+    def alert_guards(self, infinite_reach: bool = True) -> None:
+        active = self._read32(self.addresses["active character pointer"])
+        for guard in self.addresses["guard structs"]:
+            pointer = self._read32(guard)
+            while pointer != 0:
+                # Swarmers use a different struct layout; only touch guards
+                # already targeting the active character.
+                if self._read32(pointer + 0x1110) == active:
+                    if infinite_reach:
+                        self._write32(pointer + 0x1100, 1)
+                    self._write32(pointer + 0x1114, 1)
+                pointer = self._read32(pointer + 0x20)
+
+    def release_guards(self) -> None:
+        active = self._read32(self.addresses["active character pointer"])
+        for guard in self.addresses["guard structs"]:
+            pointer = self._read32(guard)
+            while pointer != 0:
+                if self._read32(pointer + 0x1110) == active:
+                    self._write32(pointer + 0x1100, 0)
+                pointer = self._read32(pointer + 0x20)
+
+    # =====================================================
     # Other utils
     # =====================================================
 

@@ -318,6 +318,8 @@ class Sly2World(World):
                 self.options.bottle_location_bundle_size.value = slot_data["bottle_location_bundle_size"]
                 self.options.bottlesanity.value = slot_data["bottlesanity"]
                 self.options.scout_thiefnet.value = slot_data["scout_thiefnet"]
+                self.options.trap_chance.value = slot_data["trap_chance"]
+                self.options.trap_weights.value = slot_data["trap_weights"]
             return
 
         self.validate_options(self.options)
@@ -388,7 +390,9 @@ class Sly2World(World):
             "bottle_location_bundle_size",
             "bottlesanity",
             "bottle_item_bundle_size",
-            "scout_thiefnet"
+            "scout_thiefnet",
+            "trap_chance",
+            "trap_weights"
             # "skip_intro"
         )
 

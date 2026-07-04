@@ -288,6 +288,8 @@ ADDRESSES = {
         "gadgets": 0x3D4AF8,
         "active character": 0x3D4A6C,
         "active character pointer": 0x2DE2F0,
+        "clock speed": 0x2DDED8,
+        "friction": 0x2C3C90,
         "string table": 0x3e1ad4,
         "frame counter": 0x2F67D0,
         "input": 0x2E0CB4,

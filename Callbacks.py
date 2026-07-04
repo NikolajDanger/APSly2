@@ -84,6 +84,7 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
         # to be sent while in the episode menu
         if current_map != 0 and not ctx.game_interface.in_cutscene():
             await handle_received(ctx)
+            handle_traps(ctx)
             await handle_checks(ctx)
             await handle_check_goal(ctx)
 
@@ -117,7 +118,11 @@ async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
     if ap_connected and ctx.current_episode:
         if ctx.slot_data is None:
             return
-        
+
+        # In case the client stopped mid-trap (e.g. a crash), revert any
+        # lingering trap edits to their defaults.
+        reset_traps(ctx)
+
         # In case guards spawned with the old loot:
         ctx.game_interface.despawn_guards()
 
@@ -376,6 +381,14 @@ async def handle_received(ctx: 'Sly2Context') -> None:
 
     notify_from = max(items_n, ctx.notified_items)
 
+    # On a fresh connection, absorb the whole backlog so traps that arrived
+    # while the client was closed don't all fire at once. Traps that arrive
+    # later (even while at a menu) still fire, since trap_cursor only advances
+    # on gameplay ticks that run handle_received.
+    if ctx.trap_baseline_pending:
+        ctx.trap_cursor = len(ctx.items_received)
+        ctx.trap_baseline_pending = False
+
     available_episodes = {e: 0 for e in Sly2Episode}
     bottles = {e: 0 for e in Sly2Episode}
     network_items = ctx.items_received
@@ -445,6 +458,8 @@ async def handle_received(ctx: 'Sly2Context') -> None:
                 ctx.slot_data["coins_maximum"]
             )
             ctx.game_interface.add_coins(amount)
+        elif item.category == "Trap" and i >= ctx.trap_cursor:
+            activate_trap(ctx, Items.Trap.from_item_name(item.name))
 
     if ctx.slot_data["episode_8_keys"] == 1 and available_episodes[Sly2Episode.Anatomy_for_Disaster] == 3:
         if ctx.clockwerk_parts_count >= ctx.slot_data["required_keys_episode_8"]:
@@ -456,7 +471,63 @@ async def handle_received(ctx: 'Sly2Context') -> None:
     ctx.all_bottles = bottles
     ctx.game_interface.set_items_received(len(network_items))
     ctx.notified_items = len(network_items)
+    ctx.trap_cursor = len(network_items)
     ctx.available_episodes = available_episodes
+
+def activate_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
+    """Fires a trap when its item is received"""
+    if trap.duration is None:
+        if trap is Items.Trap.SLY_1:
+            ctx.game_interface.set_current_health(1)
+        elif trap is Items.Trap.ENERGY_DRAIN:
+            ctx.game_interface.set_current_gadget_power(0)
+        return
+
+    # Timed traps: (re)start the timer. The per-tick effect is applied in
+    # handle_traps, since map reloads reset the underlying memory.
+    ctx.active_traps[trap] = time() + trap.duration
+    if trap is Items.Trap.NOISE:
+        ctx.game_interface.alert_guards()
+
+def handle_traps(ctx: 'Sly2Context') -> None:
+    """Applies active timed traps each tick and expires finished ones"""
+    for trap, expiry in list(ctx.active_traps.items()):
+        if time() >= expiry:
+            end_trap(ctx, trap)
+            del ctx.active_traps[trap]
+        else:
+            apply_trap(ctx, trap)
+
+def apply_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
+    """Re-applies a timed trap's effect (memory resets on map reload)"""
+    if trap is Items.Trap.SLOW_MO:
+        ctx.game_interface.set_clock_speed(0.5)
+    elif trap is Items.Trap.SUGAR_RUSH:
+        ctx.game_interface.set_clock_speed(1.5)
+    elif trap is Items.Trap.ICE:
+        ctx.game_interface.set_friction(0.2)
+
+def end_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
+    """Restores default state when a timed trap expires"""
+    if trap in (Items.Trap.SLOW_MO, Items.Trap.SUGAR_RUSH):
+        ctx.game_interface.set_clock_speed(1.0)
+    elif trap is Items.Trap.ICE:
+        ctx.game_interface.set_friction(1.5)
+    elif trap is Items.Trap.NOISE:
+        ctx.game_interface.release_guards()
+
+def reset_traps(ctx: 'Sly2Context') -> None:
+    """
+    Revert every timed trap's memory to its default.
+
+    Timed traps continuously overwrite game memory, so if the client stops
+    while one is active the edited value would persist until the next map
+    reload. Resetting to the defaults on connect cleans up any such leftovers.
+    """
+    ctx.game_interface.set_clock_speed(1.0)
+    ctx.game_interface.set_friction(1.5)
+    ctx.game_interface.release_guards()
+    ctx.active_traps.clear()
 
 async def handle_checks(ctx: 'Sly2Context') -> None:
     """Send checks to the multiworld"""

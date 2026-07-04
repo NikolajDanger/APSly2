@@ -6,9 +6,12 @@ from Options import (
     Toggle,
     DefaultOnToggle,
     Range,
+    OptionCounter,
     OptionGroup
 )
 from dataclasses import dataclass
+
+from .data.Items import Trap
 
 class PermissiveYaml(Toggle):
     """
@@ -303,6 +306,37 @@ class SkipIntro(DefaultOnToggle):
     display_name = "Skip Intro"
 
 
+class TrapChance(Range):
+    """
+    The percentage of filler items that are replaced with traps.
+    """
+
+    display_name = "Trap Chance"
+    range_start = 0
+    range_end = 100
+    default = 0
+
+
+class TrapWeights(OptionCounter):
+    """
+    Relative weights of each trap type. When a filler item becomes a trap (see
+    Trap Chance), its type is chosen according to these weights. Set a weight to
+    0 to disable that trap. The trap types are:
+
+    - Sly 1 Trap: sets the current character's health to 1.
+    - Energy Drain Trap: empties the gadget meter.
+    - Slow-mo Trap: slows the game down for a few seconds.
+    - Sugar Rush Trap: speeds the game up for a few seconds.
+    - Ice Trap: makes the ground slippery for a few seconds.
+    - Noise Trap: alerts nearby guards for a few seconds.
+    """
+
+    display_name = "Trap Weights"
+    min = 0
+    valid_keys = frozenset(trap.item_name for trap in Trap)
+    default = {trap.item_name: 10 for trap in Trap}
+
+
 @dataclass
 class Sly2Options(PerGameCommonOptions):
     start_inventory_from_pool: StartInventoryPool
@@ -333,6 +367,8 @@ class Sly2Options(PerGameCommonOptions):
     # lootsanity:LootSanity
     scout_thiefnet: ScoutThiefnet
     # skip_intro: SkipIntro
+    trap_chance: TrapChance
+    trap_weights: TrapWeights
 
 sly2_option_groups = [
     OptionGroup("Goal",[
@@ -350,7 +386,9 @@ sly2_option_groups = [
         IncludeTimeRush,
         CoinsMinimum,
         CoinsMaximum,
-        BottleItemBundleSize
+        BottleItemBundleSize,
+        TrapChance,
+        TrapWeights
     ]),
     OptionGroup("Locations",[
         ThiefNetCostMinimum,

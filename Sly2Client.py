@@ -181,7 +181,10 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     vaults: list[bool]
     clockwerk_parts_count: int = 0  # Cached count to avoid repeated filtering
     notified_items: int = 0  # Session high-water of items already notified/counted
+    trap_cursor: int = 0  # High-water of items eligible for trap activation
+    trap_baseline_pending: bool = False  # Re-baseline trap_cursor after connect
     last_checked_locations: set[int]  # Track what was already sent
+    active_traps: dict[Items.Trap, float]  # Active trap -> time it expires
 
     def __init__(self, server_address, password):
         super().__init__(server_address, password)
@@ -198,6 +201,9 @@ class Sly2Context(CommonContext): # type: ignore[misc]
         ]
         self.vaults = [False for _ in EPISODES]
         self.last_checked_locations = set()
+        self.active_traps = {}
+        self.trap_cursor = 0
+        self.trap_baseline_pending = False
 
     def run_generator(self):
         if tracker_loaded:
@@ -317,6 +323,8 @@ async def _handle_game_ready(ctx: Sly2Context) -> None:
     connected_to_server = (ctx.server is not None) and (ctx.slot is not None)
 
     new_connection = ctx.is_connected_to_server != connected_to_server
+    if new_connection and connected_to_server:
+        ctx.trap_baseline_pending = True
     if ctx.current_episode != current_episode or new_connection:
         ctx.current_episode = current_episode
         ctx.is_connected_to_server = connected_to_server

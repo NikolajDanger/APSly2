@@ -25,7 +25,7 @@ requires:
     random-low: 0
     random-high: 0
     disabled: 0 # equivalent to 0
-    normal: 50 # equivalent to 50
+    normal: 100 # equivalent to 50
     extreme: 0 # equivalent to 99
 
   # Set rules for reachability of your items/locations.
@@ -34,12 +34,12 @@ requires:
   #
   # **Minimal:** ensure what is needed to reach your goal can be acquired.
   accessibility:
-    full: 50
+    full: 100
     minimal: 0
 
   # When you die, everyone who enabled death link dies. Of course, the reverse is true too.
   death_link:
-    'false': 50
+    'false': 100
     'true': 0
 
   # If permissive yaml is on, incompatible yaml options will be changed to more
@@ -49,14 +49,14 @@ requires:
   # This is intended for yamls with random values. If you're not randomizing
   # any options, it's recommended that you turn permissive yaml off.
   permissive_yaml:
-    'false': 50
+    'false': 100
     'true': 0
 
   # Select Which episode to start with. Starting with Anatomy for disaster
   # is not compatible with the "first section" and "whole episode" options for
   # "Episode 8 Keys".
   starting_episode:
-    the_black_chateau: 50
+    the_black_chateau: 100
     a_starry_eyed_encounter: 0
     the_predator_awakens: 0
     jailbreak: 0
@@ -78,7 +78,7 @@ requires:
     rajan: 0
     the_contessa: 0
     jean_bison: 0
-    clockla: 50
+    clockla: 100
     all_bosses: 0
     clockwerk_hunt: 0
     all_vaults: 0
@@ -96,7 +96,7 @@ requires:
   # Minimum value is 1
   # Maximum value is 100
   keys_in_pool:
-    10: 50
+    10: 100
     random: 0
     random-low: 0
     random-high: 0
@@ -113,7 +113,7 @@ requires:
   # - Off: Unlock Anatomy for Disaster with progressive episode items, like the
   #   other episodes.
   episode_8_keys:
-    first_section: 50
+    first_section: 100
     last_section: 0
     whole_episode: 0
     'off': 0
@@ -125,7 +125,7 @@ requires:
   # Minimum value is 1
   # Maximum value is 100
   required_keys_episode_8:
-    10: 50
+    10: 100
     random: 0
     random-low: 0
     random-high: 0
@@ -136,7 +136,7 @@ requires:
   # Minimum value is 1
   # Maximum value is 100
   required_keys_goal:
-    10: 50
+    10: 100
     random: 0
     random-low: 0
     random-high: 0
@@ -147,17 +147,17 @@ requires:
 
   # Add the TOM ability/gadget to the pool.
   include_tom:
-    'false': 50
+    'false': 100
     'true': 0
 
   # Add the Mega Jump ability/gadget to the pool.
   include_mega_jump:
-    'false': 50
+    'false': 100
     'true': 0
 
   # Add the Time Rush ability/gadget to the pool.
   include_time_rush:
-    'false': 50
+    'false': 100
     'true': 0
 
   # The minimum number of coins you'll receive when you get a "Coins" filler
@@ -167,7 +167,7 @@ requires:
   # Minimum value is 0
   # Maximum value is 1000
   coins_minimum:
-    50: 50
+    50: 100
     random: 0
     random-low: 0
     random-high: 0
@@ -179,7 +179,7 @@ requires:
   # Minimum value is 0
   # Maximum value is 1000
   coins_maximum:
-    200: 50
+    200: 100
     random: 0
     random-low: 0
     random-high: 0
@@ -191,10 +191,39 @@ requires:
   # Minimum value is 0
   # Maximum value is 30
   bottle_item_bundle_size:
-    0: 50
+    0: 100
     random: 0
     random-low: 0
     random-high: 0
+
+  # The percentage of filler items that are replaced with traps.
+  #
+  # You can define additional values between the minimum and maximum values.
+  # Minimum value is 0
+  # Maximum value is 100
+  trap_chance:
+    0: 100
+    random: 0
+    random-low: 0
+    random-high: 0
+
+  # Relative weights of each trap type. When a filler item becomes a trap (see
+  # Trap Chance), its type is chosen according to these weights. Set a weight to
+  # 0 to disable that trap. The trap types are:
+  #
+  # - Sly 1 Trap: sets the current character's health to 1.
+  # - Energy Drain Trap: empties the gadget meter.
+  # - Slow-mo Trap: slows the game down for a few seconds.
+  # - Sugar Rush Trap: speeds the game up for a few seconds.
+  # - Ice Trap: makes the ground slippery for a few seconds.
+  # - Noise Trap: alerts nearby guards for a few seconds.
+  trap_weights:
+    Sly 1 Trap: 10
+    Energy Drain Trap: 10
+    Slow-mo Trap: 10
+    Sugar Rush Trap: 10
+    Ice Trap: 10
+    Noise Trap: 10
 
   ###############
   ## Locations ##

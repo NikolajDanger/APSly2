@@ -3,7 +3,7 @@ import typing
 from BaseClasses import Item
 
 from .data.Constants import EPISODES
-from .data.Items import item_groups
+from .data.Items import item_groups, Trap
 # from .Sly2Options import StartingEpisode
 
 if typing.TYPE_CHECKING:
@@ -97,6 +97,18 @@ def gen_bottles(world: "Sly2World"):
 
     return bottles
 
+def gen_traps(world: "Sly2World", count: int) -> list[Item]:
+    """Generate `count` trap items, distributed by their configured weights"""
+    weights = world.options.trap_weights.value
+    enabled = [trap for trap in Trap if weights[trap.item_name] > 0]
+    if count <= 0 or not enabled:
+        return []
+
+    chosen = world.random.choices(
+        enabled, weights=[weights[trap.item_name] for trap in enabled], k=count
+    )
+    return [world.create_item(trap.item_name) for trap in chosen]
+
 def gen_pool(world: "Sly2World") -> list[Item]:
     """Generate the item pool for the world"""
     item_pool = []
@@ -110,6 +122,20 @@ def gen_pool(world: "Sly2World") -> list[Item]:
     if world.options.goal.value < 5:
         remaining -= 1
     assert remaining >= 0, f"There are more items than locations ({len(item_pool)} items; {len(unfilled_locations)} locations)"
-    item_pool += [world.create_item(world.get_filler_item_name()) for _ in range(remaining)]
+
+    # Replace a portion of the filler with traps. gen_traps returns nothing if
+    # no trap types are enabled, so those slots fall back to filler.
+    trap_count = 0
+    if world.options.trap_chance.value > 0:
+        trap_count = sum(
+            1 for _ in range(remaining)
+            if world.random.randint(1,100) <= world.options.trap_chance.value
+        )
+    traps = gen_traps(world, trap_count)
+    item_pool += traps
+    item_pool += [
+        world.create_item(world.get_filler_item_name())
+        for _ in range(remaining-len(traps))
+    ]
 
     return item_pool

@@ -1,4 +1,5 @@
-from typing import NamedTuple
+from typing import NamedTuple, Optional
+from enum import Enum
 
 from BaseClasses import Item, ItemClassification
 
@@ -6,6 +7,26 @@ from .Constants import EPISODES
 
 class Sly2Item(Item):
     game: str = "Sly 2: Band of Thieves"
+
+class Trap(Enum):
+    """Trap items. `duration` is in seconds; None means an instant effect."""
+    SLY_1        = ("Sly 1 Trap",        None)
+    ENERGY_DRAIN = ("Energy Drain Trap", None)
+    SLOW_MO      = ("Slow-mo Trap",      10)
+    SUGAR_RUSH   = ("Sugar Rush Trap",   10)
+    ICE          = ("Ice Trap",          15)
+    NOISE        = ("Noise Trap",        10)
+
+    def __init__(self, item_name: str, duration: Optional[int]):
+        self.item_name = item_name
+        self.duration = duration
+
+    @classmethod
+    def from_item_name(cls, name: str) -> "Trap":
+        for trap in cls:
+            if trap.item_name == name:
+                return trap
+        raise KeyError(name)
 
 class Sly2ItemData(NamedTuple):
     name: str
@@ -108,12 +129,19 @@ progressive_episode_list = [
     for e in EPISODES.keys()
 ]
 
+# Appended last so existing item IDs stay stable.
+trap_list = [
+    (trap.item_name,            ItemClassification.trap,        "Trap")
+    for trap in Trap
+]
+
 item_list = (
     filler_list+
     powerup_list+
     clockwerk_parts_list+
     bottle_list+
-    progressive_episode_list
+    progressive_episode_list+
+    trap_list
 )
 
 base_code = 123_000
@@ -130,7 +158,8 @@ item_groups = {
         "Power-Up",
         "Bottles",
         "Episode",
-        "Clockwerk Part"
+        "Clockwerk Part",
+        "Trap"
     ]
 }
 
