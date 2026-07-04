@@ -149,6 +149,9 @@ EPISODES = {
     ],
 }
 
+def episode_key(name: str) -> str:
+    return name.lower().replace(",", "").replace("!", "").replace(" ", "_")
+
 TREASURES = {
     "The Black Chateau": [
         ("Jade Vase", 2),

@@ -21,6 +21,10 @@ class Trap(Enum):
         self.item_name = item_name
         self.duration = duration
 
+    @property
+    def key(self) -> str:
+        return self.item_name.lower().replace("-", "_").replace(" ", "_")
+
     @classmethod
     def from_item_name(cls, name: str) -> "Trap":
         for trap in cls:

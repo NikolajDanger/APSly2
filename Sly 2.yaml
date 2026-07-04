@@ -78,6 +78,9 @@ requires:
   #
   # Clockwerk Hunt requires you to collect a certain number of Clockwerk
   # parts/keys to goal. All Vaults requires you to open all 8 vaults.
+  #
+  # Pick and Mix lets you combine several victory conditions; configure which
+  # ones with the "Pick and Mix" option.
   goal:
     dimitri: 0
     rajan: 0
@@ -85,6 +88,30 @@ requires:
     jean_bison: 0
     clockla: 100
     all_bosses: 0
+    clockwerk_hunt: 0
+    all_vaults: 0
+    pick_and_mix: 0
+
+  # The victory conditions for the "Pick and Mix" goal. Only takes effect if
+  # goal is set to Pick and Mix. Set a condition to 1 to enable it and 0 to
+  # disable it. You goal once every enabled condition is met.
+  #
+  # There is a condition for completing each episode, plus:
+  #
+  # - clockwerk_hunt: collect the number of Clockwerk parts set by "Goal
+  #   Required Keys".
+  # - all_vaults: open all vaults.
+  #
+  # At least one condition must be enabled.
+  pick_and_mix:
+    the_black_chateau: 0
+    a_starry_eyed_encounter: 0
+    the_predator_awakens: 0
+    jailbreak: 0
+    a_tangled_web: 0
+    he_who_tames_the_iron_horse: 0
+    menace_from_the_north_eh: 0
+    anatomy_for_disaster: 0
     clockwerk_hunt: 0
     all_vaults: 0
 
@@ -223,12 +250,12 @@ requires:
   # - Ice Trap: makes the ground slippery for a few seconds.
   # - Noise Trap: alerts nearby guards for a few seconds.
   trap_weights:
-    Sly 1 Trap: 10
-    Energy Drain Trap: 10
-    Slow-mo Trap: 10
-    Sugar Rush Trap: 10
-    Ice Trap: 10
-    Noise Trap: 10
+    sly_1_trap: 10
+    energy_drain_trap: 10
+    slow_mo_trap: 10
+    sugar_rush_trap: 10
+    ice_trap: 10
+    noise_trap: 10
 
   ###############
   ## Locations ##

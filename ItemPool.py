@@ -49,7 +49,13 @@ def gen_episodes(world: "Sly2World") -> list[Item]:
 
 def gen_clockwerk(world: "Sly2World") -> list[Item]:
     """Generate the clockwerk part items for the item pool"""
-    if (world.options.episode_8_keys.value != 3 or world.options.goal.value == 6):
+    using_parts = (
+        world.options.episode_8_keys.value != 3 or
+        world.options.goal.value == 6 or
+        (world.options.goal.value == 8 and
+            world.options.pick_and_mix.value.get("clockwerk_hunt"))
+    )
+    if using_parts:
         num_keys = world.options.keys_in_pool.value
     else:
         num_keys = 0
@@ -100,12 +106,12 @@ def gen_bottles(world: "Sly2World"):
 def gen_traps(world: "Sly2World", count: int) -> list[Item]:
     """Generate `count` trap items, distributed by their configured weights"""
     weights = world.options.trap_weights.value
-    enabled = [trap for trap in Trap if weights[trap.item_name] > 0]
+    enabled = [trap for trap in Trap if weights[trap.key] > 0]
     if count <= 0 or not enabled:
         return []
 
     chosen = world.random.choices(
-        enabled, weights=[weights[trap.item_name] for trap in enabled], k=count
+        enabled, weights=[weights[trap.key] for trap in enabled], k=count
     )
     return [world.create_item(trap.item_name) for trap in chosen]
 

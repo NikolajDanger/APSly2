@@ -5,7 +5,7 @@ from random import randint
 from NetUtils import ClientStatus
 
 from .data import Items, Locations
-from .data.Constants import EPISODES, POWERUP_TEXT, OTHER_POWERUPS, TREASURES, DEATH_TYPES, LOOT, PICKPOCKET_LOOT_TABLE_CHANCES
+from .data.Constants import EPISODES, POWERUP_TEXT, OTHER_POWERUPS, TREASURES, DEATH_TYPES, LOOT, PICKPOCKET_LOOT_TABLE_CHANCES, episode_key
 from .Sly2Interface import Sly2Episode, PowerUps
 
 if TYPE_CHECKING:
@@ -684,6 +684,18 @@ async def handle_check_goal(ctx: 'Sly2Context') -> None:
         goaled = ctx.clockwerk_parts_count >= ctx.slot_data["required_keys_goal"]
     elif goal == 7:
         goaled = ctx.game_interface.all_vaults_opened()
+    elif goal == 8:
+        conditions = ctx.slot_data["pick_and_mix"]
+        ops = ctx.game_interface.get_operation_completion()
+        goaled = True
+        for i, ep in enumerate(EPISODES):
+            if conditions.get(episode_key(ep)) and not ops[i]:
+                goaled = False
+        if (conditions.get("clockwerk_hunt") and
+            ctx.clockwerk_parts_count < ctx.slot_data["required_keys_goal"]):
+            goaled = False
+        if conditions.get("all_vaults") and not ctx.game_interface.all_vaults_opened():
+            goaled = False
 
 
     if goaled:

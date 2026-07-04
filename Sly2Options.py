@@ -12,6 +12,7 @@ from Options import (
 from dataclasses import dataclass
 
 from .data.Items import Trap
+from .data.Constants import EPISODES, episode_key
 
 class PermissiveYaml(Toggle):
     """
@@ -50,6 +51,9 @@ class Goal(Choice):
 
     Clockwerk Hunt requires you to collect a certain number of Clockwerk
     parts/keys to goal. All Vaults requires you to open all 8 vaults.
+
+    Pick and Mix lets you combine several victory conditions; configure which
+    ones with the "Pick and Mix" option.
     """
 
     display_name = "Goal"
@@ -61,7 +65,32 @@ class Goal(Choice):
     option_All_Bosses = 5
     option_Clockwerk_Hunt = 6
     option_All_Vaults = 7
+    option_Pick_and_Mix = 8
     default = 4
+
+
+class PickAndMix(OptionCounter):
+    """
+    The victory conditions for the "Pick and Mix" goal. Only takes effect if
+    goal is set to Pick and Mix. Set a condition to 1 to enable it and 0 to
+    disable it. You goal once every enabled condition is met.
+
+    There is a condition for completing each episode, plus:
+
+    - clockwerk_hunt: collect the number of Clockwerk parts set by "Goal
+      Required Keys".
+    - all_vaults: open all vaults.
+
+    At least one condition must be enabled.
+    """
+
+    display_name = "Pick and Mix"
+    min = 0
+    max = 1
+    valid_keys = frozenset(
+        episode_key(ep) for ep in EPISODES
+    ) | {"clockwerk_hunt", "all_vaults"}
+    default = {k: 0 for k in valid_keys}
 
 
 class Episode8Keys(Choice):
@@ -333,8 +362,8 @@ class TrapWeights(OptionCounter):
 
     display_name = "Trap Weights"
     min = 0
-    valid_keys = frozenset(trap.item_name for trap in Trap)
-    default = {trap.item_name: 10 for trap in Trap}
+    valid_keys = frozenset(trap.key for trap in Trap)
+    default = {trap.key: 10 for trap in Trap}
 
 
 class RingLink(Toggle):
@@ -355,6 +384,7 @@ class Sly2Options(PerGameCommonOptions):
     permissive_yaml: PermissiveYaml
     starting_episode: StartingEpisode
     goal: Goal
+    pick_and_mix: PickAndMix
     keys_in_pool: KeysInPool
     episode_8_keys: Episode8Keys
     required_keys_episode_8: RequiredKeys
@@ -383,7 +413,8 @@ class Sly2Options(PerGameCommonOptions):
 
 sly2_option_groups = [
     OptionGroup("Goal",[
-        Goal
+        Goal,
+        PickAndMix
     ]),
     OptionGroup("Clockwerk parts",[
         KeysInPool,

@@ -9,7 +9,7 @@ from CommonClient import get_base_parser, logger, server_loop, gui_enabled
 import Utils
 
 from .data import Locations, Items
-from .data.Constants import EPISODES, ENEMIES, PICKPOCKET_LOOT_TABLE_CHANCES
+from .data.Constants import EPISODES, ENEMIES, PICKPOCKET_LOOT_TABLE_CHANCES, episode_key
 from .Sly2Interface import Sly2Interface, Sly2Episode, PowerUps
 from .Callbacks import init, update
 
@@ -152,7 +152,28 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
                 if self.ctx.game_interface.get_connection_state():
                     vaults = self.ctx.game_interface.all_vault_statuses()
                     for i in range(8):
-                        goal_text += f"\nEpisode {i+1}: {vaults[i]}"
+                        goal_text += f"\nEpisode {i+1}: {'X' if vaults[i] else ''}"
+            elif goal_idx == 8:
+                goal_text = "Goal: Pick and Mix"
+                conditions = self.ctx.slot_data["pick_and_mix"]
+                connected = self.ctx.game_interface.get_connection_state()
+                ops = (
+                    self.ctx.game_interface.get_operation_completion()
+                    if connected else None
+                )
+                for i, ep in enumerate(EPISODES):
+                    if conditions.get(episode_key(ep)):
+                        done = ops is not None and ops[i]
+                        goal_text += f"\n{ep}: {'X' if done else ''}"
+                if conditions.get("clockwerk_hunt"):
+                    needed = self.ctx.slot_data["required_keys_goal"]
+                    goal_text += f"\nClockwerk Hunt: {self.ctx.clockwerk_parts_count}/{needed} Clockwerk Parts"
+                if conditions.get("all_vaults"):
+                    status = ""
+                    if connected:
+                        opened = sum(self.ctx.game_interface.all_vault_statuses())
+                        status = f"{opened}/8"
+                    goal_text += f"\nAll Vaults: {status}"
 
             logger.info(goal_text)
 

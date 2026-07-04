@@ -4,7 +4,7 @@ from math import ceil
 from BaseClasses import CollectionState
 
 from worlds.generic.Rules import add_rule
-from .data.Constants import EPISODES
+from .data.Constants import EPISODES, episode_key
 
 if typing.TYPE_CHECKING:
     from . import Sly2World
@@ -180,6 +180,36 @@ def set_rules(world: "Sly2World"):
             return all(
                 world.multiworld.get_location(cond,world.player).access_rule(state)
                 for cond in victory_conditions
+            )
+
+        world.multiworld.completion_condition[world.player] = access_rule
+
+    elif world.options.goal.value == 8:
+        conditions = world.options.pick_and_mix.value
+        victory_locations = [
+            f"{ep} - {EPISODES[ep][-1][-1]}"
+            for ep in EPISODES if conditions.get(episode_key(ep))
+        ]
+        if conditions.get("all_vaults"):
+            victory_locations += [
+                "The Black Chateau - Vault",
+                "The Predator Awakens - Vault",
+                "A Tangled Web - Vault",
+                "Menace from the North, Eh! - Vault",
+                "Anatomy for Disaster - Vault"
+            ]
+        need_parts = conditions.get("clockwerk_hunt")
+        required = world.options.required_keys_goal.value
+
+        def access_rule(state: CollectionState):
+            if need_parts and not state.has_group(
+                "Clockwerk Part", world.player, required
+            ):
+                return False
+
+            return all(
+                world.multiworld.get_location(loc,world.player).access_rule(state)
+                for loc in victory_locations
             )
 
         world.multiworld.completion_condition[world.player] = access_rule
