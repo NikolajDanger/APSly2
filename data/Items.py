@@ -20,7 +20,7 @@ filler_list = [
     ("Coins",                   ItemClassification.filler,      "Filler"),
 ]
 
-powerup_list = [
+sly_powerups = [
     ("Smoke Bomb",              ItemClassification.useful,      "Power-Up"),
     ("Combat Dodge",            ItemClassification.useful,      "Power-Up"),
     ("Stealth Slide",           ItemClassification.useful,      "Power-Up"),
@@ -40,7 +40,9 @@ powerup_list = [
     ("TOM",                     ItemClassification.useful,      "Power-Up"),
     ("Mega Jump",               ItemClassification.progression, "Power-Up"),
     ("Time Rush",               ItemClassification.useful,      "Power-Up"),
+]
 
+bentley_powerups = [
     ("Trigger Bomb",            ItemClassification.useful,      "Power-Up"),
     ("Size Destabilizer",       ItemClassification.useful,      "Power-Up"),
     ("Snooze Bomb",             ItemClassification.useful,      "Power-Up"),
@@ -49,7 +51,9 @@ powerup_list = [
     ("Hover Pack",              ItemClassification.progression, "Power-Up"),
     ("Reduction Bomb",          ItemClassification.useful,      "Power-Up"),
     ("Temporal Lock",           ItemClassification.useful,      "Power-Up"),
+]
 
+murray_powerups = [
     ("Fists of Flame",          ItemClassification.useful,      "Power-Up"),
     ("Turnbuckle Launch",       ItemClassification.progression, "Power-Up"),
     ("Juggernaut Throw",        ItemClassification.useful,      "Power-Up"),
@@ -59,6 +63,8 @@ powerup_list = [
     ("Guttural Roar",           ItemClassification.useful,      "Power-Up"),
     ("Diablo Fire Slam",        ItemClassification.useful,      "Power-Up"),
 ]
+
+powerup_list = sly_powerups + bentley_powerups + murray_powerups
 
 clockwerk_parts_list = [
     (f"Clockwerk {s}",           ItemClassification.progression, "Clockwerk Part")
@@ -127,6 +133,15 @@ item_groups = {
         "Clockwerk Part"
     ]
 }
+
+item_groups.update({
+    "Episodes":          item_groups["Episode"],
+    "Gadgets":           item_groups["Power-Up"],
+    "Clockwerk Parts":   item_groups["Clockwerk Part"],
+    "Sly's Gadgets":     {name for name, _, _ in sly_powerups},
+    "Bentley's Gadgets": {name for name, _, _ in bentley_powerups},
+    "Murray's Gadgets":  {name for name, _, _ in murray_powerups},
+})
 
 def from_id(item_id: int) -> Sly2ItemData:
     matching = [item for item in item_dict.values() if item.code == item_id]

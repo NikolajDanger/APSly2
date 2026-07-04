@@ -5,7 +5,6 @@ description: 'Default Sly 2: Band of Thieves Template'
 
 game: 'Sly 2: Band of Thieves'
 requires:
-  version: 0.6.5 # Version of Archipelago required for this yaml to work as expected.
   game:
     'Sly 2: Band of Thieves': 0.8.6 # Version of the world required for this yaml to work as expected.
 
@@ -306,6 +305,16 @@ requires:
   #############################
   ## Item & Location Options ##
   #############################
+
+  # Item name groups (in addition to the built-in "Everything"):
+  #   Episodes, Gadgets, Bottles, Clockwerk Parts,
+  #   Sly's Gadgets, Bentley's Gadgets, Murray's Gadgets
+  # Location name groups (in addition to the built-in "Everywhere"):
+  #   Jobs, Operations, Vaults, Treasures, Bottles, Loot (aka Pickpocket
+  #   Loot), ThiefNet, and one group per episode:
+  #   The Black Chateau, A Starry Eyed Encounter, The Predator Awakens,
+  #   Jailbreak, A Tangled Web, He Who Tames the Iron Horse,
+  #   Menace from the North, Eh!, Anatomy for Disaster
 
   # Forces these items to be in their native world.
   local_items: []

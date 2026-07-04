@@ -65,6 +65,26 @@ location_groups = {
     ]
 }
 
+location_groups.update({
+    "Jobs":            location_groups["Job"],
+    "Bottles":         location_groups["Bottle"],
+    "Vaults":          location_groups["Vault"],
+    "Treasures":       location_groups["Treasure"],
+    "Loot":            location_groups["Pickpocket"],
+    "Pickpocket Loot": location_groups["Pickpocket"],
+    "ThiefNet":        location_groups["Purchase"],
+    "Operations": {
+        f"{ep} - {chapters[-1][-1]}"
+        for ep, chapters in EPISODES.items()
+    },
+})
+
+for ep in EPISODES:
+    location_groups[ep] = {
+        loc.name for loc in location_dict.values()
+        if loc.name.startswith(f"{ep} - ")
+    }
+
 def from_id(location_id: int) -> Sly2LocationData:
     matching = [location for location in location_dict.values() if location.code == location_id]
     if len(matching) == 0:
