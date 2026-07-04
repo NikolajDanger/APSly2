@@ -341,6 +341,10 @@ ADDRESSES = {
         "thiefnet costs": [0x2BCDE8+i*0x20 for i in range(24)],
         "thiefnet unlock": [0x2BCDF0+i*0x20 for i in range(24)],
         "clock-la defeated": 0x3D9AF0,
+        # Index of job in the DAG. If it's a tuple, it's because the job is
+        # multiple sections. The first number is what we use to enable/disable
+        # the checkpoint marker. The second is what we use to check if the
+        # whole job is finished.
         "jobs": [
             [
                 [4,10],
@@ -363,7 +367,7 @@ ADDRESSES = {
             [
                 [1,8,21],
                 [33,37,49,54,68],
-                [78]
+                [77]
             ],
             [
                 [1],
