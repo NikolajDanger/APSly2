@@ -75,6 +75,7 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
                     check_vaults(ctx)
                 await handle_notifications(ctx)
                 await handle_deathlink(ctx)
+                await handle_ring_link(ctx)
                 if in_hub:
                     set_bottles_collected(ctx)
 
@@ -122,6 +123,9 @@ async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
         # In case the client stopped mid-trap (e.g. a crash), revert any
         # lingering trap edits to their defaults.
         reset_traps(ctx)
+
+        # Coins read stale across a load, so re-baseline the ring link diff.
+        ctx.prev_coins = None
 
         # In case guards spawned with the old loot:
         ctx.game_interface.despawn_guards()
@@ -641,6 +645,30 @@ async def handle_deathlink(ctx: 'Sly2Context') -> None:
 
             await ctx.send_death(death_message)
             ctx.deathlink_timestamp = time()
+
+async def handle_ring_link(ctx: 'Sly2Context') -> None:
+    """Broadcast coin changes and apply received ring link deltas"""
+    if not ctx.ring_link_enabled:
+        return
+
+    current = ctx.game_interface.get_coins()
+
+    if ctx.prev_coins is None:
+        ctx.prev_coins = current
+        return
+
+    # Re-read after applying, since add_coins clamps at 0, so the received
+    # amount isn't echoed back out as a diff.
+    if ctx.pending_ring_link != 0:
+        ctx.game_interface.add_coins(ctx.pending_ring_link)
+        ctx.pending_ring_link = 0
+        ctx.prev_coins = ctx.game_interface.get_coins()
+        return
+
+    diff = current - ctx.prev_coins
+    if diff != 0:
+        await ctx.send_ring_link(diff)
+        ctx.prev_coins = current
 
 async def handle_check_goal(ctx: 'Sly2Context') -> None:
     """Checks if the goal is completed"""

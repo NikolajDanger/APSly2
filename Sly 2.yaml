@@ -42,6 +42,11 @@ requires:
     'false': 100
     'true': 0
 
+  # When you gain or lose coins, ring-linked players gain or lose the same amount, and vice versa.
+  ring_link:
+    'false': 100
+    'true': 0
+
   # If permissive yaml is on, incompatible yaml options will be changed to more
   # suitable ones. If turned off, these yaml options will throw an error and
   # cause generation to halt.

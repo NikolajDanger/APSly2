@@ -1,5 +1,6 @@
 from typing import Optional, Dict
 from collections import deque
+from time import time
 import asyncio
 import multiprocessing
 import traceback
@@ -37,6 +38,20 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
                 name="Update Deathlink"
             )
             message = f"Deathlink {'enabled' if self.ctx.death_link_enabled else 'disabled'}"
+            logger.info(message)
+            self.ctx.notification(message)
+
+    def _cmd_ringlink(self):
+        """Toggle ring link from client. Overrides default setting."""
+        if isinstance(self.ctx, Sly2Context):
+            self.ctx.ring_link_enabled = not self.ctx.ring_link_enabled
+            Utils.async_start(
+                self.ctx.update_ring_link(
+                    self.ctx.ring_link_enabled
+                ),
+                name="Update Ringlink"
+            )
+            message = f"Ringlink {'enabled' if self.ctx.ring_link_enabled else 'disabled'}"
             logger.info(message)
             self.ctx.notification(message)
 
@@ -163,6 +178,10 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     deathlink_timestamp: float = 0
     death_link_enabled = False
     queued_deaths: int = 0
+    ring_link_enabled: bool = False
+    ring_link_source: int = 0
+    pending_ring_link: int = 0
+    prev_coins: Optional[int] = None
 
     # Game state
     is_loading: bool = False
@@ -190,6 +209,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
         super().__init__(server_address, password)
         self.version = [0,8,6]
         self.game_interface = Sly2Interface(logger)
+        self.ring_link_source = int(time() * 1234)
 
         self.notification_queue = deque(maxlen=200)
         self.inventory = {l.code: 0 for l in Items.item_dict.values()}
@@ -223,6 +243,28 @@ class Sly2Context(CommonContext): # type: ignore[misc]
             else:
                 self.notification(f"DeathLink: Received from {data['source']}")
 
+    async def update_ring_link(self, ring_link: bool) -> None:
+        old_tags = self.tags.copy()
+        if ring_link:
+            self.tags.add("RingLink")
+        else:
+            self.tags -= {"RingLink"}
+        if old_tags != self.tags and self.server and not self.server.socket.closed:
+            await self.send_msgs([{"cmd": "ConnectUpdate", "tags": self.tags}])
+
+    async def send_ring_link(self, amount: int) -> None:
+        if not self.ring_link_enabled or self.slot is None:
+            return
+
+        await self.send_msgs([{
+            "cmd": "Bounce", "tags": ["RingLink"],
+            "data": {
+                "time": time(),
+                "source": self.ring_link_source,
+                "amount": amount
+            }
+        }])
+
     def make_gui(self):
         ui = super().make_gui()
         ui.base_title = f"Sly 2 Client v{'.'.join([str(i) for i in self.version])}"
@@ -241,6 +283,11 @@ class Sly2Context(CommonContext): # type: ignore[misc]
 
     def on_package(self, cmd: str, args: dict):
         super().on_package(cmd, args)
+        if cmd == "Bounced":
+            if "RingLink" in args.get("tags", []) and self.ring_link_enabled:
+                data = args["data"]
+                if data["source"] != self.ring_link_source:
+                    self.pending_ring_link += data["amount"]
         if cmd == "Connected":
             self.slot_data = args["slot_data"]
 
@@ -262,6 +309,12 @@ class Sly2Context(CommonContext): # type: ignore[misc]
                 self.death_link_enabled = bool(args["slot_data"]["death_link"])
                 Utils.async_start(self.update_death_link(
                     bool(args["slot_data"]["death_link"])))
+
+            # Set ring link tag if it was requested in options
+            if "ring_link" in args["slot_data"]:
+                self.ring_link_enabled = bool(args["slot_data"]["ring_link"])
+                Utils.async_start(self.update_ring_link(
+                    bool(args["slot_data"]["ring_link"])))
 
             Utils.async_start(self.send_msgs([{
                 "cmd": "LocationScouts",

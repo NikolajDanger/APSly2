@@ -320,6 +320,7 @@ class Sly2World(World):
                 self.options.scout_thiefnet.value = slot_data["scout_thiefnet"]
                 self.options.trap_chance.value = slot_data["trap_chance"]
                 self.options.trap_weights.value = slot_data["trap_weights"]
+                self.options.ring_link.value = slot_data["ring_link"]
             return
 
         self.validate_options(self.options)
@@ -367,6 +368,7 @@ class Sly2World(World):
     def get_options_as_dict(self) -> Dict[str, Any]:
         return self.options.as_dict(
             "death_link",
+            "ring_link",
             "permissive_yaml",
             "starting_episode",
             "goal",

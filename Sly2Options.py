@@ -337,10 +337,21 @@ class TrapWeights(OptionCounter):
     default = {trap.item_name: 10 for trap in Trap}
 
 
+class RingLink(Toggle):
+    """
+    Whether your coin gain/loss is linked to other players. When you gain or
+    lose coins, ring-linked players gain or lose the same amount, and vice
+    versa.
+    """
+
+    display_name = "Ring Link"
+
+
 @dataclass
 class Sly2Options(PerGameCommonOptions):
     start_inventory_from_pool: StartInventoryPool
     death_link: DeathLink
+    ring_link: RingLink
     permissive_yaml: PermissiveYaml
     starting_episode: StartingEpisode
     goal: Goal

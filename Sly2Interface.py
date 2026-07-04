@@ -633,6 +633,9 @@ class Sly2Interface(GameInterface):
         new_amount = max(current_amount + to_add,0)
         self._write32(self.addresses["coins"],new_amount)
 
+    def get_coins(self) -> int:
+        return self._read32(self.addresses["coins"])
+
     def set_items_received(self, n:int) -> None:
         self._write32(self.addresses["items received"], n)
 
