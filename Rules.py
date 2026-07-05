@@ -169,13 +169,7 @@ def set_rules(world: "Sly2World"):
         )
     elif world.options.goal.value == 7:
         def access_rule(state: CollectionState):
-            victory_conditions = [
-                "The Black Chateau - Vault",
-                "The Predator Awakens - Vault",
-                "A Tangled Web - Vault",
-                "Menace from the North, Eh! - Vault",
-                "Anatomy for Disaster - Vault"
-            ]
+            victory_conditions = [f"{ep} - Vault" for ep in EPISODES]
 
             return all(
                 world.multiworld.get_location(cond,world.player).can_reach(state)
@@ -191,13 +185,7 @@ def set_rules(world: "Sly2World"):
             for ep in EPISODES if conditions.get(episode_key(ep))
         ]
         if conditions.get("all_vaults"):
-            victory_locations += [
-                "The Black Chateau - Vault",
-                "The Predator Awakens - Vault",
-                "A Tangled Web - Vault",
-                "Menace from the North, Eh! - Vault",
-                "Anatomy for Disaster - Vault"
-            ]
+            victory_locations += [f"{ep} - Vault" for ep in EPISODES]
         need_parts = conditions.get("clockwerk_hunt")
         required = world.options.required_keys_goal.value
 
