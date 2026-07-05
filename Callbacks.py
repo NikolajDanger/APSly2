@@ -92,7 +92,7 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
         # episodes should be able to be unlocked and victory should be able
         # to be sent while in the episode menu
         if current_map != 0 and not ctx.game_interface.in_cutscene():
-            await handle_received(ctx)
+            await handle_received(ctx, in_safehouse)
             handle_traps(ctx)
             await handle_checks(ctx)
             await handle_check_goal(ctx)
@@ -418,7 +418,7 @@ async def handle_notifications(ctx: 'Sly2Context') -> None:
         ctx.game_interface.set_infobox(new_notification)
 
 
-async def handle_received(ctx: 'Sly2Context') -> None:
+async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
     """Receive items from the multiworld"""
     if ctx.slot_data is None:
         return
@@ -504,7 +504,7 @@ async def handle_received(ctx: 'Sly2Context') -> None:
                 ctx.slot_data["coins_maximum"]
             )
             ctx.game_interface.add_coins(amount)
-        elif item.category == "Trap" and i >= ctx.trap_cursor:
+        elif item.category == "Trap" and i >= ctx.trap_cursor and not in_safehouse:
             activate_trap(ctx, Items.Trap.from_item_name(item.name))
 
     if ctx.slot_data["episode_8_keys"] == 1 and available_episodes[Sly2Episode.Anatomy_for_Disaster] == 3:
@@ -517,7 +517,8 @@ async def handle_received(ctx: 'Sly2Context') -> None:
     ctx.all_bottles = bottles
     ctx.game_interface.set_items_received(len(network_items))
     ctx.notified_items = len(network_items)
-    ctx.trap_cursor = len(network_items)
+    if not in_safehouse:
+        ctx.trap_cursor = len(network_items)
     ctx.available_episodes = available_episodes
 
 def activate_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
