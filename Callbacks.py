@@ -49,6 +49,7 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
             ctx.in_safehouse = False
         elif ctx.in_safehouse and ctx.in_hub and not in_safehouse:
             ctx.in_safehouse = False
+            ctx.episode_hint_shown = False
             unset_thiefnet(ctx)
 
         entered_hub = in_hub and not ctx.in_hub
