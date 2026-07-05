@@ -218,6 +218,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     powerups: PowerUps = PowerUps()
     thiefnet_purchases: PowerUps = PowerUps()
     jobs_completed: list[list[list[bool]]]
+    episode_hint_shown: bool = False
     vaults: list[bool]
     clockwerk_parts_count: int = 0  # Cached count to avoid repeated filtering
     notified_items: int = 0  # Session high-water of items already notified/counted
@@ -252,6 +253,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
             # Utils.init_logging("Sly 2 Client")
 
     def notification(self, text: str):
+        logger.debug("Notification: "+text)
         self.notification_queue.append(text)
 
     def on_deathlink(self, data: Utils.Dict[str, Utils.Any]) -> None:

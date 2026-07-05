@@ -276,7 +276,8 @@ class RandomizeLoot(Toggle):
 class BottleLocationBundleSize(Range):
     """
     How many bottles you need to collect for each check. Set to 0 to disable
-    bottles as checks.
+    bottles as checks. Both this and bottle_item_bundle_size must be non-zero
+    for bottles to appear; setting only one is invalid.
     """
 
     display_name = "Bottle Location Bundle Sizes"
@@ -288,7 +289,8 @@ class BottleLocationBundleSize(Range):
 class BottleItemBundleSize(Range):
     """
     How many bottles you receive from an item. Set to 0 to disable bottles
-    as items.
+    as items. Both this and bottle_location_bundle_size must be non-zero for
+    bottles to appear; setting only one is invalid.
     """
 
     display_name = "Bottle Item Bundle Sizes"

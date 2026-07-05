@@ -1,4 +1,4 @@
-﻿name: Player{number}
+﻿name: Sly{number}
 
 # Used to describe your yaml. Useful if you have multiple files.
 description: 'Default Sly 2: Band of Thieves Template'
@@ -217,7 +217,8 @@ requires:
     random-high: 0
 
   # How many bottles you receive from an item. Set to 0 to disable bottles
-  # as items.
+  # as items. Both this and bottle_location_bundle_size must be non-zero for
+  # bottles to appear; setting only one is invalid.
   #
   # You can define additional values between the minimum and maximum values.
   # Minimum value is 0
@@ -294,7 +295,8 @@ requires:
     'true': 0
 
   # How many bottles you need to collect for each check. Set to 0 to disable
-  # bottles as checks.
+  # bottles as checks. Both this and bottle_item_bundle_size must be non-zero
+  # for bottles to appear; setting only one is invalid.
   #
   # You can define additional values between the minimum and maximum values.
   # Minimum value is 0

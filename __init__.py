@@ -188,7 +188,10 @@ class Sly2World(World):
             opt,
             (opt.bottle_item_bundle_size == 0 and opt.bottle_location_bundle_size != 0) or
             (opt.bottle_item_bundle_size != 0 and opt.bottle_location_bundle_size == 0),
-            "Bottle item bundle size and bottle location bundle size should either both be zero or both be non-zero.",
+            "Bottles need both a bottle item bundle size and a bottle location "
+            "bundle size. One is set but the other is 0. To include bottles, set "
+            "both bottle_item_bundle_size and bottle_location_bundle_size to at "
+            "least 1; to exclude bottles, set both to 0.",
             "Setting both to 0."
         ):
             opt.bottle_item_bundle_size.value = 0

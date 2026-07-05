@@ -79,6 +79,8 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
             if not in_safehouse:
                 if ctx.slot_data["include_vaults"]:
                     check_vaults(ctx)
+                if in_hub:
+                    handle_episode_hint(ctx)
                 await handle_notifications(ctx)
                 await handle_deathlink(ctx)
                 await handle_ring_link(ctx)
@@ -242,8 +244,10 @@ def replace_text(ctx: 'Sly2Context') -> None:
     # Tells you if an episode is unlocked or not
     # and how many Clockwerk parts you have
     for i in range(1,9):
-        if ctx.available_episodes[Sly2Episode(i)] > 0:
-            rep_text = "Unlocked"
+        available = ctx.available_episodes[Sly2Episode(i)]
+        if available > 0:
+            total = len(EPISODES[list(EPISODES.keys())[i-1]])
+            rep_text = f"Unlocked {min(available, total)}/{total}"
         else:
             if i == 8 and ctx.slot_data["episode_8_keys"] != 3:
                 required_keys = ctx.slot_data["required_keys_episode_8"]
@@ -343,6 +347,43 @@ def set_jobs(ctx: 'Sly2Context') -> None:
                 ctx.game_interface.activate_job(job)
             else:
                 ctx.game_interface.deactivate_job(job)
+
+def handle_episode_hint(ctx: 'Sly2Context') -> None:
+    """Hint what unlocks the next jobs when the available ones are all done"""
+    if ctx.slot_data is None or not ctx.current_episode:
+        return
+
+    episode = ctx.current_episode
+    available = ctx.available_episodes[episode]
+    completed = ctx.jobs_completed[episode-1]
+    stuck = (
+        available < len(completed) and
+        all(job for chapter in completed[:available] for job in chapter)
+    )
+    if not stuck:
+        ctx.episode_hint_shown = False
+        return
+
+    # Only when the infobox is free, so the hint shows in this episode now
+    # rather than surfacing later in another one.
+    if (
+        ctx.episode_hint_shown or ctx.notification_queue or
+        ctx.showing_notification or ctx.game_interface.is_infobox()
+    ):
+        return
+
+    # Anatomy's final chapter is gated behind Clockwerk parts under the "last
+    # section" setting, not an episode item.
+    if (episode == Sly2Episode.Anatomy_for_Disaster and
+            ctx.slot_data["episode_8_keys"] == 1 and
+            available == len(completed) - 1):
+        ctx.notification("Collect more Clockwerk parts to unlock the next jobs.")
+    else:
+        episode_name = list(EPISODES.keys())[episode-1]
+        ctx.notification(
+            f"Collect another Progressive {episode_name} to unlock the next jobs."
+        )
+    ctx.episode_hint_shown = True
 
 def set_powerups(ctx: 'Sly2Context'):
     """Loads the correct powerups into the game"""

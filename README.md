@@ -43,6 +43,9 @@ Save the patch to your PCSX2 `patches` directory, and then enable it in `Setting
 The randomizer has full support for [Universal Tracker](https://github.com/FarisTheAncient/Archipelago/blob/tracker/worlds/tracker/docs/setup.md), based on lastingParadox's [tracker pack](https://github.com/lastingParadox/Sly2-Poptracker) for poptracker.
 
 ## Troubleshooting
+### I completed some jobs but can't start the next one
+Each episode is split into chunks by its chalk-talk cutscenes, and each chunk is unlocked by a separate `Progressive <Episode>` item. If you've finished the jobs you have access to and the next job marker is missing, you need another of that episode's items. The episode menu shows how many chunks you've unlocked (e.g. `Unlocked 2/4`).
+
 ### The client won't connect to my PCSX2 instance
 Make sure you have PINE enabled and that you're playing the US version of the game.
 
