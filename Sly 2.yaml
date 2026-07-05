@@ -268,7 +268,7 @@ requires:
   # Minimum value is 0
   # Maximum value is 9999
   thiefnet_minimum:
-    200: 50
+    200: 100
     random: 0
     random-low: 0
     random-high: 0
@@ -279,7 +279,7 @@ requires:
   # Minimum value is 0
   # Maximum value is 9999
   thiefnet_maximum:
-    2000: 50
+    2000: 100
     random: 0
     random-low: 0
     random-high: 0
@@ -287,11 +287,11 @@ requires:
   # Whether to include vaults as checks.
   include_vaults:
     'false': 0
-    'true': 50
+    'true': 100
 
   # Whether to include pickpocketing loot from guards as checks.
   include_pickpocketing:
-    'false': 50
+    'false': 100
     'true': 0
 
   # How many bottles you need to collect for each check. Set to 0 to disable
@@ -302,7 +302,7 @@ requires:
   # Minimum value is 0
   # Maximum value is 30
   bottle_location_bundle_size:
-    0: 50
+    0: 100
     random: 0
     random-low: 0
     random-high: 0
@@ -311,12 +311,12 @@ requires:
   # collected. Only takes effect if bottle_location_bundle_size is 1.
   bottlesanity:
     'false': 0
-    'true': 50
+    'true': 100
 
   # Whether to scout/hint ThiefNet checks. They will still be displayed in game.
   scout_thiefnet:
     'false': 0
-    'true': 50
+    'true': 100
 
   ####################
   ## Pick-pocketing ##
@@ -326,7 +326,7 @@ requires:
   # same piece of loot multiple times on their table, so there is no
   # guaranteeing that each guard will have exactly 6 different pieces of loot.
   randomize_loot:
-    'false': 50
+    'false': 100
     'true': 0
 
   # The chance that any given small guard will have pick-pocketable loot.
@@ -335,7 +335,7 @@ requires:
   # Minimum value is 1
   # Maximum value is 100
   small_guard_loot_chance:
-    20: 50
+    20: 100
     random: 0
     random-low: 0
     random-high: 0
@@ -346,7 +346,7 @@ requires:
   # Minimum value is 1
   # Maximum value is 100
   large_guard_loot_chance:
-    40: 50
+    40: 100
     random: 0
     random-low: 0
     random-high: 0
@@ -360,7 +360,7 @@ requires:
   # Minimum value is 1
   # Maximum value is 100
   loot_table_distribution:
-    50: 50
+    50: 100
     random: 0
     random-low: 0
     random-high: 0
