@@ -662,23 +662,13 @@ class Sly2Interface(GameInterface):
     # Guard Management
     # =====================================================
 
-    def despawn_guards(self):
+    def reset_guard_pockets(self):
         for guard in self.addresses["guard structs"]:
             pointer = self._read32(guard)
             while pointer != 0:
-                transform_component = self._read32(pointer + 0x54)
-                disable_pointer = transform_component + 0xA0
+                if self._read32(pointer + 0x488) == 0:
+                    self._write32(pointer + 0x48C, 1)
                 pointer = self._read32(pointer + 0x20)
-                self._write32(disable_pointer, 1)
-
-    def respawn_guards(self):
-        for guard in self.addresses["guard structs"]:
-            pointer = self._read32(guard)
-            while pointer != 0:
-                transform_component = self._read32(pointer + 0x54)
-                disable_pointer = transform_component + 0xA0
-                pointer = self._read32(pointer + 0x20)
-                self._write32(disable_pointer, 0)
 
     # =====================================================
     # Traps

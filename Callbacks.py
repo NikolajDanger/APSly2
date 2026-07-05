@@ -50,13 +50,19 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
             ctx.in_safehouse = False
             unset_thiefnet(ctx)
 
-        if in_hub and not ctx.in_hub:
+        entered_hub = in_hub and not ctx.in_hub
+        if entered_hub:
             ctx.in_hub = True
 
         set_pickpocketing(ctx)
 
         if ctx.slot_data["randomize_loot"]:
             set_loot_table(ctx)
+
+        # Guards that spawned during the hub load cached the pre-load config;
+        # re-roll their pockets now that this tick has rewritten it.
+        if entered_hub:
+            ctx.game_interface.reset_guard_pockets()
 
         # The DAG unloads before the client can see that the clock-la mission
         # is finished. That's why we need to check it directly.
@@ -127,15 +133,10 @@ async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
         # Coins read stale across a load, so re-baseline the ring link diff.
         ctx.prev_coins = None
 
-        # In case guards spawned with the old loot:
-        ctx.game_interface.despawn_guards()
-
         set_pickpocketing(ctx)
 
         if ctx.slot_data["randomize_loot"]:
             set_loot_table(ctx)
-
-        ctx.game_interface.respawn_guards()
 
         # Stop mega jump from being unselected
         # fix_mega_jump(ctx)
