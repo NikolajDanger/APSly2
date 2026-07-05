@@ -155,7 +155,7 @@ def set_rules(world: "Sly2World"):
             ]
 
             return all(
-                world.multiworld.get_location(cond,world.player).access_rule(state)
+                world.multiworld.get_location(cond,world.player).can_reach(state)
                 for cond in victory_conditions
             )
 
@@ -178,7 +178,7 @@ def set_rules(world: "Sly2World"):
             ]
 
             return all(
-                world.multiworld.get_location(cond,world.player).access_rule(state)
+                world.multiworld.get_location(cond,world.player).can_reach(state)
                 for cond in victory_conditions
             )
 
@@ -208,7 +208,7 @@ def set_rules(world: "Sly2World"):
                 return False
 
             return all(
-                world.multiworld.get_location(loc,world.player).access_rule(state)
+                world.multiworld.get_location(loc,world.player).can_reach(state)
                 for loc in victory_locations
             )
 
