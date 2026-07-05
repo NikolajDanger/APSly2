@@ -161,7 +161,7 @@ class Sly2World(World):
 
         if self._coerce_or_raise(
             opt,
-            opt.episode_8_keys.value != 3 and opt.required_keys_episode_8 > opt.keys_in_pool,
+            opt.episode_8_keys.value != 4 and opt.required_keys_episode_8 > opt.keys_in_pool,
             f"Episode 8 requires {opt.required_keys_episode_8} keys but only {opt.keys_in_pool} keys in pool.",
             "Increasing number of keys in pool."
         ):
@@ -177,7 +177,7 @@ class Sly2World(World):
 
         if self._coerce_or_raise(
             opt,
-            opt.episode_8_keys.value in [0,2] and
+            opt.episode_8_keys.value in [0,2,3] and
             opt.starting_episode == StartingEpisode.option_Anatomy_for_Disaster,
             f"Incompatible options: Episode 8 Keys: ({opt.episode_8_keys}) and Starting Episode: ({opt.starting_episode}).",
             "Changing Episode 8 Keys to \"Last Section\"."
@@ -231,7 +231,7 @@ class Sly2World(World):
             n_locations -= 1 # If the goal is a check, there can't be an item there
 
         using_parts = (
-            opt.episode_8_keys.value != 3 or
+            opt.episode_8_keys.value != 4 or
             opt.goal.value == 6 or
             (opt.goal.value == 8 and opt.pick_and_mix.value.get("clockwerk_hunt"))
         )
@@ -245,7 +245,7 @@ class Sly2World(World):
         )
         if opt.episode_8_keys.value in [0,1]:
             n_items += 3
-        elif opt.episode_8_keys.value == 3:
+        elif opt.episode_8_keys.value == 4:
             n_items += 4
 
         if opt.bottle_item_bundle_size.value != 0:

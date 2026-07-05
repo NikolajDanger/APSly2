@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 from time import sleep, time
 from random import randint
+from math import ceil
 
 from NetUtils import ClientStatus
 
@@ -249,7 +250,7 @@ def replace_text(ctx: 'Sly2Context') -> None:
             total = len(EPISODES[list(EPISODES.keys())[i-1]])
             rep_text = f"Unlocked {min(available, total)}/{total}"
         else:
-            if i == 8 and ctx.slot_data["episode_8_keys"] != 3:
+            if i == 8 and ctx.slot_data["episode_8_keys"] != 4:
                 required_keys = ctx.slot_data["required_keys_episode_8"]
                 rep_text = f"{ctx.clockwerk_parts_count}/{required_keys} Clockwerk parts"
             else:
@@ -372,11 +373,13 @@ def handle_episode_hint(ctx: 'Sly2Context') -> None:
     ):
         return
 
-    # Anatomy's final chapter is gated behind Clockwerk parts under the "last
-    # section" setting, not an episode item.
-    if (episode == Sly2Episode.Anatomy_for_Disaster and
-            ctx.slot_data["episode_8_keys"] == 1 and
-            available == len(completed) - 1):
+    # Anatomy's chapters are gated behind Clockwerk parts rather than episode
+    # items under the "last section" and "gradual sections" settings.
+    if (episode == Sly2Episode.Anatomy_for_Disaster and (
+            (ctx.slot_data["episode_8_keys"] == 1 and
+                available == len(completed) - 1) or
+            (ctx.slot_data["episode_8_keys"] == 3 and
+                available < len(completed)))):
         ctx.notification("Collect more Clockwerk parts to unlock the next jobs.")
     else:
         episode_name = list(EPISODES.keys())[episode-1]
@@ -452,6 +455,12 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
                 available_episodes[Sly2Episode.Anatomy_for_Disaster] = 1
             else:
                 available_episodes[Sly2Episode.Anatomy_for_Disaster] = 4
+    elif ctx.slot_data["episode_8_keys"] == 3:
+        required = ctx.slot_data["required_keys_episode_8"]
+        available_episodes[Sly2Episode.Anatomy_for_Disaster] = sum(
+            1 for n in range(1, 5)
+            if ctx.clockwerk_parts_count >= ceil(required * n / 4)
+        )
 
     for i, network_item in enumerate(network_items):
         item = Items.from_id(network_item.item)
@@ -468,7 +477,7 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
 
             if (
                 episode != Sly2Episode.Anatomy_for_Disaster or
-                ctx.slot_data["episode_8_keys"] in [1,3] or
+                ctx.slot_data["episode_8_keys"] in [1,4] or
                 available_episodes[episode] > 0
             ):
                 available_episodes[episode] += 1

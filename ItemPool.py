@@ -31,10 +31,10 @@ def gen_episodes(world: "Sly2World") -> list[Item]:
         for _ in range(4)
     ]
     all_episodes.remove("Progressive Jailbreak") # Jailbreak only has 3 chapters
-    if world.options.episode_8_keys in [0,1,2]:
+    if world.options.episode_8_keys in [0,1,2,3]:
         all_episodes.remove("Progressive Anatomy for Disaster")
 
-    if world.options.episode_8_keys == 2:
+    if world.options.episode_8_keys in [2,3]:
         all_episodes.remove("Progressive Anatomy for Disaster")
         all_episodes.remove("Progressive Anatomy for Disaster")
         all_episodes.remove("Progressive Anatomy for Disaster")
@@ -50,7 +50,7 @@ def gen_episodes(world: "Sly2World") -> list[Item]:
 def gen_clockwerk(world: "Sly2World") -> list[Item]:
     """Generate the clockwerk part items for the item pool"""
     using_parts = (
-        world.options.episode_8_keys.value != 3 or
+        world.options.episode_8_keys.value != 4 or
         world.options.goal.value == 6 or
         (world.options.goal.value == 8 and
             world.options.pick_and_mix.value.get("clockwerk_hunt"))

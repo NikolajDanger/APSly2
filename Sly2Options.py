@@ -29,8 +29,8 @@ class PermissiveYaml(Toggle):
 class StartingEpisode(Choice):
     """
     Select Which episode to start with. Starting with Anatomy for disaster
-    is not compatible with the "first section" and "whole episode" options for
-    "Episode 8 Keys".
+    is not compatible with the "first section", "whole episode" and
+    "progressive sections" options for "Episode 8 Keys".
     """
 
     display_name = "Starting Episode"
@@ -104,6 +104,9 @@ class Episode8Keys(Choice):
       the required amount of Clockwerk Parts.
     - Whole episode: Unlock every mission in Anatomy for Disaster with the
       required amount of Clockwerk Parts.
+    - Gradual sections: Unlock the four sections of Anatomy for Disaster one at
+      a time, each requiring a larger fraction of the required Clockwerk Parts,
+      with the final section requiring the full amount.
     - Off: Unlock Anatomy for Disaster with progressive episode items, like the
       other episodes.
     """
@@ -112,7 +115,8 @@ class Episode8Keys(Choice):
     option_First_section = 0
     option_Last_section = 1
     option_Whole_episode = 2
-    option_Off = 3
+    option_Gradual_sections = 3
+    option_Off = 4
     default = 0
 
 

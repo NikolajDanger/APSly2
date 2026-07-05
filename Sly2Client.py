@@ -81,7 +81,7 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
             if self.ctx.slot_data is None:
                 return
 
-            if self.ctx.slot_data["episode_8_keys"] != 3:
+            if self.ctx.slot_data["episode_8_keys"] != 4:
                 logger.info(f"Clockwerk parts needed to unlock episode 8: {self.ctx.slot_data['required_keys_episode_8']}")
 
             if self.ctx.slot_data["goal"] == 6:
