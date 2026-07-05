@@ -9,8 +9,8 @@
         ],
         "map_locations": [{
           "map": "The Predator Awakes",
-          "x": 212,
-          "y": 168
+          "x": 258,
+          "y": 510
         }]
       },
       {
@@ -25,14 +25,14 @@
         }]
       },
       {
-        "name": "Freeing the Elephant",
+        "name": "Freeing the Elephants",
         "sections": [
-          {"name": "The Predator Awakens - Freeing the Elephant"}
+          {"name": "The Predator Awakens - Freeing the Elephants"}
         ],
         "map_locations": [{
           "map": "The Predator Awakes",
-          "x": 334,
-          "y": 828
+          "x": 342,
+          "y": 746
         }]
       },
       {
