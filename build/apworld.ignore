@@ -1,8 +1,9 @@
-.git*
 __pycache__
-.vscode
+.*
 build
-README.md
+*.md
+set_version
 LICENSE
 requirements.txt
 Sly 2.yaml
+Sly_Addresses.xlsx
