@@ -18,7 +18,7 @@ from worlds.LauncherComponents import (
 from .Sly2Options import Sly2Options, StartingEpisode, sly2_option_groups
 from .Regions import create_regions
 from .data.Items import item_dict, item_groups, Sly2Item
-from .data.Locations import location_dict, location_groups
+from .data.Locations import location_dict, location_groups, tasksanity_list
 from .data.Constants import EPISODES, LOOT, ENEMIES, PICKPOCKET_LOOT_TABLE_CHANCES
 from .ItemPool import gen_pool
 from .Rules import set_rules
@@ -223,7 +223,8 @@ class Sly2World(World):
             24 + # treasures
             24 + # thiefnet
             (8 if opt.include_vaults else 0) +
-            (30 if opt.include_pickpocketing else 0)
+            (30 if opt.include_pickpocketing else 0) +
+            (len(tasksanity_list) if opt.tasksanity else 0)
         )
         if opt.bottle_location_bundle_size != 0:
             n_locations += ceil(30/opt.bottle_location_bundle_size)*8
@@ -326,6 +327,7 @@ class Sly2World(World):
                 self.options.thiefnet_maximum.value = slot_data["thiefnet_maximum"]
                 self.options.include_vaults.value = slot_data["include_vaults"]
                 self.options.include_pickpocketing.value = slot_data["include_pickpocketing"]
+                self.options.tasksanity.value = slot_data["tasksanity"]
                 self.options.small_guard_loot_chance.value = slot_data["small_guard_loot_chance"]
                 self.options.large_guard_loot_chance.value = slot_data["large_guard_loot_chance"]
                 self.options.loot_table_distribution.value = slot_data["loot_table_distribution"]
@@ -402,6 +404,7 @@ class Sly2World(World):
             "thiefnet_maximum",
             "include_vaults",
             "include_pickpocketing",
+            "tasksanity",
             "small_guard_loot_chance",
             "large_guard_loot_chance",
             "loot_table_distribution",

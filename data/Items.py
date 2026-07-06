@@ -91,33 +91,41 @@ murray_powerups = [
 
 powerup_list = sly_powerups + bentley_powerups + murray_powerups
 
+# Clockwerk parts are drawn for the pool in tiers (see gen_clockwerk): core
+# (in-game) parts fill small pools, additional parts join once core runs out,
+# silly parts only join once the pool exceeds 100, and repeatable parts pad
+# whatever's left (weighted toward the iconic Feather) so huge pools aren't one
+# item repeated.
+CLOCKWERK_CORE = [f"Clockwerk {s}" for s in [
+    "Tail Feathers", "Wing (Right)", "Wing (Left)", "Heart (Right Half)",
+    "Heart (Left Half)", "Eye (Right)", "Eye (Left)", "Lung (Right)",
+    "Lung (Left)", "Stomach", "Talons", "Hate Chip", "Brain",
+]]
+CLOCKWERK_ADDITIONAL = [f"Clockwerk {s}" for s in [
+    "Beak", "Ribcage", "Skull", "Leg (Right)", "Leg (Left)", "Neck", "Pelvis",
+    "Spine", "Jaw",
+]]
+CLOCKWERK_SILLY = [f"Clockwerk {s}" for s in [
+    "Gizzard", "Wishbone", "Spleen", "Gyroscope", "Power Core", "Servo Motor",
+    "Mild Annoyance Chip", "Tongue", "Small Intestines", "Large Intestines",
+    "Kidney (Left)", "Kidney (Right)", "Ureter", "Proventriculus", "Cloaca",
+    "Cervical Air Sac", "Interclavicular Air Sac", "Anterior Thoracic Air Sac",
+    "Posterior Thoracic Air Sac", "Abdominal Air Sac", "CPU Cooling Fan",
+    "Circuit Board", "Syrinx", "Uropygial Gland", "Pygostyle", "Keel", "Crop",
+    "Nictitating Membrane", "Heat Sink", "Motherboard",
+]]
+# (name, draw weight); Feather is weighted to ~half of the padding.
+CLOCKWERK_REPEATABLE = [
+    ("Clockwerk Feather", 3), ("Clockwerk Bone", 1),
+    ("Clockwerk Screw", 1), ("Clockwerk Cog", 1),
+]
+
 clockwerk_parts_list = [
-    (f"Clockwerk {s}",           ItemClassification.progression, "Clockwerk Part")
-    for s in [
-        "Tail Feathers",
-        "Wing (Right)",
-        "Wing (Left)",
-        "Heart (Right Half)",
-        "Heart (Left Half)",
-        "Eye (Right)",
-        "Eye (Left)",
-        "Lung (Right)",
-        "Lung (Left)",
-        "Stomach",
-        "Talons",
-        "Hate Chip",
-        "Brain",
-
-        "Beak",
-        "Ribcage",
-        "Skull",
-        "Leg (Right)",
-        "Leg (Left)",
-        "Neck",
-        "Pelvis",
-
-        "Feather"
-    ]
+    (name,                       ItemClassification.progression, "Clockwerk Part")
+    for name in (
+        CLOCKWERK_CORE + CLOCKWERK_ADDITIONAL + CLOCKWERK_SILLY
+        + [n for n, _ in CLOCKWERK_REPEATABLE]
+    )
 ]
 
 bottle_list = [

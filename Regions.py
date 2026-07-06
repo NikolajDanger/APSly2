@@ -1,10 +1,10 @@
 import typing
 from math import ceil
 
-from BaseClasses import Region, CollectionState, Location
+from BaseClasses import Region, CollectionState
 
 from .data.Locations import location_dict
-from .data.Constants import EPISODES, TREASURES, LOOT
+from .data.Constants import EPISODES, TREASURES, TASKS
 
 if typing.TYPE_CHECKING:
     from . import Sly2World
@@ -72,10 +72,16 @@ def create_regions(world: "Sly2World"):
                 break
 
             region = Region(f"Episode {i+1} ({n})", world.player, world.multiworld)
-            region.add_locations({
+            locations = {
                 f"{episode} - {job}": location_dict[f"{episode} - {job}"].code
                 for job in EPISODES[episode][n-1]
-            })
+            }
+            if world.options.tasksanity:
+                for job in EPISODES[episode][n-1]:
+                    for _, task in TASKS.get(episode, {}).get(job, []):
+                        name = f"{episode} - {job} - {task}"
+                        locations[name] = location_dict[name].code
+            region.add_locations(locations)
 
             world.multiworld.regions.append(region)
             menu.connect(

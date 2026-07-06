@@ -4,7 +4,7 @@ from math import ceil
 from BaseClasses import CollectionState
 
 from worlds.generic.Rules import add_rule
-from .data.Constants import EPISODES, episode_key
+from .data.Constants import EPISODES, TASKS, episode_key
 
 if typing.TYPE_CHECKING:
     from . import Sly2World
@@ -12,29 +12,35 @@ if typing.TYPE_CHECKING:
 def set_rules(world: "Sly2World"):
     player = world.player
 
+    def add_job_rule(ep, job, rule):
+        add_rule(world.get_location(f"{ep} - {job}"), rule)
+        if world.options.tasksanity:
+            for _, task in TASKS.get(ep, {}).get(job, []):
+                add_rule(world.get_location(f"{ep} - {job} - {task}"), rule)
+
     add_rule(
         world.get_location("A Tangled Web - Crystal Vase"),
         lambda state: (
             state.has("Paraglider", player) or
-            state.has("Mega Jump", player) or 
+            state.has("Mega Jump", player) or
             state.has("Hover Pack", player) or
             state.has("Turnbuckle Launch", player)
         )
     )
-    add_rule(
-        world.get_location("A Tangled Web - Operation: High Road"),
+    add_job_rule(
+        "A Tangled Web", "Operation: High Road",
         lambda state: state.has("Paraglider", player)
     )
-    add_rule(
-        world.get_location("He Who Tames the Iron Horse - Spice in the Sky"),
+    add_job_rule(
+        "He Who Tames the Iron Horse", "Spice in the Sky",
         lambda state: state.has("Paraglider", player)
     )
-    add_rule(
-        world.get_location("He Who Tames the Iron Horse - Ride the Iron Horse"),
+    add_job_rule(
+        "He Who Tames the Iron Horse", "Ride the Iron Horse",
         lambda state: state.has("Paraglider", player)
     )
-    add_rule(
-        world.get_location("Menace from the North, Eh! - Thermal Ride"),
+    add_job_rule(
+        "Menace from the North, Eh!", "Thermal Ride",
         lambda state: state.has("Paraglider", player)
     )
 
@@ -65,10 +71,10 @@ def set_rules(world: "Sly2World"):
                     )
 
         """
-            For the Ep8 bottles below, although it is technically possible to get them 
-            during the job, "Mega Jump Job", because this availability is only temporary 
-            and there is currently no way of replaying completed jobs in Sly 2, this 
-            specific corner-case has not been included as part of legitimate logic, in 
+            For the Ep8 bottles below, although it is technically possible to get them
+            during the job, "Mega Jump Job", because this availability is only temporary
+            and there is currently no way of replaying completed jobs in Sly 2, this
+            specific corner-case has not been included as part of legitimate logic, in
             order to avoid soft-lock situations.
         """
         if world.options.bottle_location_bundle_size.value == 1 and bottlesanity:
@@ -113,7 +119,7 @@ def set_rules(world: "Sly2World"):
                     state.has("Turnbuckle Launch", player) # or
                     # state.has("Progressive Anatomy for Disaster", player, 3)
                     # Obtainable during Mega Jump Job. If jobs were replayable, this rule COULD be applied if desired.
-                    
+
                 )
             )
 

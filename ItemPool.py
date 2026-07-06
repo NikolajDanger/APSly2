@@ -3,7 +3,10 @@ import typing
 from BaseClasses import Item
 
 from .data.Constants import EPISODES
-from .data.Items import item_groups, Trap
+from .data.Items import (
+    item_groups, Trap,
+    CLOCKWERK_CORE, CLOCKWERK_ADDITIONAL, CLOCKWERK_SILLY, CLOCKWERK_REPEATABLE
+)
 # from .Sly2Options import StartingEpisode
 
 if typing.TYPE_CHECKING:
@@ -60,20 +63,32 @@ def gen_clockwerk(world: "Sly2World") -> list[Item]:
     else:
         num_keys = 0
 
-    clockwerk_parts = []
+    def get_parts():
+        distinct = list(CLOCKWERK_CORE)
+        if num_keys <= len(distinct):
+            return world.random.sample(distinct, num_keys)
+        else:
+            distinct += CLOCKWERK_ADDITIONAL
 
-    if num_keys <= 13:
-        clockwerk_parts = world.random.sample(list(item_groups["Clockwerk Part"])[:13], num_keys)
-    elif num_keys <= 20:
-        clockwerk_parts = world.random.sample(list(item_groups["Clockwerk Part"])[:20], num_keys)
-    else:
-        clockwerk_parts = list(item_groups["Clockwerk Part"])[:20]
-        clockwerk_parts += ["Clockwerk Feather"]*(num_keys-20)
+        if num_keys > 100:
+            distinct += CLOCKWERK_SILLY
+
+        if num_keys <= len(distinct):
+            clockwerk_parts = world.random.sample(distinct, num_keys)
+        else:
+            clockwerk_parts = list(distinct)
+            clockwerk_parts += world.random.choices(
+                [name for name, _ in CLOCKWERK_REPEATABLE],
+                weights=[weight for _, weight in CLOCKWERK_REPEATABLE],
+                k=num_keys - len(distinct)
+            )
+
+        return clockwerk_parts
 
     return [
         world.create_item(p)
         for p in
-        clockwerk_parts
+        get_parts()
     ]
 
 def gen_bottles(world: "Sly2World"):

@@ -126,11 +126,15 @@ class KeysInPool(Range):
     lower than the required number of keys, for either Clockwerk Hunt or
     Episode 8 unlock. No Clockwerk parts will be added  if Episode 8 Keys
     and Clockwerk Hunt are both off.
+
+    Setting this to values close to 500 requires that you set tasksanity to
+    true, bottle_location_bundle_size to 1, and bottle_item_bundle_size to at
+    least 3 (4 if both vault and pickpocket checks are turned off).
     """
 
     display_name = "Clockwerk Parts in Pool"
     range_start = 1
-    range_end = 100
+    range_end = 500
     default = 10
 
 
@@ -142,7 +146,7 @@ class RequiredKeys(Range):
 
     display_name = "Episode 8 Required Keys"
     range_start = 1
-    range_end = 100
+    range_end = 500
     default = 10
 
 
@@ -153,7 +157,7 @@ class RequiredKeysGoal(Range):
 
     display_name = "Goal Required Keys"
     range_start = 1
-    range_end = 100
+    range_end = 500
     default = 10
 
 
@@ -238,6 +242,12 @@ class IncludePickpocketing(Toggle):
     Whether to include pickpocketing loot from guards as checks.
     """
     display_name = "Include Pickpocketing"
+
+class TaskSanity(Toggle):
+    """
+    Whether to include the individual tasks that make up each job as checks.
+    """
+    display_name = "Task Sanity"
 
 class SmallGuardLootChance(Range):
     """
@@ -402,6 +412,7 @@ class Sly2Options(PerGameCommonOptions):
     coins_maximum: CoinsMaximum
     include_vaults: IncludeVaults
     include_pickpocketing: IncludePickpocketing
+    tasksanity: TaskSanity
     small_guard_loot_chance: SmallGuardLootChance
     large_guard_loot_chance: LargeGuardLootChance
     loot_table_distribution: LootTableDistribution
@@ -443,6 +454,7 @@ sly2_option_groups = [
         ThiefNetCostMaximum,
         IncludeVaults,
         IncludePickpocketing,
+        TaskSanity,
         BottleLocationBundleSize,
         BottleSanity,
         ScoutThiefnet

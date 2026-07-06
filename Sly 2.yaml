@@ -124,9 +124,13 @@ requires:
   # Episode 8 unlock. No Clockwerk parts will be added  if Episode 8 Keys
   # and Clockwerk Hunt are both off.
   #
+  # Setting this to values close to 500 requires that you set tasksanity to
+  # true, bottle_location_bundle_size to 1, and bottle_item_bundle_size to at
+  # least 3 (4 if both vault and pickpocket checks are turned off).
+  #
   # You can define additional values between the minimum and maximum values.
   # Minimum value is 1
-  # Maximum value is 100
+  # Maximum value is 500
   keys_in_pool:
     10: 100
     random: 0
@@ -159,7 +163,7 @@ requires:
   #
   # You can define additional values between the minimum and maximum values.
   # Minimum value is 1
-  # Maximum value is 100
+  # Maximum value is 500
   required_keys_episode_8:
     10: 100
     random: 0
@@ -170,7 +174,7 @@ requires:
   #
   # You can define additional values between the minimum and maximum values.
   # Minimum value is 1
-  # Maximum value is 100
+  # Maximum value is 500
   required_keys_goal:
     10: 100
     random: 0
@@ -295,6 +299,11 @@ requires:
 
   # Whether to include pickpocketing loot from guards as checks.
   include_pickpocketing:
+    'false': 100
+    'true': 0
+
+  # Whether to include the individual tasks that make up each job as checks.
+  tasksanity:
     'false': 100
     'true': 0
 
