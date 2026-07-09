@@ -603,7 +603,7 @@ class Sly2Interface(GameInterface):
             text_pointer = text
 
 
-        replacement_string = replacement.encode()+bytes([0])
+        replacement_string = replacement.replace("&","&&").encode()+bytes([0])
         self._write_bytes(text_pointer,replacement_string)
 
     def current_infobox(self) -> int:
