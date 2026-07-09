@@ -6,12 +6,13 @@ import multiprocessing
 import traceback
 
 from CommonClient import get_base_parser, logger, server_loop, gui_enabled
+import NetUtils
 import Utils
 
 from .data import Locations, Items
 from .data.Constants import EPISODES, TASKS, ENEMIES, PICKPOCKET_LOOT_TABLE_CHANCES, episode_key
 from .Sly2Interface import Sly2Interface, Sly2Episode, PowerUps
-from .Callbacks import init, update
+from .Callbacks import init, update, compute_available_episodes
 
 # Load Universal Tracker
 tracker_loaded: bool = False
@@ -87,6 +88,21 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
             if self.ctx.slot_data["goal"] == 6:
                 logger.info(f"Clockwerk parts needed to complete Clockwerk Hunt goal: {self.ctx.slot_data['required_keys_goal']}")
 
+    def _episode_loot(self, loot_table, i: int, j: int) -> list:
+        loot = []
+        for k in range(1, 7):
+            for loot_name, loot_locations in loot_table.items():
+                if [i+1, bool(j), k] in loot_locations:
+                    loot.append(loot_name)
+                    break
+        return loot
+
+    def _print_json_line(self, parts: list) -> None:
+        if self.ctx.ui is not None:
+            self.ctx.ui.print_json(parts)
+        else:
+            logger.info(self.ctx.jsontotextparser(parts))
+
     def _cmd_loot_tables(self):
         """Get the loot tables for each episode"""
         if self.ctx.slot_data is None:
@@ -95,22 +111,50 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
         slot_data = self.ctx.slot_data
         loot_table_distribution = slot_data["loot_table_distribution"]
         loot_table = slot_data["loot_table"]
-        loot_table_text = ""
+        loot_odds = PICKPOCKET_LOOT_TABLE_CHANCES[loot_table_distribution-1]
+
+        if not slot_data["include_pickpocketing"]:
+            loot_table_text = ""
+            for i in range(8):
+                loot_table_text += f"\n== Episode {i+1} =="
+                for j in range(2):
+                    enemy = ENEMIES[i][j]
+                    loot = self._episode_loot(loot_table, i, j)
+                    loot_text = ", ".join(
+                        f"{l} ({loot_odds[k]}%)" for k, l in enumerate(loot)
+                    )
+                    loot_table_text += f"\n- {enemy}: {loot_text}"
+            logger.info(loot_table_text)
+            return
+
+        NetUtils.color_codes.setdefault("grey", 90)
+        if self.ctx.ui is not None:
+            self.ctx.ui.json_to_kivy_parser.color_codes.setdefault("grey", "808080")
+
+        available = compute_available_episodes(self.ctx)
+
+        def loot_color(loot_name: str, accessible: bool) -> str:
+            code = Locations.location_dict[f"Pickpocket {loot_name}"].code
+            if code in self.ctx.checked_locations:
+                return "grey"
+            return "white" if accessible else "red"
+
         for i in range(8):
-            loot_table_text += f"\n== Episode {i+1} =="
+            accessible = available.get(Sly2Episode(i+1), 0) > 0
+            self._print_json_line([{"text": f"== Episode {i+1} =="}])
             for j in range(2):
                 enemy = ENEMIES[i][j]
-                loot = []
-                for k in range(1,7):
-                    for loot_name, loot_locations in loot_table.items():
-                        if [i+1,bool(j),k] in loot_locations:
-                            loot.append(loot_name)
-                            break
-                loot_odds = PICKPOCKET_LOOT_TABLE_CHANCES[loot_table_distribution-1]
-                loot_text = ", ".join(f"{l} ({loot_odds[i]}%)" for i, l in enumerate(loot))
-                loot_table_text += f"\n- {enemy}: {loot_text}"
-
-        logger.info(loot_table_text)
+                loot = self._episode_loot(loot_table, i, j)
+                parts = [{"text": f"- {enemy}: "}]
+                for k, l in enumerate(loot):
+                    if k:
+                        parts.append({"text": ", "})
+                    parts.append({
+                        "type": "color",
+                        "color": loot_color(l, accessible),
+                        "text": f"{l} ({loot_odds[k]}%)",
+                    })
+                self._print_json_line(parts)
 
     def _cmd_goal(self):
         """Show what the goal is set to"""

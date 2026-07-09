@@ -441,6 +441,52 @@ async def handle_notifications(ctx: 'Sly2Context') -> None:
         ctx.game_interface.set_infobox(new_notification)
 
 
+def compute_available_episodes(ctx: 'Sly2Context') -> dict:
+    """Which episodes the player can access"""
+    available_episodes = {e: 0 for e in Sly2Episode}
+    if ctx.slot_data is None:
+        return available_episodes
+
+    clockwerk_parts = sum(
+        1 for i in ctx.items_received
+        if Items.from_id(i.item).category == "Clockwerk Part"
+    )
+    episode_8_keys = ctx.slot_data["episode_8_keys"]
+    required = ctx.slot_data["required_keys_episode_8"]
+
+    if episode_8_keys in [0, 2]:
+        if clockwerk_parts >= required:
+            available_episodes[Sly2Episode.Anatomy_for_Disaster] = (
+                1 if episode_8_keys == 0 else 4
+            )
+    elif episode_8_keys == 3:
+        available_episodes[Sly2Episode.Anatomy_for_Disaster] = sum(
+            1 for n in range(1, 5)
+            if clockwerk_parts >= ceil(required * n / 4)
+        )
+
+    for network_item in ctx.items_received:
+        item = Items.from_id(network_item.item)
+        if item.category != "Episode":
+            continue
+        episode = Sly2Episode[
+            item.name[12:].replace(" ","_").replace(",","").replace("!","")
+        ]
+        if (
+            episode != Sly2Episode.Anatomy_for_Disaster or
+            episode_8_keys in [1,4] or
+            available_episodes[episode] > 0
+        ):
+            available_episodes[episode] += 1
+
+    if (episode_8_keys == 1 and
+            available_episodes[Sly2Episode.Anatomy_for_Disaster] == 3 and
+            clockwerk_parts >= required):
+        available_episodes[Sly2Episode.Anatomy_for_Disaster] = 4
+
+    return available_episodes
+
+
 async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
     """Receive items from the multiworld"""
     if ctx.slot_data is None:
@@ -458,7 +504,7 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
         ctx.trap_cursor = len(ctx.items_received)
         ctx.trap_baseline_pending = False
 
-    available_episodes = {e: 0 for e in Sly2Episode}
+    available_episodes = compute_available_episodes(ctx)
     bottles = {e: 0 for e in Sly2Episode}
     network_items = ctx.items_received
 
@@ -466,19 +512,6 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
         ctx.clockwerk_parts_count = sum(
             1 for i in network_items
             if Items.from_id(i.item).category == "Clockwerk Part"
-        )
-
-    if ctx.slot_data["episode_8_keys"] in [0,2]:
-        if ctx.clockwerk_parts_count >= ctx.slot_data["required_keys_episode_8"]:
-            if ctx.slot_data["episode_8_keys"] == 0:
-                available_episodes[Sly2Episode.Anatomy_for_Disaster] = 1
-            else:
-                available_episodes[Sly2Episode.Anatomy_for_Disaster] = 4
-    elif ctx.slot_data["episode_8_keys"] == 3:
-        required = ctx.slot_data["required_keys_episode_8"]
-        available_episodes[Sly2Episode.Anatomy_for_Disaster] = sum(
-            1 for n in range(1, 5)
-            if ctx.clockwerk_parts_count >= ceil(required * n / 4)
         )
 
     for i, network_item in enumerate(network_items):
@@ -489,18 +522,7 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
             ctx.inventory[network_item.item] += 1
             ctx.notification(f"Received {item.name} from {player}")
 
-        if item.category == "Episode":
-            episode = Sly2Episode[
-                item.name[12:].replace(" ","_").replace(",","").replace("!","")
-            ]
-
-            if (
-                episode != Sly2Episode.Anatomy_for_Disaster or
-                ctx.slot_data["episode_8_keys"] in [1,4] or
-                available_episodes[episode] > 0
-            ):
-                available_episodes[episode] += 1
-        elif item.category == "Power-Up":
+        if item.category == "Power-Up":
             # I have strong opinions about this. It should be paraglider
             if item.name == "Paraglider":
                 item_name = "Paraglide"
@@ -534,10 +556,6 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
             ctx.game_interface.add_coins(amount)
         elif item.category == "Trap" and i >= ctx.trap_cursor and not in_safehouse:
             activate_trap(ctx, Items.Trap.from_item_name(item.name))
-
-    if ctx.slot_data["episode_8_keys"] == 1 and available_episodes[Sly2Episode.Anatomy_for_Disaster] == 3:
-        if ctx.clockwerk_parts_count >= ctx.slot_data["required_keys_episode_8"]:
-            available_episodes[Sly2Episode.Anatomy_for_Disaster] = 4
 
     if ctx.current_episode != 0 and not ctx.in_safehouse:
         set_powerups(ctx)
