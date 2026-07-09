@@ -61,11 +61,6 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
         if ctx.slot_data["randomize_loot"]:
             set_loot_table(ctx)
 
-        # Guards that spawned during the hub load cached the pre-load config;
-        # re-roll their pockets now that this tick has rewritten it.
-        if entered_hub:
-            ctx.game_interface.reset_guard_pockets()
-
         # The DAG unloads before the client can see that the clock-la mission
         # is finished. That's why we need to check it directly.
         check_clockla(ctx)
@@ -141,6 +136,11 @@ async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
 
         if ctx.slot_data["randomize_loot"]:
             set_loot_table(ctx)
+
+        # Replace guards that spawned before the client wrote the loot config so
+        # they re-roll their pockets from the randomized table and loot chance.
+        if ctx.slot_data["include_pickpocketing"]:
+            ctx.game_interface.despawn_guards()
 
         # Stop mega jump from being unselected
         # fix_mega_jump(ctx)

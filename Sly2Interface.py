@@ -662,12 +662,18 @@ class Sly2Interface(GameInterface):
     # Guard Management
     # =====================================================
 
-    def reset_guard_pockets(self):
+    def despawn_guards(self) -> None:
+        # Guards already spawned when the client connected rolled their pockets
+        # (loot chance and table) from the pre-connect config. Disabling them
+        # makes map streaming re-spawn fresh guards that re-roll from the config
+        # we now hold. Deliberately never re-enabled: re-enabling revives the
+        # same stale objects instead of letting streaming replace them.
         for guard in self.addresses["guard structs"]:
             pointer = self._read32(guard)
             while pointer != 0:
-                if self._read32(pointer + 0x488) == 0:
-                    self._write32(pointer + 0x48C, 1)
+                transform = self._read32(pointer + 0x54)
+                if transform != 0:
+                    self._write32(transform + 0xA0, 1)
                 pointer = self._read32(pointer + 0x20)
 
     # =====================================================
