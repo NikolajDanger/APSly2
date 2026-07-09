@@ -443,8 +443,7 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
     bottles = {e: 0 for e in Sly2Episode}
     network_items = ctx.items_received
 
-    # Update cached Clockwerk parts count only when processing new items
-    if len(network_items) > notify_from:
+    if len(network_items) != ctx.notified_items:
         ctx.clockwerk_parts_count = sum(
             1 for i in network_items
             if Items.from_id(i.item).category == "Clockwerk Part"
