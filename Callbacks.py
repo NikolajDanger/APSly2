@@ -6,7 +6,7 @@ from math import ceil
 from NetUtils import ClientStatus
 
 from .data import Items, Locations
-from .data.Constants import EPISODES, POWERUP_TEXT, OTHER_POWERUPS, TREASURES, DEATH_TYPES, LOOT, PICKPOCKET_LOOT_TABLE_CHANCES, episode_key
+from .data.Constants import EPISODES, TASKS, POWERUP_TEXT, OTHER_POWERUPS, TREASURES, DEATH_TYPES, LOOT, PICKPOCKET_LOOT_TABLE_CHANCES, episode_key
 from .Sly2Interface import Sly2Episode, PowerUps
 
 if TYPE_CHECKING:
@@ -72,6 +72,7 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
                 set_jobs(ctx)
 
             check_jobs(ctx)
+            check_tasks(ctx)
 
             if not in_safehouse:
                 if ctx.slot_data["include_vaults"]:
@@ -328,6 +329,24 @@ def check_jobs(ctx: 'Sly2Context') -> None:
         for (j, k), status in zip(job_positions, statuses):
             ctx.jobs_completed[episode-1][j][k] = status
 
+def check_tasks(ctx: 'Sly2Context') -> None:
+    """Checks if the current episode's individual tasks are completed"""
+    if ctx.slot_data is None or not ctx.slot_data.get("tasksanity"):
+        return
+
+    episode = ctx.current_episode
+    if episode is None:
+        return
+
+    done = ctx.tasks_completed[episode-1]
+    to_check = [i for i, finished in done.items() if not finished]
+    if not to_check:
+        return
+
+    statuses = ctx.game_interface.tasks_completed(to_check)
+    for i, status in zip(to_check, statuses):
+        ctx.tasks_completed[episode-1][i] = status
+
 def set_jobs(ctx: 'Sly2Context') -> None:
     """Sets jobs to available/unavailable"""
     if ctx.current_episode is None:
@@ -532,6 +551,7 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
 
 def activate_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
     """Fires a trap when its item is received"""
+    ctx.game_interface.logger.debug(f"Activating trap: {trap}")
     if trap.duration is None:
         if trap is Items.Trap.SLY_1:
             ctx.game_interface.set_current_health(1)
@@ -644,6 +664,17 @@ async def handle_checks(ctx: 'Sly2Context') -> None:
                     location_name = f"{episode_name} - {job_name}"
                     location_code = Locations.location_dict[location_name].code
                     ctx.locations_checked.add(location_code)
+
+    # Tasks
+    if ctx.slot_data["tasksanity"]:
+        for i, episode_name in enumerate(EPISODES.keys()):
+            done = ctx.tasks_completed[i]
+            for job_name, tasks in TASKS.get(episode_name, {}).items():
+                for idx, task_name in tasks:
+                    if done.get(idx):
+                        location_name = f"{episode_name} - {job_name} - {task_name}"
+                        location_code = Locations.location_dict[location_name].code
+                        ctx.locations_checked.add(location_code)
 
     # Treasures
     treasures_stolen = ctx.game_interface.all_treasures_stolen()

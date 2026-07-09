@@ -388,6 +388,12 @@ class Sly2Interface(GameInterface):
         # Batch read all statuses
         return [i == 3 for i in self._batch_read32(job_status_addresses)]
 
+    def tasks_completed(self, tasks: list[int]) -> list[bool]:
+        # Unlike whole jobs, a task node is done at state 2 (job still in
+        # progress); it only reaches 3 once the whole job finalizes.
+        addresses = [self._get_job_address(t) + 0x54 for t in tasks]
+        return [status >= 2 for status in self._batch_read32(addresses)]
+
     # =====================================================
     # Vault Stuff
     # =====================================================
@@ -681,18 +687,22 @@ class Sly2Interface(GameInterface):
     # =====================================================
 
     def set_current_health(self, value: int) -> None:
+        self.logger.debug(f"Setting health to {value}")
         active_character_pointer = self._read32(
             self.addresses["active character pointer"])
         health_pointer = self._read32(active_character_pointer + 0xe00)
         if health_pointer != 0:
             self._write32(health_pointer, value)
+            self.logger.debug(f"New health value: {self._read32(health_pointer)}")
 
     def set_current_gadget_power(self, value: int) -> None:
+        self.logger.debug(f"Setting gadget power to {value}")
         active_character_pointer = self._read32(
             self.addresses["active character pointer"])
         gadget_power = self._read32(active_character_pointer + 0x12fc)
         if gadget_power != 0:
             self._write32(gadget_power, value)
+            self.logger.debug(f"New gadget value: {self._read32(gadget_power)}")
 
     def set_clock_speed(self, speed: float) -> None:
         self._write_float(self.addresses["clock speed"], speed)

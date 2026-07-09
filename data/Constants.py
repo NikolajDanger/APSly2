@@ -162,7 +162,7 @@ TASKS = {
         ],
         "Breaking and Entering": [
             (11, "Fight"), (16, "Table Crawling"), (18, "Stealth Slam"),
-            (24, "Picture (Dimitri)"), (25, "Picture (Generator)"),
+            (24, "Picture (Generator)"), (25, "Picture (Dimitri)"),
             (26, "Picture (Tail Feathers)"),
         ],
         "Waterpump Destruction": [
@@ -180,24 +180,24 @@ TASKS = {
             (73, "Pillar 4"),
         ],
         "Operation: Thunder Beak": [
-            (87, "Valves"), (90, "Truck Keys"), (93, "Sign Destruction"),
+            (87, "Valves"), (88, "Truck Keys"), (93, "Sign Destruction"),
         ],
     },
     "A Starry Eyed Encounter": {
         "Recon the Ballroom": [
-            (4, "Picture (Rajan)"), (5, "Picture (Wing 1)"),
-            (6, "Picture (Wing 2)"), (7, "Picture (Winch)"),
-            (9, "Picture (Jean Bison)"), (10, "Picture (Neyla)"),
-            (11, "Picture (Contessa)"), (12, "Picture (Arpeggio)"),
-            (13, "Picture (Carmelita)"),
+            (4, "Picture (Winch)"), (5, "Picture (Wing 1)"),
+            (6, "Picture (Wing 2)"), (7, "Picture (Rajan)"),
+            (9, "Picture (Jean Bison)"), (10, "Picture (Contessa)"),
+            (11, "Picture (Neyla)"), (12, "Picture (Carmelita)"),
+            (13, "Picture (Arpeggio)"),
         ],
         "Lower the Drawbridge": [
             (18, "Winch Key 1"), (19, "Winch Key 2"), (20, "Winch Key 3"),
             (21, "Winch Key 4"), (22, "Winch Key 5"),
         ],
         "Steal a Tuxedo": [
-            (40, "Bow Tie"), (41, "Gloves"), (42, "Shoes"), (43, "Shirt"),
-            (44, "Jacket"),
+            (40, "Jacket"), (41, "Bow Tie"), (42, "Shoes"), (43, "Gloves"),
+            (44, "Shirt"),
         ],
         "Boardroom Brawl": [
             (32, "Gain Entry"),
@@ -215,13 +215,14 @@ TASKS = {
             (79, "Bridge Support 11"), (80, "Bridge Support 12"),
             (81, "Bridge Support 13"), (82, "Bridge Support 14"),
             (83, "Bridge Support 15"), (84, "Bridge Support 16"),
-            (85, "Bridge Support 17"), (89, "Tango"),
+            (85, "Bridge Support 17"), (89, "Dance"),
         ],
     },
     "The Predator Awakens": {
         "Spice Room Recon": [
-            (7, "Picture (Rajan)"), (8, "Picture (Crane Controls)"),
-            (9, "Picture (Clockwerk's Heart)"), (10, "Picture (Entrance)"),
+            (7, "Picture (Clockwerk's Heart)"),
+            (8, "Picture (Crane Controls)"), (9, "Picture (Entrance)"),
+            (10, "Picture (Rajan)"),
         ],
         "Freeing the Elephants": [
             (18, "Spice Plant 1"), (19, "Spice Plant 2"),
@@ -229,28 +230,27 @@ TASKS = {
             (22, "Spice Plant 5"), (23, "Spice Plant 6"),
         ],
         "Leading Rajan": [
-            (38, "Watermelon 1"), (41, "Watermelon 2"), (44, "Watermelon 3"),
+            (38, "Blueprint 2"), (41, "Blueprint 3"), (44, "Blueprint 1"),
         ],
         "Neyla's Secret": [
             (30, "Enter Spice Room"), (31, "Crane Key 1"),
             (32, "Crane Key 2"),
         ],
         "Spice Grinder Destruction": [
-            (47, "Blow Up Door 1"), (48, "Blow Up Door 2"),
-            (49, "Blow Up Door 3"), (50, "Blow Up Door 4"),
-            (51, "Blow Up Door 5"),
+            (47, "Blow Up Door 4"), (48, "Blow Up Door 2"),
+            (49, "Blow Up Door 3"), (50, "Blow Up Door 1"),
         ],
         "Rip-Off the Ruby": [
-            (59, "Checkpoint 1"), (60, "Checkpoint 2"), (62, "Checkpoint 3"),
+            (62, "Checkpoint"),
         ],
         "Operation: Wet Tiger": [
-            (72, "Protect Murray"), (74, "Flood the Palace"),
+            (72, "Protect Murray"), (75, "Flood the Palace"),
         ],
     },
     "Jailbreak": {
         "Train Hack": [
-            (11, "Terminal 1"), (13, "Terminal 2"), (15, "Terminal 3"),
-            (17, "Terminal 4"), (19, "Terminal 5"),
+            (10, "Terminal 1"), (12, "Terminal 2"), (14, "Terminal 3"),
+            (16, "Terminal 4"), (18, "Terminal 5"), (20, "Terminal 6"),
         ],
         "Wall Bombing": [
             (22, "Guard 1"), (23, "Guard 2"), (24, "Guard 3"),
@@ -258,32 +258,33 @@ TASKS = {
             (28, "Guard 7"),
         ],
         "Lightning Action": [
-            (39, "Tower 1"), (41, "Tower 2"), (43, "Tower 3"),
-            (45, "Tower 4"), (47, "Tower 5"),
+            (39, "Lightning Rod 1"), (41, "Lightning Rod 2"),
+            (43, "Lightning Rod 3"), (45, "Lightning Rod 4"),
+            (47, "Lightning Rod 5"),
         ],
         "Disguise Bridge": [
-            (51, "Section 1"), (52, "Section 2"),
+            (51, "Lower"), (52, "Upper"),
         ],
         "Code Capture": [
-            (60, "Code 1"), (63, "Code 2"), (66, "Code 3"),
+            (57, "Code 1"), (60, "Code 2"), (63, "Code 3"), (66, "Code 4"),
         ],
         "Close to Contessa": [
             (70, "Key 1"), (72, "Key 2"), (75, "Tank Patrol Schedule"),
         ],
         "Operation: Trojan Tank": [
-            (81, "Enter Prison"), (82, "Climb to Control Panel"),
-            (88, "Terminal 1"), (91, "Terminal 2"), (94, "Terminal 3"),
+            (81, "Enter Prison"), (84, "Climb to Control Panel"),
+            (88, "Code Pad 1"), (91, "Code Pad 2"), (94, "Code Pad 3"),
             (97, "Hypno-box 1"), (98, "Hypno-box 2"), (99, "Hypno-box 3"),
             (100, "Hypno-box 4"), (105, "Lift Levers"),
         ],
     },
     "A Tangled Web": {
         "Know Your Enemy": [
-            (2, "Picture (Boat)"), (3, "Picture (Blimp)"),
-            (4, "Picture (Tank)"), (5, "Picture (Neyla's HQ)"),
-            (8, "Picture (Old Computer)"), (9, "Picture (Carmelita)"),
+            (2, "Picture (Neyla's HQ)"), (3, "Picture (Tank)"),
+            (4, "Picture (Blimp)"), (5, "Picture (Boat)"),
+            (8, "Picture (Shadow Guard)"), (9, "Picture (Carmelita)"),
             (10, "Picture (Clockwerk's Eyes)"),
-            (11, "Picture (Mind Shuffler)"), (12, "Picture (Shadow Guard)"),
+            (11, "Picture (Mind Shuffler)"), (12, "Picture (Old Terminal)"),
         ],
         "Ghost Capture": [
             (18, "Free the Ghosts"), (20, "Trap Ghost 1"),
@@ -292,12 +293,12 @@ TASKS = {
             (27, "Trap Ghost 8"), (28, "Trap Ghost 9"),
         ],
         "Mojo Trap Action": [
-            (34, "Crypt 1"), (36, "Crypt 2"), (38, "Crypt 3"),
-            (40, "Crypt 4"),
+            (33, "Crypt 1"), (35, "Crypt 2"), (37, "Crypt 3"),
+            (39, "Crypt 4"),
         ],
         "Stealing Voices": [
             (47, "Guard Tower Key 1"), (48, "Guard Tower Key 2"),
-            (51, "Collect Wire Tap"), (52, "Castle Front Door Key 1"),
+            (50, "Collect Wire Tap"), (52, "Castle Front Door Key 1"),
             (53, "Castle Front Door Key 2"), (55, "Collect Voice Modulator"),
             (57, "Sewer Entrance Key 1"), (58, "Sewer Entrance Key 2"),
         ],
@@ -306,19 +307,19 @@ TASKS = {
             (67, "Tank 5"), (68, "Tank 6"),
         ],
         "Crypt Hack": [
-            (73, "Terminal 1"), (75, "Terminal 2"), (77, "Terminal 3"),
+            (72, "Terminal 1"), (74, "Terminal 2"), (76, "Terminal 3"),
         ],
         "Operation: High Road": [
-            (83, "Old Terminal"), (84, "Catch Neyla"),
-            (86, "Shoot Down Planes"), (88, "Defeat The Contessa 1"),
-            (92, "Stop Carmelita"),
+            (84, "Old Terminal"), (88, "Catch Neyla"),
+            (92, "Shoot Down Planes"), (94, "Defeat The Contessa 1"),
+            (96, "Stop Carmelita"),
         ],
     },
     "He Who Tames the Iron Horse": {
         "Cabin Crimes": [
-            (3, "Picture (Iron Horse 1)"), (4, "Picture (Iron Horse 2)"),
-            (5, "Picture (Iron Horse 3)"), (7, "Iron Horse Blueprints 1"),
-            (10, "Iron Horse Blueprints 2"), (12, "Iron Horse Blueprints 3"),
+            (3, "Picture (Iron Horse 3)"), (4, "Picture (Iron Horse 2)"),
+            (5, "Picture (Iron Horse 1)"), (7, "Iron Horse Blueprints 1"),
+            (9, "Iron Horse Blueprints 2"), (11, "Iron Horse Blueprints 3"),
         ],
         "Spice in the Sky": [
             (19, "Open Up Iron Horse 1"), (20, "Open Up Iron Horse 2"),
@@ -332,15 +333,15 @@ TASKS = {
             (53, "Bear Cub 1"), (58, "Bear Cub 2"),
         ],
         "Operation: Choo-Choo": [
-            (67, "Defeat Neyla 1"), (69, "Defeat Neyla 2"),
+            (63, "Defeat Neyla 1"), (68, "Defeat Neyla 2"),
         ],
     },
     "Menace from the North, Eh!": {
         "Recon the Sawmill": [
-            (3, "Picture (Sawmill Blades)"), (4, "Picture (Boat)"),
-            (5, "Picture (Jean Bison's House)"), (6, "Picture (Bear)"),
-            (9, "Picture (Spinner)"), (10, "Picture (Front Door)"),
-            (11, "Picture (Battery Charger)"), (13, "Picture (Jean Bison)"),
+            (3, "Picture (Jean Bison's House)"), (4, "Picture (Boat)"),
+            (5, "Picture (Bear)"), (6, "Picture (Sawmill Blades)"),
+            (9, "Picture (Battery Charger)"), (10, "Picture (Front Door)"),
+            (11, "Picture (Spinner)"), (13, "Picture (Jean Bison)"),
         ],
         "Bearcave Bugging": [
             (19, "Collect Transmitter 1"), (20, "Collect Transmitter 2"),
@@ -354,9 +355,9 @@ TASKS = {
             (37, "Collect Moose Head"),
         ],
         "Laser Redirection": [
-            (44, "Activate Laser"), (47, "Place Crystal 1"),
-            (48, "Place Crystal 2"), (49, "Place Crystal 3"),
-            (50, "Place Crystal 4"), (52, "Place Crystal 5"),
+            (43, "Activate Laser"), (45, "Redirect 1"), (46, "Redirect 2"),
+            (47, "Redirect 3"), (48, "Redirect 4"), (49, "Redirect 5"),
+            (50, "Redirect 6"), (51, "Redirect 7"), (52, "Redirect 8"),
         ],
         "Lighthouse Break-In": [
             (57, "Enter Lighthouse"), (59, "Open Door"),
@@ -366,30 +367,30 @@ TASKS = {
             (65, "Destroy Oil Main 3"), (66, "Destroy Oil Main 4"),
         ],
         "Boat Hack": [
-            (73, "Boat Terminal 1"), (77, "Boat Terminal 2"),
-            (81, "Boat Terminal 3"),
+            (71, "Boat Terminal 1"), (75, "Boat Terminal 2"),
+            (79, "Boat Terminal 3"),
         ],
         "Thermal Ride": [
-            (86, "Collect Egg"),
+            (85, "Collect Egg"),
         ],
         "Operation: Canada Games": [
-            (93, "Log Chopping"), (96, "Sabotage Log Chopping"),
-            (99, "Wall Climbing"), (102, "Sabotage Wall Climbing"),
-            (105, "Spinning Logs"), (108, "Sabotage Spinning Logs"),
+            (95, "Log Chopping"), (98, "Sabotage Log Chopping"),
+            (101, "Wall Climbing"), (104, "Sabotage Wall Climbing"),
+            (107, "Spinning Logs"), (110, "Sabotage Spinning Logs"),
         ],
     },
     "Anatomy for Disaster": {
         "Blimp HQ Recon": [
-            (5, "Picture (Electro-platform)"), (6, "Picture (Clockwerk)"),
-            (7, "Picture (Eggs)"), (10, "Picture (Arpeggio)"),
-            (11, "Picture (Neyla)"), (13, "Key 1"), (14, "Key 2"),
+            (5, "Picture (Eggs)"), (6, "Picture (Clockwerk)"),
+            (7, "Picture (Electro-platform)"), (10, "Picture (Neyla)"),
+            (11, "Picture (Arpeggio)"), (13, "Key 1"), (14, "Key 2"),
             (15, "Key 3"), (16, "Key 4"), (18, "Reverse Magnet 1"),
             (19, "Reverse Magnet 2"), (20, "Reverse Magnet 3"),
             (21, "Reverse Magnet 4"),
         ],
         "Charged TNT Run": [
-            (26, "Collect TNT 1"), (27, "Collect TNT 2"),
-            (28, "Collect TNT 3"),
+            (26, "Collect Booster 1"), (27, "Collect Booster 2"),
+            (28, "Collect Booster 3"),
         ],
         "Murray/Sly Tag Team": [
             (32, "Power Station 1"), (33, "Power Station 2"),
@@ -401,7 +402,7 @@ TASKS = {
             (47, "Key 5"), (48, "Open Door"),
         ],
         "Bentley/Murray Team Up": [
-            (54, "Terminal 1"), (56, "Terminal 2"), (58, "Terminal 3"),
+            (53, "Terminal 1"), (55, "Terminal 2"), (57, "Terminal 3"),
             (59, "Open Door"),
         ],
         "Mega-Jump Job": [

@@ -9,7 +9,7 @@ from CommonClient import get_base_parser, logger, server_loop, gui_enabled
 import Utils
 
 from .data import Locations, Items
-from .data.Constants import EPISODES, ENEMIES, PICKPOCKET_LOOT_TABLE_CHANCES, episode_key
+from .data.Constants import EPISODES, TASKS, ENEMIES, PICKPOCKET_LOOT_TABLE_CHANCES, episode_key
 from .Sly2Interface import Sly2Interface, Sly2Episode, PowerUps
 from .Callbacks import init, update
 
@@ -218,6 +218,8 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     powerups: PowerUps = PowerUps()
     thiefnet_purchases: PowerUps = PowerUps()
     jobs_completed: list[list[list[bool]]]
+    # episode index -> {DAG node index: task done}
+    tasks_completed: dict[int, dict[int, bool]]
     episode_hint_shown: bool = False
     vaults: list[bool]
     clockwerk_parts_count: int = 0  # Cached count to avoid repeated filtering
@@ -251,6 +253,11 @@ class Sly2Context(CommonContext): # type: ignore[misc]
             [[False for _ in chapter] for chapter in episode]
             for episode in EPISODES.values()
         ]
+        self.tasks_completed = {
+            i: {idx: False for tasks in TASKS.get(ep, {}).values()
+                for idx, _ in tasks}
+            for i, ep in enumerate(EPISODES.keys())
+        }
         self.vaults = [False for _ in EPISODES]
         self.powerups = PowerUps()
         self.thiefnet_purchases = PowerUps()
