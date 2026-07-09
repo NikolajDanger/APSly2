@@ -234,6 +234,16 @@ class Sly2Context(CommonContext): # type: ignore[misc]
         self.ring_link_source = int(time() * 1234)
 
         self.notification_queue = deque(maxlen=200)
+        self.active_traps = {}
+        self.trap_cursor = 0
+        self.trap_baseline_pending = False
+        self.reset_world_state()
+
+    def reset_world_state(self) -> None:
+        """Clear per-slot caches so reconnecting to a different slot without
+        restarting the client doesn't carry state over from the old slot.
+        Everything here is re-derived from game memory or the server's
+        checked_locations, so it is safe to run on every connect."""
         self.inventory = {l.code: 0 for l in Items.item_dict.values()}
         self.available_episodes = {e: 0 for e in Sly2Episode}
         self.all_bottles = {e: 0 for e in Sly2Episode}
@@ -242,10 +252,20 @@ class Sly2Context(CommonContext): # type: ignore[misc]
             for episode in EPISODES.values()
         ]
         self.vaults = [False for _ in EPISODES]
+        self.powerups = PowerUps()
+        self.thiefnet_purchases = PowerUps()
+        self.notified_items = 0
+        self.clockwerk_parts_count = 0
+        self.locations_checked = set()
         self.last_checked_locations = set()
-        self.active_traps = {}
-        self.trap_cursor = 0
-        self.trap_baseline_pending = False
+
+    def reset_server_state(self):
+        # Wipe per-slot caches the moment the connection drops. The base client
+        # resends locations_checked while handling the next Connected packet
+        # (before on_package runs), so a different slot would otherwise be sent
+        # the previous slot's checks.
+        super().reset_server_state()
+        self.reset_world_state()
 
     def run_generator(self):
         if tracker_loaded:
