@@ -27,6 +27,17 @@ try:
 except ImportError:
     from CommonClient import ClientCommandProcessor, CommonContext
 
+
+def episode_loot(loot_table, i: int, j: int) -> list:
+    loot = []
+    for k in range(1, 7):
+        for loot_name, loot_locations in loot_table.items():
+            if [i + 1, bool(j), k] in loot_locations:
+                loot.append(loot_name)
+                break
+    return loot
+
+
 class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
     def _cmd_deathlink(self):
         """Toggle deathlink from client. Overrides default setting."""
@@ -89,13 +100,7 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
                 logger.info(f"Clockwerk parts needed to complete Clockwerk Hunt goal: {self.ctx.slot_data['required_keys_goal']}")
 
     def _episode_loot(self, loot_table, i: int, j: int) -> list:
-        loot = []
-        for k in range(1, 7):
-            for loot_name, loot_locations in loot_table.items():
-                if [i+1, bool(j), k] in loot_locations:
-                    loot.append(loot_name)
-                    break
-        return loot
+        return episode_loot(loot_table, i, j)
 
     def _print_json_line(self, parts: list) -> None:
         if self.ctx.ui is not None:
@@ -369,6 +374,89 @@ class Sly2Context(CommonContext): # type: ignore[misc]
         ui.base_title += " | Archipelago"
         return ui
 
+    def build_gui(self, manager):
+        super().build_gui(manager)
+        try:
+            visual_tracker = getattr(self.map_page_coords_func, "__self__", None)
+            if visual_tracker is not None:
+                self._add_loot_marker(visual_tracker)
+        except Exception:
+            logger.debug("Failed to install loot marker", exc_info=True)
+
+    def _add_loot_marker(self, visual_tracker):
+        from kvui import HoverBehavior, ToolTip, ApAsyncImage
+        from kivymd.uix.tooltip import MDTooltip
+        from kivy.metrics import dp
+
+        ctx = self
+        tracker_map = visual_tracker.ids.tracker_map
+
+        class Sly2LootMarker(HoverBehavior, ApAsyncImage, MDTooltip):
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+                self._tooltip = ToolTip(text="")
+                self._tooltip.markup = True
+                self._tooltip.pos_hint = {}
+
+            def to_window(self, x, y):
+                if isinstance(self.border_point, (tuple, list)):
+                    return self.border_point
+                return super().to_window(x, y)
+
+            def on_enter(self):
+                if not self.opacity:
+                    return
+                self._tooltip.text = self.get_text()
+                self.display_tooltip()
+
+            def on_leave(self):
+                self.animation_tooltip_dismiss()
+
+            def get_text(self):
+                if ctx.slot_data is None or getattr(ctx, "map_id", None) is None:
+                    return ""
+                episode = ctx.map_id
+                slot_data = ctx.slot_data
+                loot_table = slot_data["loot_table"]
+                loot_odds = PICKPOCKET_LOOT_TABLE_CHANCES[slot_data["loot_table_distribution"] - 1]
+                show_odds = slot_data["include_pickpocketing"]
+                lines = [f"== Episode {episode + 1} Loot =="]
+                for j in range(2):
+                    lines.append(f"{ENEMIES[episode][j]}:")
+                    for k, name in enumerate(episode_loot(loot_table, episode, j)):
+                        text = f"{name} ({loot_odds[k]}%)" if show_odds else name
+                        code = Locations.location_dict[f"Pickpocket {name}"].code
+                        if code in ctx.checked_locations:
+                            text = f"[color=808080]{text}[/color]"
+                        lines.append(f"  {text}")
+                return "\n".join(lines)
+
+        marker = Sly2LootMarker(
+            source=f"ap:{__package__}/tracker/Goldwatch.png",
+            size_hint=(None, None),
+            size=(dp(40), dp(40)),
+            opacity=0,
+        )
+        self._loot_marker = marker
+
+        def reposition(*args):
+            marker.pos = (tracker_map.x + dp(10),
+                          tracker_map.top - marker.height - dp(10))
+
+        tracker_map.bind(pos=reposition, size=reposition)
+        marker.bind(size=reposition)
+        reposition()
+        tracker_map.add_widget(marker)
+        self._update_loot_marker()
+
+    def _update_loot_marker(self):
+        marker = getattr(self, "_loot_marker", None)
+        if marker is None:
+            return
+        visible = (self.slot_data is not None
+                   and bool(self.slot_data.get("include_pickpocketing")))
+        marker.opacity = 1 if visible else 0
+
     async def server_auth(self, password_requested: bool = False) -> None:
         if password_requested and not self.password:
             await super(Sly2Context, self).server_auth(password_requested)
@@ -417,6 +505,8 @@ class Sly2Context(CommonContext): # type: ignore[misc]
                     for location in Locations.location_groups["Purchase"]
                 ]
             }]))
+
+            self._update_loot_marker()
 
 def update_connection_status(ctx: Sly2Context, status: bool):
     if ctx.is_connected_to_game == status:
