@@ -2,7 +2,8 @@ from enum import IntEnum
 from typing import Optional, NamedTuple, Tuple, Dict, List
 from math import ceil
 import struct
-from logging import Logger
+import sys
+from logging import Logger, DEBUG, CRITICAL, getLogger
 from time import time
 import traceback
 
@@ -63,6 +64,21 @@ class PowerUps(NamedTuple):
     tom: bool = False
     time_rush: bool = False
 
+# The PS2's main RAM. The first megabyte is kernel space, so a pointer read out
+# of the game's heap that lands there is garbage rather than an object. PCSX2
+# services a write to an address outside this range with a raw EE write that
+# faults inside the emulator itself, so a single bad pointer takes it down —
+# every access is range checked instead of trusted.
+EE_RAM_START = 0x0010_0000
+EE_RAM_END = 0x0200_0000
+
+# No map holds anywhere near this many guards at once; a list longer than this
+# is a walk that wandered into freed memory.
+MAX_GUARDS = 512
+
+def in_ee_ram(address: int, size: int = 4) -> bool:
+    return EE_RAM_START <= address and address + size <= EE_RAM_END
+
 class GameInterface():
     """
     Base class for connecting with a pcsx2 game
@@ -76,21 +92,64 @@ class GameInterface():
 
     def __init__(self, logger) -> None:
         self.logger = logger
+        self.reported_bad_writes = set()
+        # Own logger so /trace can enable write logging by setting its level to
+        # DEBUG. It propagates to the root file handler regardless of the root
+        # level, so the writes reach the log file even when the client is at
+        # INFO. Muted by default to keep it out of normal play logs.
+        self.write_logger = getLogger("Sly2Writes")
+        self.write_logger.setLevel(CRITICAL)
+
+    def set_write_trace(self, enabled: bool) -> None:
+        self.write_logger.setLevel(DEBUG if enabled else CRITICAL)
+
+    def _log_write(self, kind: str, address, value) -> None:
+        if not self.write_logger.isEnabledFor(DEBUG):
+            return
+        # sys._getframe(2) is the method that issued the write, past this
+        # helper and the _write primitive, so the log names the actual site.
+        if isinstance(address, list):
+            where = f"[{', '.join(f'{a:#010x}' for a in address)}]"
+        else:
+            where = f"{address:#010x}"
+        self.write_logger.debug(
+            f"{sys._getframe(2).f_code.co_name} {kind} {where} = {value}")
+
+    def _writable(self, address: int, size: int = 4) -> bool:
+        if in_ee_ram(address, size):
+            return True
+
+        caller = traceback.extract_stack()[-3]
+        if caller.name not in self.reported_bad_writes:
+            self.reported_bad_writes.add(caller.name)
+            self.logger.warning(
+                f"Refused write to invalid address {address:#010x} from "
+                f"{caller.name} (line {caller.lineno})"
+            )
+        return False
 
     def _read8(self, address: int):
+        if not in_ee_ram(address, 1):
+            return 0
         return self.pcsx2_interface.read_int8(address)
 
     def _read16(self, address: int):
+        if not in_ee_ram(address, 2):
+            return 0
         return self.pcsx2_interface.read_int16(address)
 
     def _read32(self, address: int):
+        if not in_ee_ram(address):
+            return 0
         return self.pcsx2_interface.read_int32(address)
 
     def _read_bytes(self, address: int, n: int):
+        if not in_ee_ram(address, n):
+            return bytes(n)
         return self.pcsx2_interface.read_bytes(address, n)
 
     def _read_float(self, address: int):
-        return struct.unpack("f",self.pcsx2_interface.read_bytes(address, 4))[0]
+        return struct.unpack("f", self._read_bytes(address, 4))[0]
 
     def _batch_read8(self, addresses: list[int]) -> list[int]:
         return self.pcsx2_interface.batch_read_int8(addresses)
@@ -102,19 +161,49 @@ class GameInterface():
         return self.pcsx2_interface.batch_read_int32(addresses)
 
     def _write8(self, address: int, value: int):
-        self.pcsx2_interface.write_int8(address, value)
+        if self._writable(address, 1):
+            self._log_write("w8", address, value)
+            self.pcsx2_interface.write_int8(address, value)
 
     def _write16(self, address: int, value: int):
-        self.pcsx2_interface.write_int16(address, value)
+        if self._writable(address, 2):
+            self._log_write("w16", address, value)
+            self.pcsx2_interface.write_int16(address, value)
 
     def _write32(self, address: int, value: int):
-        self.pcsx2_interface.write_int32(address, value)
+        if self._writable(address):
+            self._log_write("w32", address, value)
+            self.pcsx2_interface.write_int32(address, value)
 
     def _write_bytes(self, address: int, value: bytes):
-        self.pcsx2_interface.write_bytes(address, value)
+        if self._writable(address, len(value)):
+            self._log_write("wbytes", address, value.hex())
+            self.pcsx2_interface.write_bytes(address, value)
 
     def _write_float(self, address: int, value: float):
-        self.pcsx2_interface.write_float(address, value)
+        if self._writable(address):
+            self._log_write("wfloat", address, value)
+            self.pcsx2_interface.write_float(address, value)
+
+    def _batch_write32(self, operations: list[tuple[int, int]]) -> None:
+        valid = []
+        for address, value in operations:
+            if self._writable(address):
+                valid.append((address, value))
+        if valid:
+            self._log_write("bw32", [a for a, _ in valid],
+                            [v for _, v in valid])
+            self.pcsx2_interface.batch_write_int32(valid)
+
+    def _batch_write_float(self, operations: list[tuple[int, float]]) -> None:
+        valid = []
+        for address, value in operations:
+            if self._writable(address):
+                valid.append((address, value))
+        if valid:
+            self._log_write("bwfloat", [a for a, _ in valid],
+                            [v for _, v in valid])
+            self.pcsx2_interface.batch_write_float(valid)
 
     def connect_to_game(self):
         """
@@ -458,7 +547,7 @@ class Sly2Interface(GameInterface):
     def set_loot_chance(self, episode: Sly2Episode, loot_chances: tuple[float, float]):
         addresses = self.addresses["loot chance"][episode.value-1]
         # Batch write both loot chances
-        self.pcsx2_interface.batch_write_float([
+        self._batch_write_float([
             (addresses[0], loot_chances[0]),
             (addresses[1], loot_chances[1])
         ])
@@ -470,7 +559,7 @@ class Sly2Interface(GameInterface):
         for i, table in enumerate(loot_table):
             for j, chance in enumerate(table):
                 write_operations.append((addresses[i][j], chance))
-        self.pcsx2_interface.batch_write_int32(write_operations)
+        self._batch_write32(write_operations)
 
     def set_loot_table(self, episode: Sly2Episode, loot_table: dict[str, list[tuple[int,bool,int]]]):
         addresses = self.addresses["loot table"][episode.value-1]
@@ -486,7 +575,7 @@ class Sly2Interface(GameInterface):
                 write_operations.append((address, loot_id))
 
         if write_operations:
-            self.pcsx2_interface.batch_write_int32(write_operations)
+            self._batch_write32(write_operations)
 
     def all_loot_stolen(self) -> list[bool]:
         """Batch read all loot statuses"""
@@ -578,7 +667,7 @@ class Sly2Interface(GameInterface):
             (self.addresses["thiefnet unlock"][i], 1)
             for i in range(24)
         ]
-        self.pcsx2_interface.batch_write_int32(write_operations)
+        self._batch_write32(write_operations)
 
     def reset_thiefnet(self) -> None:
         powerups = self.addresses["text"]["powerups"][self.get_current_episode()-1]
@@ -653,20 +742,51 @@ class Sly2Interface(GameInterface):
     # =====================================================
 
     def get_damage_type(self) -> int:
-        active_character = self._read32(self.addresses["active character pointer"])
-        damage_type = self._read32(active_character + 0xe2c)
-        return damage_type
+        active_character = self.get_active_character()
+        if active_character == 0:
+            return 0
+
+        return self._read32(active_character + 0xe2c)
 
     def kill_player(self):
         if self.in_safehouse() or self.get_current_episode() == 0:
             return
 
-        active_character_pointer = self._read32(self.addresses["active character pointer"])
-        self._write32(active_character_pointer+0xdf4,8)
+        active_character = self.get_active_character()
+        if active_character == 0:
+            return
+
+        self._write32(active_character+0xdf4,8)
 
     # =====================================================
     # Guard Management
     # =====================================================
+
+    def get_active_character(self) -> int:
+        """The character the player is controlling, or 0 if there is none"""
+        pointer = self._read32(self.addresses["active character pointer"])
+        return pointer if in_ee_ram(pointer) else 0
+
+    def _walk_guards(self):
+        """
+        Yields every currently spawned guard.
+
+        The lists are linked through each guard's 0x20 field. After a map
+        unload the heads still hold pointers into freed memory, so the walk
+        validates every node, and stops on a repeat or an implausible length
+        rather than following garbage forever.
+        """
+        for guard in self.addresses["guard structs"]:
+            seen = set()
+            pointer = self._read32(guard)
+            while (
+                in_ee_ram(pointer, 0x24) and
+                pointer not in seen and
+                len(seen) < MAX_GUARDS
+            ):
+                seen.add(pointer)
+                yield pointer
+                pointer = self._read32(pointer + 0x20)
 
     def despawn_guards(self) -> None:
         # Guards already spawned when the client connected rolled their pockets
@@ -674,13 +794,10 @@ class Sly2Interface(GameInterface):
         # makes map streaming re-spawn fresh guards that re-roll from the config
         # we now hold. Deliberately never re-enabled: re-enabling revives the
         # same stale objects instead of letting streaming replace them.
-        for guard in self.addresses["guard structs"]:
-            pointer = self._read32(guard)
-            while pointer != 0:
-                transform = self._read32(pointer + 0x54)
-                if transform != 0:
-                    self._write32(transform + 0xA0, 1)
-                pointer = self._read32(pointer + 0x20)
+        for guard in self._walk_guards():
+            transform = self._read32(guard + 0x54)
+            if transform != 0:
+                self._write32(transform + 0xA0, 1)
 
     # =====================================================
     # Traps
@@ -688,18 +805,22 @@ class Sly2Interface(GameInterface):
 
     def set_current_health(self, value: int) -> None:
         self.logger.debug(f"Setting health to {value}")
-        active_character_pointer = self._read32(
-            self.addresses["active character pointer"])
-        health_pointer = self._read32(active_character_pointer + 0xe00)
+        active_character = self.get_active_character()
+        if active_character == 0:
+            return
+
+        health_pointer = self._read32(active_character + 0xe00)
         if health_pointer != 0:
             self._write32(health_pointer, value)
             self.logger.debug(f"New health value: {self._read32(health_pointer)}")
 
     def set_current_gadget_power(self, value: int) -> None:
         self.logger.debug(f"Setting gadget power to {value}")
-        active_character_pointer = self._read32(
-            self.addresses["active character pointer"])
-        gadget_power = self._read32(active_character_pointer + 0x12fc)
+        active_character = self.get_active_character()
+        if active_character == 0:
+            return
+
+        gadget_power = self._read32(active_character + 0x12fc)
         if gadget_power != 0:
             self._write32(gadget_power, value)
             self.logger.debug(f"New gadget value: {self._read32(gadget_power)}")
@@ -711,26 +832,26 @@ class Sly2Interface(GameInterface):
         self._write_float(self.addresses["friction"], friction)
 
     def alert_guards(self, infinite_reach: bool = True) -> None:
-        active = self._read32(self.addresses["active character pointer"])
-        for guard in self.addresses["guard structs"]:
-            pointer = self._read32(guard)
-            while pointer != 0:
-                # Swarmers use a different struct layout; only touch guards
-                # already targeting the active character.
-                if self._read32(pointer + 0x1110) == active:
-                    if infinite_reach:
-                        self._write32(pointer + 0x1100, 1)
-                    self._write32(pointer + 0x1114, 1)
-                pointer = self._read32(pointer + 0x20)
+        active = self.get_active_character()
+        if active == 0:
+            return
+
+        for guard in self._walk_guards():
+            # Swarmers use a different struct layout; only touch guards
+            # already targeting the active character.
+            if self._read32(guard + 0x1110) == active:
+                if infinite_reach:
+                    self._write32(guard + 0x1100, 1)
+                self._write32(guard + 0x1114, 1)
 
     def release_guards(self) -> None:
-        active = self._read32(self.addresses["active character pointer"])
-        for guard in self.addresses["guard structs"]:
-            pointer = self._read32(guard)
-            while pointer != 0:
-                if self._read32(pointer + 0x1110) == active:
-                    self._write32(pointer + 0x1100, 0)
-                pointer = self._read32(pointer + 0x20)
+        active = self.get_active_character()
+        if active == 0:
+            return
+
+        for guard in self._walk_guards():
+            if self._read32(guard + 0x1110) == active:
+                self._write32(guard + 0x1100, 0)
 
     # =====================================================
     # Other utils

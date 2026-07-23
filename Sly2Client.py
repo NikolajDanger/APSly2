@@ -2,12 +2,15 @@ from typing import Optional, Dict
 from collections import deque
 from time import time
 import asyncio
+import logging
 import multiprocessing
 import traceback
 
-from CommonClient import get_base_parser, logger, server_loop, gui_enabled
+from CommonClient import get_base_parser, server_loop, gui_enabled
 import NetUtils
 import Utils
+
+logger = logging.getLogger("Sly2Client")
 
 from .data import Locations, Items
 from .data.Constants import EPISODES, TASKS, ENEMIES, PICKPOCKET_LOOT_TABLE_CHANCES, episode_key
@@ -50,6 +53,17 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
                 name="Update Deathlink"
             )
             message = f"Deathlink {'enabled' if self.ctx.death_link_enabled else 'disabled'}"
+            logger.info(message)
+            self.ctx.notification(message)
+
+    def _cmd_trace(self):
+        """Toggle logging every memory write to the log file, for diagnosing
+        crashes. Off by default; produces a lot of output when enabled."""
+        if isinstance(self.ctx, Sly2Context):
+            enabled = not self.ctx.game_interface.write_logger.isEnabledFor(
+                logging.DEBUG)
+            self.ctx.game_interface.set_write_trace(enabled)
+            message = f"Write tracing {'enabled' if enabled else 'disabled'}"
             logger.info(message)
             self.ctx.notification(message)
 
