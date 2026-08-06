@@ -10,7 +10,9 @@ from CommonClient import get_base_parser, server_loop, gui_enabled
 import NetUtils
 import Utils
 
-logger = logging.getLogger("Sly2Client")
+# Child of CommonClient's "Client" logger so records propagate to the UI log
+# pane, which only has handlers on "Client" itself.
+logger = logging.getLogger("Client.Sly2")
 
 from .data import Locations, Items
 from .data.Constants import EPISODES, TASKS, ENEMIES, PICKPOCKET_LOOT_TABLE_CHANCES, episode_key
@@ -127,7 +129,7 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
         if self.ctx.slot_data is None:
             return
 
-        sell_value_text = "\n== Loot =="
+        sell_value_text = "== Loot =="
         for loot, price in self.ctx.slot_data["loot_prices"].items():
             sell_value_text += f"\n- {loot}: {price} coins"
 
