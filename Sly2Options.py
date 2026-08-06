@@ -287,6 +287,76 @@ class RandomizeLoot(Toggle):
     """
     display_name = "Randomize Loot"
 
+class LootValues(Choice):
+    """
+    How much each piece of pickpocketing loot sells for.
+
+    - Vanilla: Loot sells for what it does in the base game.
+    - Shuffled: The vanilla sell values are shuffled between the pieces of loot.
+    - Randomized: Each piece of loot gets a new sell value, rolled between
+      "Loot Value Minimum" and "Loot Value Maximum".
+    """
+    display_name = "Loot Values"
+    option_Vanilla = 0
+    option_Shuffled = 1
+    option_Randomized = 2
+    default = 0
+
+class LootValueMinimum(Range):
+    """
+    The lowest a piece of loot can sell for. Only takes effect if loot_values is
+    set to Randomized.
+    """
+    display_name = "Loot Value Minimum"
+    range_start = 0
+    range_end = 999
+    default = 10
+
+class LootValueMaximum(Range):
+    """
+    The highest a piece of loot can sell for. Only takes effect if loot_values
+    is set to Randomized.
+    """
+    display_name = "Loot Value Maximum"
+    range_start = 0
+    range_end = 999
+    default = 150
+
+class TreasureValues(Choice):
+    """
+    How much each treasure sells for.
+
+    - Vanilla: Treasures sell for what they do in the base game.
+    - Shuffled: The vanilla sell values are shuffled between the treasures.
+    - Randomized: Each treasure gets a new sell value, rolled between "Treasure
+      Value Minimum" and "Treasure Value Maximum".
+    """
+    display_name = "Treasure Values"
+    option_Vanilla = 0
+    option_Shuffled = 1
+    option_Randomized = 2
+    default = 0
+
+class TreasureValueMinimum(Range):
+    """
+    The lowest a treasure can sell for. Only takes effect if treasure_values is
+    set to Randomized.
+    """
+    display_name = "Treasure Value Minimum"
+    range_start = 0
+    range_end = 9999
+    default = 150
+
+class TreasureValueMaximum(Range):
+    """
+    The highest a treasure can sell for. Only takes effect if treasure_values is
+    set to Randomized.
+    """
+    display_name = "Treasure Value Maximum"
+    range_start = 0
+    range_end = 9999
+    default = 800
+
 class BottleLocationBundleSize(Range):
     """
     How many bottles you need to collect for each check. Set to 0 to disable
@@ -417,6 +487,12 @@ class Sly2Options(PerGameCommonOptions):
     large_guard_loot_chance: LargeGuardLootChance
     loot_table_distribution: LootTableDistribution
     randomize_loot: RandomizeLoot
+    loot_values: LootValues
+    loot_value_minimum: LootValueMinimum
+    loot_value_maximum: LootValueMaximum
+    treasure_values: TreasureValues
+    treasure_value_minimum: TreasureValueMinimum
+    treasure_value_maximum: TreasureValueMaximum
     thiefnet_minimum: ThiefNetCostMinimum
     thiefnet_maximum: ThiefNetCostMaximum
     bottle_location_bundle_size: BottleLocationBundleSize
@@ -464,5 +540,13 @@ sly2_option_groups = [
         SmallGuardLootChance,
         LargeGuardLootChance,
         LootTableDistribution
+    ]),
+    OptionGroup("Sell values",[
+        LootValues,
+        LootValueMinimum,
+        LootValueMaximum,
+        TreasureValues,
+        TreasureValueMinimum,
+        TreasureValueMaximum
     ])
 ]

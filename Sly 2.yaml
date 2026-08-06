@@ -378,6 +378,80 @@ requires:
     random-low: 0
     random-high: 0
 
+  #################
+  ## Sell values ##
+  #################
+
+  # How much each piece of pickpocketing loot sells for.
+  #
+  # - Vanilla: Loot sells for what it does in the base game.
+  # - Shuffled: The vanilla sell values are shuffled between the pieces of loot.
+  # - Randomized: Each piece of loot gets a new sell value, rolled between
+  #   "Loot Value Minimum" and "Loot Value Maximum".
+  loot_values:
+    vanilla: 100
+    shuffled: 0
+    randomized: 0
+
+  # The lowest a piece of loot can sell for. Only takes effect if loot_values is
+  # set to Randomized.
+  #
+  # You can define additional values between the minimum and maximum values.
+  # Minimum value is 0
+  # Maximum value is 999
+  loot_value_minimum:
+    10: 100
+    random: 0
+    random-low: 0
+    random-high: 0
+
+  # The highest a piece of loot can sell for. Only takes effect if loot_values
+  # is set to Randomized.
+  #
+  # You can define additional values between the minimum and maximum values.
+  # Minimum value is 0
+  # Maximum value is 999
+  loot_value_maximum:
+    150: 100
+    random: 0
+    random-low: 0
+    random-high: 0
+
+  # How much each treasure sells for.
+  #
+  # - Vanilla: Treasures sell for what they do in the base game.
+  # - Shuffled: The vanilla sell values are shuffled between the treasures.
+  # - Randomized: Each treasure gets a new sell value, rolled between "Treasure
+  #   Value Minimum" and "Treasure Value Maximum".
+  treasure_values:
+    vanilla: 100
+    shuffled: 0
+    randomized: 0
+
+  # The lowest a treasure can sell for. Only takes effect if treasure_values is
+  # set to Randomized.
+  #
+  # You can define additional values between the minimum and maximum values.
+  # Minimum value is 0
+  # Maximum value is 9999
+  treasure_value_minimum:
+    150: 100
+    random: 0
+    random-low: 0
+    random-high: 0
+
+  # The highest a treasure can sell for. Only takes effect if treasure_values is
+  # set to Randomized.
+  #
+  # You can define additional values between the minimum and maximum values.
+  # Minimum value is 0
+  # Maximum value is 9999
+  treasure_value_maximum:
+    800: 100
+    random: 0
+    random-low: 0
+    random-high: 0
+
   #############################
   ## Item & Location Options ##
   #############################

@@ -122,6 +122,21 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
         else:
             logger.info(self.ctx.jsontotextparser(parts))
 
+    def _cmd_sell_values(self):
+        """Get the sell value of each piece of loot and each treasure"""
+        if self.ctx.slot_data is None:
+            return
+
+        sell_value_text = "\n== Loot =="
+        for loot, price in self.ctx.slot_data["loot_prices"].items():
+            sell_value_text += f"\n- {loot}: {price} coins"
+
+        sell_value_text += "\n== Treasures =="
+        for treasure, price in self.ctx.slot_data["treasure_prices"].items():
+            sell_value_text += f"\n- {treasure}: {price} coins"
+
+        logger.info(sell_value_text)
+
     def _cmd_loot_tables(self):
         """Get the loot tables for each episode"""
         if self.ctx.slot_data is None:

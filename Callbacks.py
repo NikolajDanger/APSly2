@@ -44,6 +44,7 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
         if in_safehouse and not ctx.in_safehouse:
             ctx.in_safehouse = True
             await set_thiefnet(ctx)
+            set_prices(ctx)
         elif ctx.in_hub and not in_hub:
             ctx.in_hub = False
             ctx.in_safehouse = False
@@ -115,6 +116,17 @@ def set_loot_table(ctx: 'Sly2Context'):
     loot_table = ctx.slot_data["loot_table"]
     ctx.game_interface.set_loot_table(ctx.current_episode, loot_table)
 
+def set_prices(ctx: 'Sly2Context'):
+    if ctx.slot_data is None:
+        return
+
+    if not ctx.slot_data["loot_values"] and not ctx.slot_data["treasure_values"]:
+        return
+
+    ctx.game_interface.set_prices(
+        ctx.slot_data["loot_prices"], ctx.slot_data["treasure_prices"]
+    )
+
 def fix_mega_jump(ctx: 'Sly2Context'):
     if ctx.powerups.mega_jump:
         address = ctx.game_interface.addresses["unload mega jump"]
@@ -137,6 +149,8 @@ async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
 
         if ctx.slot_data["randomize_loot"]:
             set_loot_table(ctx)
+
+        set_prices(ctx)
 
         # Replace guards that spawned before the client wrote the loot config so
         # they re-roll their pockets from the randomized table and loot chance.

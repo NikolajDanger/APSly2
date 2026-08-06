@@ -503,6 +503,85 @@ LOOT = {
 
 LOOT_IDS = {loot: 0x45A+i for i, loot in enumerate(LOOT.keys())}
 
+LOOT_PRICES = {
+    "Bronze Comb": 11,
+    "Silver Comb": 19,
+    "Gold Comb": 27,
+
+    "Bronze Ring": 17,
+    "Silver Ring": 40,
+    "Gold Ring": 60,
+
+    "Bronze Watch": 14,
+    "Silver Watch": 31,
+    "Gold Watch": 44,
+
+    "Bronze Pen": 22,
+    "Silver Pen": 49,
+    "Gold Pen": 71,
+
+    "Bronze Medal": 29,
+    "Silver Medal": 54,
+    "Gold Medal": 84,
+
+    "Bronze Pocket Watch": 32,
+    "Silver Pocket Watch": 62,
+    "Gold Pocket Watch": 97,
+
+    "Small Nugget": 41,
+    "Medium Nugget": 79,
+    "Large Gold Bar": 120,
+
+    "Topaz": 39,
+    "Sapphire": 81,
+    "Ruby": 122,
+
+    "Small Diamond": 45,
+    "Medium Diamond": 91,
+    "Large Diamond": 137,
+
+    "Small Necklace": 42,
+    "Medium Necklace": 84,
+    "Large Necklace": 127,
+}
+
+TREASURE_PRICES = {
+    # Missable, so it isn't a check, but it still sells.
+    "Gold Painting": 232,
+
+    "Crystal Chalice": 153,
+    "Ivory Jewel Box": 205,
+    "Jade Vase": 246,
+
+    "Ming Vase": 249,
+    "Ancestral Kite": 307,
+    "Burial Urn": 354,
+
+    "Crystal Flask": 352,
+    "Golden Scroll Case": 402,
+    "Gilded Scepter": 447,
+
+    "Ceremonial Lantern": 451,
+    "Crystal Ball": 504,
+    "Golden Orb": 553,
+
+    "Crystal Vase": 546,
+    "Royal Tiara": 601,
+    "Jeweled Crown": 652,
+
+    "Crystal Bell": 605,
+    "Alabaster Chalice": 654,
+    "Golden Plate": 704,
+
+    "Jade Decanter": 647,
+    "Collectible Plate": 701,
+    "Jeweled Chalice": 748,
+
+    "Jeweled Egg": 752,
+    "Golden Headdress": 803,
+    "Golden Vase": 726,
+}
+
 ENEMIES = [
   ("Rats/Frogs", "Boars"),
   ("Monkeys/Goats", "Rhinos"),
@@ -757,6 +836,36 @@ ADDRESSES = {
             0x3D57B4
         ],
         "loot": [0x3D4B04+i*4 for i in range(len(LOOT))],
+        "loot prices": {
+            loot: 0x2C3288+i*0xC for i, loot in enumerate(LOOT_PRICES.keys())
+        },
+        "treasure prices": {
+            "Gold Painting": 0x2C3450,
+            "Crystal Chalice": 0x2C345C,
+            "Ivory Jewel Box": 0x2C3468,
+            "Jade Vase": 0x2C3474,
+            "Ming Vase": 0x2C3480,
+            "Ancestral Kite": 0x2C348C,
+            "Burial Urn": 0x2C3498,
+            "Crystal Flask": 0x2C34A4,
+            "Golden Scroll Case": 0x2C34B0,
+            "Gilded Scepter": 0x2C34BC,
+            "Ceremonial Lantern": 0x2C34C8,
+            "Crystal Ball": 0x2C34D4,
+            "Golden Orb": 0x2C34E0,
+            "Crystal Vase": 0x2C34EC,
+            "Royal Tiara": 0x2C34F8,
+            "Jeweled Crown": 0x2C3504,
+            "Crystal Bell": 0x2C3510,
+            "Alabaster Chalice": 0x2C351C,
+            "Golden Plate": 0x2C3528,
+            "Jade Decanter": 0x2C3534,
+            "Collectible Plate": 0x2C3540,
+            "Jeweled Chalice": 0x2C354C,
+            "Jeweled Egg": 0x2C3564,
+            "Golden Headdress": 0x2C3570,
+            "Golden Vase": 0x2C357C,
+        },
         "loot chance": [(0x2C378C+i*0x3c, 0x2C378C+i*0x3c+0x220) for i in range(8)],
         "loot table odds": [
             (

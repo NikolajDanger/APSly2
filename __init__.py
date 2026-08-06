@@ -4,7 +4,7 @@ from math import ceil
 import inspect
 
 from BaseClasses import Item, ItemClassification
-from Options import OptionError
+from Options import Choice, OptionError
 from worlds.AutoWorld import World, WebWorld
 from worlds.LauncherComponents import (
     Component,
@@ -19,7 +19,14 @@ from .Sly2Options import Sly2Options, StartingEpisode, sly2_option_groups
 from .Regions import create_regions
 from .data.Items import item_dict, item_groups, Sly2Item
 from .data.Locations import location_dict, location_groups, tasksanity_list
-from .data.Constants import EPISODES, LOOT, ENEMIES, PICKPOCKET_LOOT_TABLE_CHANCES
+from .data.Constants import (
+    EPISODES,
+    LOOT,
+    LOOT_PRICES,
+    TREASURE_PRICES,
+    ENEMIES,
+    PICKPOCKET_LOOT_TABLE_CHANCES
+)
 from .ItemPool import gen_pool
 from .Rules import set_rules
 
@@ -70,6 +77,8 @@ class Sly2World(World):
 
     thiefnet_costs: List[int] = []
     loot_table: dict[str, list[tuple[int,bool,int]]] = {}
+    loot_prices: dict[str, int] = {}
+    treasure_prices: dict[str, int] = {}
 
     # this is how we tell the Universal Tracker we want to use re_gen_passthrough
     @staticmethod
@@ -217,6 +226,26 @@ class Sly2World(World):
                 opt.thiefnet_maximum.value, opt.thiefnet_minimum.value
             )
 
+        if self._coerce_or_raise(
+            opt,
+            opt.loot_value_maximum < opt.loot_value_minimum,
+            f"Loot value minimum cannot be larger than maximum (min: {opt.loot_value_minimum}, max: {opt.loot_value_maximum}).",
+            "Swapping values."
+        ):
+            opt.loot_value_minimum.value, opt.loot_value_maximum.value = (
+                opt.loot_value_maximum.value, opt.loot_value_minimum.value
+            )
+
+        if self._coerce_or_raise(
+            opt,
+            opt.treasure_value_maximum < opt.treasure_value_minimum,
+            f"Treasure value minimum cannot be larger than maximum (min: {opt.treasure_value_minimum}, max: {opt.treasure_value_maximum}).",
+            "Swapping values."
+        ):
+            opt.treasure_value_minimum.value, opt.treasure_value_maximum.value = (
+                opt.treasure_value_maximum.value, opt.treasure_value_minimum.value
+            )
+
         # Checking number of locations and items
         n_locations = (
             69 + # jobs
@@ -300,6 +329,22 @@ class Sly2World(World):
 
         return loot_table
 
+    def randomize_prices(
+        self, vanilla: dict[str,int], option: Choice, minimum: int, maximum: int
+    ) -> dict[str,int]:
+        if option.value == 1:
+            prices = list(vanilla.values())
+            self.random.shuffle(prices)
+            return dict(zip(vanilla.keys(), prices))
+
+        if option.value == 2:
+            return {
+                name: self.random.randint(minimum, maximum)
+                for name in vanilla.keys()
+            }
+
+        return dict(vanilla)
+
     def generate_early(self) -> None:
 
         # implement .yaml-less Universal Tracker support
@@ -310,6 +355,8 @@ class Sly2World(World):
                 slot_data = re_gen_passthrough["Sly 2: Band of Thieves"]
                 self.thiefnet_costs = slot_data["thiefnet_costs"]
                 self.loot_table = slot_data["loot_table"]
+                self.loot_prices = slot_data["loot_prices"]
+                self.treasure_prices = slot_data["treasure_prices"]
                 self.options.starting_episode.value = slot_data["starting_episode"]
                 self.options.permissive_yaml.value = slot_data["permissive_yaml"]
                 self.options.goal.value = slot_data["goal"]
@@ -332,6 +379,12 @@ class Sly2World(World):
                 self.options.large_guard_loot_chance.value = slot_data["large_guard_loot_chance"]
                 self.options.loot_table_distribution.value = slot_data["loot_table_distribution"]
                 self.options.randomize_loot.value = slot_data["randomize_loot"]
+                self.options.loot_values.value = slot_data["loot_values"]
+                self.options.loot_value_minimum.value = slot_data["loot_value_minimum"]
+                self.options.loot_value_maximum.value = slot_data["loot_value_maximum"]
+                self.options.treasure_values.value = slot_data["treasure_values"]
+                self.options.treasure_value_minimum.value = slot_data["treasure_value_minimum"]
+                self.options.treasure_value_maximum.value = slot_data["treasure_value_maximum"]
                 self.options.bottle_item_bundle_size.value = slot_data["bottle_item_bundle_size"]
                 self.options.bottle_location_bundle_size.value = slot_data["bottle_location_bundle_size"]
                 self.options.bottlesanity.value = slot_data["bottlesanity"]
@@ -354,6 +407,19 @@ class Sly2World(World):
             self.loot_table = self.randomize_loot_table()
         else:
             self.loot_table = LOOT
+
+        self.loot_prices = self.randomize_prices(
+            LOOT_PRICES,
+            self.options.loot_values,
+            self.options.loot_value_minimum.value,
+            self.options.loot_value_maximum.value
+        )
+        self.treasure_prices = self.randomize_prices(
+            TREASURE_PRICES,
+            self.options.treasure_values,
+            self.options.treasure_value_minimum.value,
+            self.options.treasure_value_maximum.value
+        )
 
     def get_filler_item_name(self) -> str:
         # Currently just coins
@@ -409,6 +475,12 @@ class Sly2World(World):
             "large_guard_loot_chance",
             "loot_table_distribution",
             "randomize_loot",
+            "loot_values",
+            "loot_value_minimum",
+            "loot_value_maximum",
+            "treasure_values",
+            "treasure_value_minimum",
+            "treasure_value_maximum",
             "bottle_location_bundle_size",
             "bottlesanity",
             "bottle_item_bundle_size",
@@ -422,6 +494,8 @@ class Sly2World(World):
         slot_data = self.get_options_as_dict()
         slot_data["thiefnet_costs"] = self.thiefnet_costs
         slot_data["loot_table"] = self.loot_table
+        slot_data["loot_prices"] = self.loot_prices
+        slot_data["treasure_prices"] = self.treasure_prices
         slot_data["skip_intro"] = True
         slot_data["world_version"] = self.world_version
 
@@ -448,6 +522,18 @@ class Sly2World(World):
                 loot_odds = PICKPOCKET_LOOT_TABLE_CHANCES[self.options.loot_table_distribution-1]
                 loot_text = ", ".join(f"{l} ({loot_odds[i]}%)" for i, l in enumerate(loot))
                 spoiler_text += f"\n- {enemy}: {loot_text}"
+
+        spoiler_text += "\n======= Sly 2 Sell Values ========"
+        spoiler_text += "\n== Loot =="
+        spoiler_text += "\n"+"\n".join(
+            f"- {loot}: {price} coins"
+            for loot, price in self.loot_prices.items()
+        )
+        spoiler_text += "\n== Treasures =="
+        spoiler_text += "\n"+"\n".join(
+            f"- {treasure}: {price} coins"
+            for treasure, price in self.treasure_prices.items()
+        )
 
         spoiler_text += "\n=================================="
 

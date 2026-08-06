@@ -577,6 +577,19 @@ class Sly2Interface(GameInterface):
         if write_operations:
             self._batch_write32(write_operations)
 
+    def set_prices(
+        self, loot_prices: dict[str,int], treasure_prices: dict[str,int]
+    ) -> None:
+        write_operations = [
+            (self.addresses["loot prices"][loot], price)
+            for loot, price in loot_prices.items()
+        ]
+        write_operations += [
+            (self.addresses["treasure prices"][treasure], price)
+            for treasure, price in treasure_prices.items()
+        ]
+        self._batch_write32(write_operations)
+
     def all_loot_stolen(self) -> list[bool]:
         """Batch read all loot statuses"""
         loot_addresses = self.addresses["loot"]
