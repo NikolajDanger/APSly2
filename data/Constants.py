@@ -249,8 +249,8 @@ TASKS = {
     },
     "Jailbreak": {
         "Train Hack": [
-            (10, "Terminal 1"), (12, "Terminal 2"), (14, "Terminal 3"),
-            (16, "Terminal 4"), (18, "Terminal 5"), (20, "Terminal 6"),
+            (9, "Terminal 1"), (11, "Terminal 2"), (13, "Terminal 3"),
+            (15, "Terminal 4"), (17, "Terminal 5"), (19, "Terminal 6"),
         ],
         "Wall Bombing": [
             (22, "Guard 1"), (23, "Guard 2"), (24, "Guard 3"),
@@ -272,7 +272,7 @@ TASKS = {
             (70, "Key 1"), (72, "Key 2"), (75, "Tank Patrol Schedule"),
         ],
         "Operation: Trojan Tank": [
-            (81, "Enter Prison"), (84, "Climb to Control Panel"),
+            (81, "Enter Prison"), (83, "Climb to Control Panel"),
             (88, "Code Pad 1"), (91, "Code Pad 2"), (94, "Code Pad 3"),
             (97, "Hypno-box 1"), (98, "Hypno-box 2"), (99, "Hypno-box 3"),
             (100, "Hypno-box 4"), (105, "Lift Levers"),
@@ -326,8 +326,8 @@ TASKS = {
             (21, "Open Up Iron Horse 3"),
         ],
         "A Friend in Need": [
-            (32, "Follow Carmelita"), (35, "Key 1"), (38, "Key 2"),
-            (41, "Key 3"),
+            (32, "Follow Carmelita"), (34, "Key 1"), (37, "Key 2"),
+            (40, "Key 3"),
         ],
         "Bear Cub Kidnapping": [
             (53, "Bear Cub 1"), (58, "Bear Cub 2"),
