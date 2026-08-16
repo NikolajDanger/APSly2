@@ -184,6 +184,12 @@ item_groups.update({
     "Murray's Gadgets":  {name for name, _, _ in murray_powerups},
 })
 
+def ordered_group(group: str) -> list[str]:
+    """Group members in item_dict order; set iteration order varies between
+    processes, which breaks generation determinism."""
+    members = item_groups[group]
+    return [name for name in item_dict if name in members]
+
 def from_id(item_id: int) -> Sly2ItemData:
     matching = [item for item in item_dict.values() if item.code == item_id]
     if len(matching) == 0:

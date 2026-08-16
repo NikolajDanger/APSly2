@@ -1,7 +1,8 @@
 from typing import Dict, Optional, Mapping, Any, List, ClassVar, TextIO
 import logging
 from math import ceil
-import inspect
+import os
+import sys
 
 from BaseClasses import Item, ItemClassification
 from Options import Choice, OptionError
@@ -17,7 +18,7 @@ from worlds.LauncherComponents import (
 
 from .Sly2Options import Sly2Options, StartingEpisode, sly2_option_groups
 from .Regions import create_regions
-from .data.Items import item_dict, item_groups, Sly2Item
+from .data.Items import item_dict, item_groups, ordered_group, Sly2Item
 from .data.Locations import location_dict, location_groups, tasksanity_list
 from .data.Constants import (
     EPISODES,
@@ -47,6 +48,18 @@ def map_page_index(episode: str) -> int:
     mapping = {k: i for i,k in enumerate(EPISODES.keys())}
 
     return mapping.get(episode,0)
+
+# The fuzzer's hooks re-run generation to compare against the first run,
+# either in-process (the Universal Tracker hook) or in subprocesses of the
+# fuzzer's workers (the determinism hook). This module is first imported in
+# the fuzzer's own process, so stamping the environment here reaches every
+# hook (subprocesses inherit it) without knowing the hooks by name.
+if os.path.basename(sys.argv[0]) == "fuzz.py":
+    os.environ["APSLY2_FUZZING"] = "1"
+
+def generation_is_fuzzed() -> bool:
+    """Whether the fuzzer is driving this generation."""
+    return "APSLY2_FUZZING" in os.environ
 
 ## The world
 class Sly2Web(WebWorld):
@@ -79,6 +92,7 @@ class Sly2World(World):
     loot_table: dict[str, list[tuple[int,bool,int]]] = {}
     loot_prices: dict[str, int] = {}
     treasure_prices: dict[str, int] = {}
+    fuzzing: bool = False
 
     # this is how we tell the Universal Tracker we want to use re_gen_passthrough
     @staticmethod
@@ -128,8 +142,7 @@ class Sly2World(World):
         # This part is in order to get a better, more representative sample
         # from the fuzzer. Any yaml with a bunch of random values _should_ be
         # called with permissive_yaml on.
-        generation_caller = inspect.stack()[6]
-        if generation_caller.function == "call_generate":
+        if self.fuzzing:
             opt.permissive_yaml.value = True
 
         if self._coerce_or_raise(
@@ -346,6 +359,7 @@ class Sly2World(World):
         return dict(vanilla)
 
     def generate_early(self) -> None:
+        self.fuzzing = generation_is_fuzzed()
 
         # implement .yaml-less Universal Tracker support
         if getattr(self.multiworld, "generation_is_fake", False):
@@ -423,7 +437,7 @@ class Sly2World(World):
 
     def get_filler_item_name(self) -> str:
         # Currently just coins
-        return self.random.choice(list(self.item_name_groups["Filler"]))
+        return self.random.choice(ordered_group("Filler"))
 
     def create_regions(self) -> None:
         create_regions(self)

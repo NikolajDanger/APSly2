@@ -4,7 +4,7 @@ from BaseClasses import Item
 
 from .data.Constants import EPISODES
 from .data.Items import (
-    item_groups, Trap,
+    ordered_group, Trap,
     CLOCKWERK_CORE, CLOCKWERK_ADDITIONAL, CLOCKWERK_SILLY, CLOCKWERK_REPEATABLE
 )
 # from .Sly2Options import StartingEpisode
@@ -15,7 +15,7 @@ if typing.TYPE_CHECKING:
 def gen_powerups(world: "Sly2World") -> list[Item]:
     """Generate the power-ups for the item pool"""
     powerups = []
-    for item_name in item_groups["Power-Up"]:
+    for item_name in ordered_group("Power-Up"):
         if (
             (item_name == "TOM" and not world.options.include_tom) or
             (item_name == "Mega Jump" and not world.options.include_mega_jump) or
@@ -30,7 +30,7 @@ def gen_powerups(world: "Sly2World") -> list[Item]:
 def gen_episodes(world: "Sly2World") -> list[Item]:
     """Generate the progressive episodes items for the item pool"""
     all_episodes = [
-        item_name for item_name in item_groups["Episode"]
+        item_name for item_name in ordered_group("Episode")
         for _ in range(4)
     ]
     all_episodes.remove("Progressive Jailbreak") # Jailbreak only has 3 chapters
@@ -121,7 +121,7 @@ def gen_bottles(world: "Sly2World"):
 def gen_traps(world: "Sly2World", count: int) -> list[Item]:
     """Generate `count` trap items, distributed by their configured weights"""
     weights = world.options.trap_weights.value
-    enabled = [trap for trap in Trap if weights[trap.key] > 0]
+    enabled = [trap for trap in Trap if weights.get(trap.key, 0) > 0]
     if count <= 0 or not enabled:
         return []
 

@@ -125,8 +125,10 @@ def set_rules(world: "Sly2World"):
 
     # Putting ThiefNet stuff out of logic, to make early game less slow.
     # Divides the items into 8 groups of 3. First groups requires 2 episodes
-    # items to be in logic, second group requires 4, etc.
-    if not getattr(world.multiworld, "generation_is_fake", False): # (unless tracking)
+    # items to be in logic, second group requires 4, etc. Skipped when
+    # tracking, except under the fuzzer, whose UT hook compares the tracker's
+    # logic against the real generation's spheres.
+    if not getattr(world.multiworld, "generation_is_fake", False) or world.fuzzing:
         for i in range(1,25):
             episode_items_n = ceil(i/3)*2
             add_rule(
