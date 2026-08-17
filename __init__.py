@@ -482,6 +482,7 @@ class Sly2World(World):
                 self.options.large_guard_loot_chance.value = slot_data["large_guard_loot_chance"]
                 self.options.loot_table_distribution.value = slot_data["loot_table_distribution"]
                 self.options.randomize_loot.value = slot_data["randomize_loot"]
+                self.options.dynamic_loot_tables.value = slot_data["dynamic_loot_tables"]
                 self.options.loot_values.value = slot_data["loot_values"]
                 self.options.loot_value_minimum.value = slot_data["loot_value_minimum"]
                 self.options.loot_value_maximum.value = slot_data["loot_value_maximum"]
@@ -578,6 +579,7 @@ class Sly2World(World):
             "large_guard_loot_chance",
             "loot_table_distribution",
             "randomize_loot",
+            "dynamic_loot_tables",
             "loot_values",
             "loot_value_minimum",
             "loot_value_maximum",

@@ -15,9 +15,9 @@ import Utils
 logger = logging.getLogger("Client.Sly2")
 
 from .data import Locations, Items
-from .data.Constants import EPISODES, TASKS, ENEMIES, PICKPOCKET_LOOT_TABLE_CHANCES, episode_key
+from .data.Constants import EPISODES, TASKS, ENEMIES, episode_key
 from .Sly2Interface import Sly2Interface, Sly2Episode, PowerUps
-from .Callbacks import init, update, compute_available_episodes
+from .Callbacks import init, update, compute_available_episodes, episode_loot, loot_odds_row
 
 # Load Universal Tracker
 tracker_loaded: bool = False
@@ -31,16 +31,6 @@ try:
     tracker_loaded = True
 except ImportError:
     from CommonClient import ClientCommandProcessor, CommonContext
-
-
-def episode_loot(loot_table, i: int, j: int) -> list:
-    loot = []
-    for k in range(1, 7):
-        for loot_name, loot_locations in loot_table.items():
-            if [i + 1, bool(j), k] in loot_locations:
-                loot.append(loot_name)
-                break
-    return loot
 
 
 class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
@@ -145,9 +135,7 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
             return
 
         slot_data = self.ctx.slot_data
-        loot_table_distribution = slot_data["loot_table_distribution"]
         loot_table = slot_data["loot_table"]
-        loot_odds = PICKPOCKET_LOOT_TABLE_CHANCES[loot_table_distribution-1]
 
         if not slot_data["include_pickpocketing"]:
             loot_table_text = ""
@@ -156,6 +144,7 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
                 for j in range(2):
                     enemy = ENEMIES[i][j]
                     loot = self._episode_loot(loot_table, i, j)
+                    loot_odds = loot_odds_row(self.ctx, i, j)
                     loot_text = ", ".join(
                         f"{l} ({loot_odds[k]}%)" for k, l in enumerate(loot)
                     )
@@ -181,6 +170,7 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
             for j in range(2):
                 enemy = ENEMIES[i][j]
                 loot = self._episode_loot(loot_table, i, j)
+                loot_odds = loot_odds_row(self.ctx, i, j)
                 parts = [{"text": f"- {enemy}: "}]
                 for k, l in enumerate(loot):
                     if k:
@@ -449,11 +439,11 @@ class Sly2Context(CommonContext): # type: ignore[misc]
                 episode = ctx.map_id
                 slot_data = ctx.slot_data
                 loot_table = slot_data["loot_table"]
-                loot_odds = PICKPOCKET_LOOT_TABLE_CHANCES[slot_data["loot_table_distribution"] - 1]
                 show_odds = slot_data["include_pickpocketing"]
                 lines = [f"== Episode {episode + 1} Loot =="]
                 for j in range(2):
                     lines.append(f"{ENEMIES[episode][j]}:")
+                    loot_odds = loot_odds_row(ctx, episode, j)
                     for k, name in enumerate(episode_loot(loot_table, episode, j)):
                         text = f"{name} ({loot_odds[k]}%)" if show_odds else name
                         code = Locations.location_dict[f"Pickpocket {name}"].code

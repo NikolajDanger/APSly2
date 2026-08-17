@@ -98,6 +98,61 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
 
     boot_from_invalid_episode(ctx, ap_connected)
 
+def episode_loot(loot_table, i: int, j: int) -> list:
+    loot = []
+    for k in range(1, 7):
+        for loot_name, loot_locations in loot_table.items():
+            if [i + 1, bool(j), k] in loot_locations:
+                loot.append(loot_name)
+                break
+    return loot
+
+def dynamic_loot_odds(loot_table, checked, i: int, j: int, base_odds) -> tuple:
+    names = episode_loot(loot_table, i, j)
+    if len(names) != 6:
+        return base_odds
+
+    collected = [
+        Locations.location_dict[f"Pickpocket {name}"].code in checked
+        for name in names
+    ]
+    if not any(collected) or all(collected):
+        return base_odds
+
+    # Collected loot keeps 60% of its base chance, so with a flat table the
+    # total chance of uncollected loot drops 10 points per collection,
+    # bottoming out at 50% for the last piece.
+    kept = [b*0.6 if c else b for b, c in zip(base_odds, collected)]
+    freed = 100 - sum(kept)
+    uncollected = sum(b for b, c in zip(base_odds, collected) if not c)
+    target = [
+        t if c else t + freed*t/uncollected
+        for t, c in zip(kept, collected)
+    ]
+
+    # The game reads these as raw integer percentages and nothing downstream
+    # renormalizes, so the row must sum to exactly 100.
+    odds = [max(1, int(t)) for t in target]
+    remainders = [t - o for t, o in zip(target, odds)]
+    while sum(odds) > 100:
+        odds[odds.index(max(odds))] -= 1
+    for _ in range(100 - sum(odds)):
+        k = remainders.index(max(remainders))
+        odds[k] += 1
+        remainders[k] -= 1
+    return tuple(odds)
+
+def loot_odds_row(ctx: 'Sly2Context', i: int, j: int) -> tuple:
+    if ctx.slot_data is None:
+        return PICKPOCKET_LOOT_TABLE_CHANCES[49]
+
+    base = PICKPOCKET_LOOT_TABLE_CHANCES[ctx.slot_data["loot_table_distribution"]-1]
+    if not ctx.slot_data["dynamic_loot_tables"]:
+        return base
+
+    checked = ctx.checked_locations | ctx.locations_checked
+    return dynamic_loot_odds(ctx.slot_data["loot_table"], checked, i, j, base)
+
 def set_pickpocketing(ctx: 'Sly2Context'):
     """Set pickpocking chances to be higher"""
     if ctx.current_episode is None or ctx.slot_data is None:
@@ -106,8 +161,11 @@ def set_pickpocketing(ctx: 'Sly2Context'):
     small_guard = ctx.slot_data["small_guard_loot_chance"]/100.0
     large_guard = ctx.slot_data["large_guard_loot_chance"]/100.0
     ctx.game_interface.set_loot_chance(ctx.current_episode, (small_guard, large_guard))
-    loot_table = PICKPOCKET_LOOT_TABLE_CHANCES[ctx.slot_data["loot_table_distribution"]-1]
-    ctx.game_interface.set_loot_table_odds(ctx.current_episode, (loot_table, loot_table))
+    episode_index = ctx.current_episode.value-1
+    ctx.game_interface.set_loot_table_odds(ctx.current_episode, (
+        loot_odds_row(ctx, episode_index, 0),
+        loot_odds_row(ctx, episode_index, 1)
+    ))
 
 def set_loot_table(ctx: 'Sly2Context'):
     if ctx.slot_data is None or ctx.current_episode is None:

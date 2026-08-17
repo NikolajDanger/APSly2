@@ -288,6 +288,14 @@ class RandomizeLoot(Toggle):
     """
     display_name = "Randomize Loot"
 
+class DynamicLootTables(Toggle):
+    """
+    Whether the pickpocketing loot tables update during play, making loot whose
+    checks have not been collected more common than loot that has already been
+    checked.
+    """
+    display_name = "Dynamic Loot Tables"
+
 class LootValues(Choice):
     """
     How much each piece of pickpocketing loot sells for.
@@ -488,6 +496,7 @@ class Sly2Options(PerGameCommonOptions):
     large_guard_loot_chance: LargeGuardLootChance
     loot_table_distribution: LootTableDistribution
     randomize_loot: RandomizeLoot
+    dynamic_loot_tables: DynamicLootTables
     loot_values: LootValues
     loot_value_minimum: LootValueMinimum
     loot_value_maximum: LootValueMaximum
@@ -538,6 +547,7 @@ sly2_option_groups = [
     ]),
     OptionGroup("Pick-pocketing",[
         RandomizeLoot,
+        DynamicLootTables,
         SmallGuardLootChance,
         LargeGuardLootChance,
         LootTableDistribution

@@ -343,6 +343,13 @@ requires:
     'false': 100
     'true': 0
 
+  # Whether the pickpocketing loot tables update during play, making loot whose
+  # checks have not been collected more common than loot that has already been
+  # checked.
+  dynamic_loot_tables:
+    'false': 100
+    'true': 0
+
   # The chance that any given small guard will have pick-pocketable loot.
   #
   # You can define additional values between the minimum and maximum values.
