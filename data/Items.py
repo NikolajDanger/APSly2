@@ -12,9 +12,9 @@ class Trap(Enum):
     """Trap items. `duration` is in seconds; None means an instant effect."""
     SLY_1        = ("Sly 1 Trap",        None)
     ENERGY_DRAIN = ("Energy Drain Trap", None)
-    SLOW_MO      = ("Slow-mo Trap",      10)
-    SUGAR_RUSH   = ("Sugar Rush Trap",   10)
-    ICE          = ("Ice Trap",          15)
+    SLOW_MO      = ("Slow-mo Trap",      15)
+    SUGAR_RUSH   = ("Sugar Rush Trap",   15)
+    ICE          = ("Ice Trap",          20)
     NOISE        = ("Noise Trap",        10)
 
     def __init__(self, item_name: str, duration: Optional[int]):
