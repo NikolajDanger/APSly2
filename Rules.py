@@ -123,6 +123,26 @@ def set_rules(world: "Sly2World"):
                 )
             )
 
+    # If the settings forces there to be a bunch of progression items and very
+    # few early locations
+    restrictive_start = (
+        world.options.episode_8_keys.value == 3 or
+        (
+            bool(world.options.include_vaults) and
+            world.options.bottle_item_bundle_size.value != 0 and
+            world.options.bottle_location_bundle_size.value > 5 and
+            bool(world.options.include_pickpocketing) and
+            world.options.episode_8_keys.value != 4 and
+            (
+                world.options.goal.value == 6 or
+                (
+                    world.options.goal.value == 8 and
+                    bool(world.options.pick_and_mix.value.get("clockwerk_hunt"))
+                )
+            )
+        )
+    )
+
     # Putting ThiefNet stuff out of logic, to make early game less slow.
     # Divides the items into 8 groups of 3. First groups requires 2 episodes
     # items to be in logic, second group requires 4, etc. Skipped when
@@ -131,6 +151,8 @@ def set_rules(world: "Sly2World"):
     if not getattr(world.multiworld, "generation_is_fake", False) or world.fuzzing:
         for i in range(1,25):
             episode_items_n = ceil(i/3)*2
+            if restrictive_start and i <= 3:
+                episode_items_n = 1
             add_rule(
                 world.get_location(f"ThiefNet {i:02}"),
                 lambda state, n=episode_items_n: (

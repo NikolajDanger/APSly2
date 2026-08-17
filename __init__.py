@@ -22,6 +22,8 @@ from .data.Items import item_dict, item_groups, ordered_group, Sly2Item
 from .data.Locations import location_dict, location_groups, tasksanity_list
 from .data.Constants import (
     EPISODES,
+    TASKS,
+    TREASURES,
     LOOT,
     LOOT_PRICES,
     TREASURE_PRICES,
@@ -121,19 +123,24 @@ class Sly2World(World):
     }
 
     def _coerce_or_raise(
-        self, opt: Sly2Options, conflict: bool, error_text: str, coercion_text: str
+        self, opt: Sly2Options, conflict: bool, error_text: str,
+        coercion_text: str, warn_only: Optional[str] = None
     ) -> bool:
         """Enforce an option conflict, honouring permissive_yaml.
 
         Returns True when `conflict` holds and permissive_yaml is on, logging
         `error_text` followed by `coercion_text` (which describes the fix), so
         the caller can apply its coercion. Raises OptionError with `error_text`
-        when the conflict holds and permissive_yaml is off. Returns False when
+        when the conflict holds and permissive_yaml is off; unless `warn_only`
+        is given, in which case the conflict is only logged. Returns False when
         there is no conflict.
         """
         if not conflict:
             return False
         if not opt.permissive_yaml:
+            if warn_only is not None:
+                logging.warning(f"{self.player_name}: {error_text} {warn_only}")
+                return False
             raise OptionError(error_text)
         logging.warning(f"{self.player_name}: {error_text} {coercion_text}")
         return True
@@ -177,25 +184,26 @@ class Sly2World(World):
                 opt,
                 bool(conditions.get("clockwerk_hunt")) and opt.required_keys_goal > opt.keys_in_pool,
                 f"The \"clockwerk_hunt\" Pick and Mix condition requires {opt.required_keys_goal} keys but only {opt.keys_in_pool} keys in pool.",
-                "Increasing number of keys in pool."
+                "Lowering the requirement."
             ):
-                opt.keys_in_pool.value = opt.required_keys_goal.value
+                opt.required_keys_goal.value = opt.keys_in_pool.value
 
         if self._coerce_or_raise(
             opt,
             opt.episode_8_keys.value != 4 and opt.required_keys_episode_8 > opt.keys_in_pool,
             f"Episode 8 requires {opt.required_keys_episode_8} keys but only {opt.keys_in_pool} keys in pool.",
-            "Increasing number of keys in pool."
+            "Lowering the requirement.",
+            warn_only="Proceeding as written; Episode 8 cannot be unlocked."
         ):
-            opt.keys_in_pool.value = opt.required_keys_episode_8.value
+            opt.required_keys_episode_8.value = opt.keys_in_pool.value
 
         if self._coerce_or_raise(
             opt,
             opt.goal == 6 and opt.required_keys_goal > opt.keys_in_pool,
             f"Clockwerk Hunt goal requires {opt.required_keys_goal} keys but only {opt.keys_in_pool} keys in pool.",
-            "Increasing number of keys in pool."
+            "Lowering the requirement."
         ):
-            opt.keys_in_pool.value = opt.required_keys_goal.value
+            opt.required_keys_goal.value = opt.keys_in_pool.value
 
         if self._coerce_or_raise(
             opt,
@@ -304,18 +312,36 @@ class Sly2World(World):
                 f"More items than locations ({n_items} items; {n_locations} locations)\n"+
                 "Adjusting Clockwerk part amounts."
             )
-            overflow = n_items - n_locations
-            if (opt.keys_in_pool.value - overflow < 1) or not using_parts:
-                logging.warning(
-                    f"{self.player_name}: " +
-                    "Too many items, even when reducing Clockwerk part amounts."
+            if using_parts:
+                overflow = n_items - n_locations
+                # A pool with no filler is nearly all progression, which fill'
+                # swap phase handles badly.
+                cut = min(
+                    opt.keys_in_pool.value - 1,
+                    overflow + max(10, n_locations//25)
                 )
-                n_items = n_items - opt.keys_in_pool.value + 1
+                opt.keys_in_pool.value -= cut
+                n_items -= cut
+
+            if n_items > n_locations and opt.bottle_item_bundle_size.value != 0:
+                bottles = ceil(30/opt.bottle_item_bundle_size.value)*8
+                for bundle in list(range(opt.bottle_item_bundle_size.value + 1, 31)) + [0]:
+                    new_bottles = ceil(30/bundle)*8 if bundle else 0
+                    if n_items - bottles + new_bottles <= n_locations:
+                        logging.warning(
+                            f"{self.player_name}: " +
+                            "Still more items than locations. Setting " +
+                            f"bottle_item_bundle_size to {bundle}."
+                        )
+                        opt.bottle_item_bundle_size.value = bundle
+                        n_items += new_bottles - bottles
+                        break
+
+            if n_items > n_locations:
                 raise OptionError(
-                    "There are more items than locations"+
+                    "There are more items than locations "+
                     f"({n_items} items; {n_locations} locations)"
                 )
-            opt.keys_in_pool.value = opt.keys_in_pool.value - overflow
             opt.required_keys_episode_8.value = min(
                 opt.required_keys_episode_8.value,
                 opt.keys_in_pool.value
@@ -324,6 +350,69 @@ class Sly2World(World):
                 opt.required_keys_goal.value,
                 opt.keys_in_pool.value
             )
+
+        # The Clockwerk parts that gate Anatomy for Disaster can only come
+        # from locations collectable before the sections they unlock
+        if opt.episode_8_keys.value != 4:
+            def ep8_chapter_locations(n: int) -> int:
+                jobs = EPISODES["Anatomy for Disaster"][n-1]
+                count = len(jobs)
+                if opt.tasksanity:
+                    tasks = TASKS.get("Anatomy for Disaster", {})
+                    count += sum(len(tasks.get(job, [])) for job in jobs)
+                count += sum(
+                    1 for _, chapter in TREASURES["Anatomy for Disaster"]
+                    if chapter == n
+                )
+                if n == 1 and opt.bottle_location_bundle_size != 0:
+                    count += ceil(30/opt.bottle_location_bundle_size.value)
+                if n == 2 and opt.include_vaults:
+                    count += 1
+                if opt.include_pickpocketing:
+                    count += sum(
+                        1 for locations in LOOT.values()
+                        for i, _, j in locations
+                        if i == 8 and ceil(j/2) == n
+                    )
+                return count
+
+            chapters = [ep8_chapter_locations(n) for n in range(1, 5)]
+
+            episode_items = (len(EPISODES)-1)*4 - 1  # Jailbreak has 3 chapters
+            if opt.starting_episode.value != 7:
+                episode_items -= 1
+            gadgets = sum(
+                1 for item in item_dict.values()
+                if item.category == "Power-Up" and
+                item.classification == ItemClassification.progression
+            )
+            capacity = n_locations - sum(chapters) - episode_items - gadgets
+            if opt.include_vaults and opt.bottle_item_bundle_size.value != 0:
+                capacity -= ceil(30/opt.bottle_item_bundle_size.value)*7
+
+            capacity -= max(10, n_locations//20)
+
+            if opt.episode_8_keys.value == 1:
+                cap = capacity + sum(chapters[:3])
+            elif opt.episode_8_keys.value == 3:
+                cap = opt.required_keys_episode_8.value
+                for n in range(1, 5):
+                    cap = min(cap, capacity*4//n)
+                    capacity += chapters[n-1]
+            else:
+                cap = capacity
+
+            if self._coerce_or_raise(
+                opt,
+                opt.required_keys_episode_8.value > cap,
+                f"Episode 8 requires {opt.required_keys_episode_8.value} "
+                f"Clockwerk parts, but at most {max(cap, 0)} can be collected "
+                "before the sections they unlock.",
+                "Lowering the requirement.",
+                warn_only="Proceeding as written; Episode 8 may be impossible "
+                "to unlock."
+            ):
+                opt.required_keys_episode_8.value = max(cap, 1)
 
     def randomize_loot_table(self) -> dict[str, list[tuple[int,bool,int]]]:
         all_locations = [loc for locations in LOOT.values() for loc in locations]

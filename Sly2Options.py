@@ -122,10 +122,11 @@ class Episode8Keys(Choice):
 
 class KeysInPool(Range):
     """
-    How many Clockwerk parts are added to the pool. This number cannot be
-    lower than the required number of keys, for either Clockwerk Hunt or
-    Episode 8 unlock. No Clockwerk parts will be added  if Episode 8 Keys
-    and Clockwerk Hunt are both off.
+    How many Clockwerk parts are added to the pool. If this is lower than the
+    required number of keys (for either Clockwerk Hunt or Episode 8 unlock),
+    the generator warns and keeps your values as written, which can make the
+    goal or Episode 8 impossible, or, with permissive_yaml on, lowers the
+    requirement to match.
 
     Setting this to values close to 500 requires that you set tasksanity to
     true, bottle_location_bundle_size to 1, and bottle_item_bundle_size to at
