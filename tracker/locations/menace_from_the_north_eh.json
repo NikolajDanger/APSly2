@@ -5,7 +5,15 @@
       {
         "name": "Recon the Sawmill",
         "sections": [
-          {"name": "Menace from the North, Eh! - Recon the Sawmill"}
+          {"name": "Menace from the North, Eh! - Recon the Sawmill"},
+          {"name": "Menace from the North, Eh! - Recon the Sawmill - Picture (Jean Bison's House)"},
+          {"name": "Menace from the North, Eh! - Recon the Sawmill - Picture (Boat)"},
+          {"name": "Menace from the North, Eh! - Recon the Sawmill - Picture (Bear)"},
+          {"name": "Menace from the North, Eh! - Recon the Sawmill - Picture (Sawmill Blades)"},
+          {"name": "Menace from the North, Eh! - Recon the Sawmill - Picture (Battery Charger)"},
+          {"name": "Menace from the North, Eh! - Recon the Sawmill - Picture (Front Door)"},
+          {"name": "Menace from the North, Eh! - Recon the Sawmill - Picture (Spinner)"},
+          {"name": "Menace from the North, Eh! - Recon the Sawmill - Picture (Jean Bison)"}
         ],
         "map_locations": [{
           "map": "Menace from the North, eh!",
@@ -16,7 +24,19 @@
       {
         "name": "Bearcave Bugging",
         "sections": [
-          {"name": "Menace from the North, Eh! - Bearcave Bugging"}
+          {"name": "Menace from the North, Eh! - Bearcave Bugging"},
+          {"name": "Menace from the North, Eh! - Bearcave Bugging - Collect Transmitter 1"},
+          {"name": "Menace from the North, Eh! - Bearcave Bugging - Collect Transmitter 2"},
+          {"name": "Menace from the North, Eh! - Bearcave Bugging - Collect Transmitter 3"},
+          {"name": "Menace from the North, Eh! - Bearcave Bugging - Collect Transmitter 4"},
+          {"name": "Menace from the North, Eh! - Bearcave Bugging - Collect Transmitter 5"},
+          {"name": "Menace from the North, Eh! - Bearcave Bugging - Collect Transmitter 6"},
+          {"name": "Menace from the North, Eh! - Bearcave Bugging - Place Transmitter 1"},
+          {"name": "Menace from the North, Eh! - Bearcave Bugging - Place Transmitter 2"},
+          {"name": "Menace from the North, Eh! - Bearcave Bugging - Place Transmitter 3"},
+          {"name": "Menace from the North, Eh! - Bearcave Bugging - Place Transmitter 4"},
+          {"name": "Menace from the North, Eh! - Bearcave Bugging - Place Transmitter 5"},
+          {"name": "Menace from the North, Eh! - Bearcave Bugging - Place Transmitter 6"}
         ],
         "map_locations": [{
           "map": "Menace from the North, eh!",
@@ -27,7 +47,8 @@
       {
         "name": "RC Combat Club",
         "sections": [
-          {"name": "Menace from the North, Eh! - RC Combat Club"}
+          {"name": "Menace from the North, Eh! - RC Combat Club"},
+          {"name": "Menace from the North, Eh! - RC Combat Club - Collect Moose Head"}
         ],
         "map_locations": [{
           "map": "Menace from the North, eh!",
@@ -39,6 +60,15 @@
         "name": "Laser Redirection",
         "sections": [
           {"name": "Menace from the North, Eh! - Laser Redirection"},
+          {"name": "Menace from the North, Eh! - Laser Redirection - Activate Laser"},
+          {"name": "Menace from the North, Eh! - Laser Redirection - Redirect 1"},
+          {"name": "Menace from the North, Eh! - Laser Redirection - Redirect 2"},
+          {"name": "Menace from the North, Eh! - Laser Redirection - Redirect 3"},
+          {"name": "Menace from the North, Eh! - Laser Redirection - Redirect 4"},
+          {"name": "Menace from the North, Eh! - Laser Redirection - Redirect 5"},
+          {"name": "Menace from the North, Eh! - Laser Redirection - Redirect 6"},
+          {"name": "Menace from the North, Eh! - Laser Redirection - Redirect 7"},
+          {"name": "Menace from the North, Eh! - Laser Redirection - Redirect 8"},
           {
             "name": "Menace from the North, Eh! - Vault",
             "visibility_rules": ["include_vaultson"]
@@ -53,7 +83,9 @@
       {
         "name": "Lighthouse Break-In",
         "sections": [
-          {"name": "Menace from the North, Eh! - Lighthouse Break-In"}
+          {"name": "Menace from the North, Eh! - Lighthouse Break-In"},
+          {"name": "Menace from the North, Eh! - Lighthouse Break-In - Enter Lighthouse"},
+          {"name": "Menace from the North, Eh! - Lighthouse Break-In - Open Door"}
         ],
         "map_locations": [{
           "map": "Menace from the North, eh!",
@@ -64,7 +96,11 @@
       {
         "name": "Old Grizzle Face",
         "sections": [
-          {"name": "Menace from the North, Eh! - Old Grizzle Face"}
+          {"name": "Menace from the North, Eh! - Old Grizzle Face"},
+          {"name": "Menace from the North, Eh! - Old Grizzle Face - Destroy Oil Main 1"},
+          {"name": "Menace from the North, Eh! - Old Grizzle Face - Destroy Oil Main 2"},
+          {"name": "Menace from the North, Eh! - Old Grizzle Face - Destroy Oil Main 3"},
+          {"name": "Menace from the North, Eh! - Old Grizzle Face - Destroy Oil Main 4"}
         ],
         "map_locations": [{
           "map": "Menace from the North, eh!",
@@ -75,7 +111,10 @@
       {
         "name": "Boat Hack",
         "sections": [
-          {"name": "Menace from the North, Eh! - Boat Hack"}
+          {"name": "Menace from the North, Eh! - Boat Hack"},
+          {"name": "Menace from the North, Eh! - Boat Hack - Boat Terminal 1"},
+          {"name": "Menace from the North, Eh! - Boat Hack - Boat Terminal 2"},
+          {"name": "Menace from the North, Eh! - Boat Hack - Boat Terminal 3"}
         ],
         "map_locations": [{
           "map": "Menace from the North, eh!",
@@ -86,7 +125,8 @@
       {
         "name": "Thermal Ride",
         "sections": [
-          {"name": "Menace from the North, Eh! - Thermal Ride"}
+          {"name": "Menace from the North, Eh! - Thermal Ride"},
+          {"name": "Menace from the North, Eh! - Thermal Ride - Collect Egg"}
         ],
         "map_locations": [{
           "map": "Menace from the North, eh!",
@@ -97,7 +137,13 @@
       {
         "name": "Operation: Canada Games",
         "sections": [
-          {"name": "Menace from the North, Eh! - Operation: Canada Games"}
+          {"name": "Menace from the North, Eh! - Operation: Canada Games"},
+          {"name": "Menace from the North, Eh! - Operation: Canada Games - Log Chopping"},
+          {"name": "Menace from the North, Eh! - Operation: Canada Games - Sabotage Log Chopping"},
+          {"name": "Menace from the North, Eh! - Operation: Canada Games - Wall Climbing"},
+          {"name": "Menace from the North, Eh! - Operation: Canada Games - Sabotage Wall Climbing"},
+          {"name": "Menace from the North, Eh! - Operation: Canada Games - Spinning Logs"},
+          {"name": "Menace from the North, Eh! - Operation: Canada Games - Sabotage Spinning Logs"}
         ],
         "map_locations": [{
           "map": "Menace from the North, eh!",

@@ -5,7 +5,16 @@
       {
         "name": "Know Your Enemy",
         "sections": [
-          {"name": "A Tangled Web - Know Your Enemy"}
+          {"name": "A Tangled Web - Know Your Enemy"},
+          {"name": "A Tangled Web - Know Your Enemy - Picture (Neyla's HQ)"},
+          {"name": "A Tangled Web - Know Your Enemy - Picture (Tank)"},
+          {"name": "A Tangled Web - Know Your Enemy - Picture (Blimp)"},
+          {"name": "A Tangled Web - Know Your Enemy - Picture (Boat)"},
+          {"name": "A Tangled Web - Know Your Enemy - Picture (Shadow Guard)"},
+          {"name": "A Tangled Web - Know Your Enemy - Picture (Carmelita)"},
+          {"name": "A Tangled Web - Know Your Enemy - Picture (Clockwerk's Eyes)"},
+          {"name": "A Tangled Web - Know Your Enemy - Picture (Mind Shuffler)"},
+          {"name": "A Tangled Web - Know Your Enemy - Picture (Old Terminal)"}
         ],
         "map_locations": [{
           "map":  "A Tangled Web",
@@ -16,7 +25,17 @@
       {
         "name": "Ghost Capture",
         "sections": [
-          {"name": "A Tangled Web - Ghost Capture"}
+          {"name": "A Tangled Web - Ghost Capture"},
+          {"name": "A Tangled Web - Ghost Capture - Free the Ghosts"},
+          {"name": "A Tangled Web - Ghost Capture - Trap Ghost 1"},
+          {"name": "A Tangled Web - Ghost Capture - Trap Ghost 2"},
+          {"name": "A Tangled Web - Ghost Capture - Trap Ghost 3"},
+          {"name": "A Tangled Web - Ghost Capture - Trap Ghost 4"},
+          {"name": "A Tangled Web - Ghost Capture - Trap Ghost 5"},
+          {"name": "A Tangled Web - Ghost Capture - Trap Ghost 6"},
+          {"name": "A Tangled Web - Ghost Capture - Trap Ghost 7"},
+          {"name": "A Tangled Web - Ghost Capture - Trap Ghost 8"},
+          {"name": "A Tangled Web - Ghost Capture - Trap Ghost 9"}
         ],
         "map_locations": [{
           "map":  "A Tangled Web",
@@ -27,7 +46,11 @@
       {
         "name": "Mojo Trap Action",
         "sections": [
-          {"name": "A Tangled Web - Mojo Trap Action"}
+          {"name": "A Tangled Web - Mojo Trap Action"},
+          {"name": "A Tangled Web - Mojo Trap Action - Crypt 1"},
+          {"name": "A Tangled Web - Mojo Trap Action - Crypt 2"},
+          {"name": "A Tangled Web - Mojo Trap Action - Crypt 3"},
+          {"name": "A Tangled Web - Mojo Trap Action - Crypt 4"}
         ],
         "map_locations": [{
           "map":  "A Tangled Web",
@@ -49,7 +72,15 @@
       {
         "name": "Stealing Voices",
         "sections": [
-          {"name": "A Tangled Web - Stealing Voices"}
+          {"name": "A Tangled Web - Stealing Voices"},
+          {"name": "A Tangled Web - Stealing Voices - Guard Tower Key 1"},
+          {"name": "A Tangled Web - Stealing Voices - Guard Tower Key 2"},
+          {"name": "A Tangled Web - Stealing Voices - Collect Wire Tap"},
+          {"name": "A Tangled Web - Stealing Voices - Castle Front Door Key 1"},
+          {"name": "A Tangled Web - Stealing Voices - Castle Front Door Key 2"},
+          {"name": "A Tangled Web - Stealing Voices - Collect Voice Modulator"},
+          {"name": "A Tangled Web - Stealing Voices - Sewer Entrance Key 1"},
+          {"name": "A Tangled Web - Stealing Voices - Sewer Entrance Key 2"}
         ],
         "map_locations": [{
           "map":  "A Tangled Web",
@@ -60,7 +91,13 @@
       {
         "name": "Tank Showdown",
         "sections": [
-          {"name": "A Tangled Web - Tank Showdown"}
+          {"name": "A Tangled Web - Tank Showdown"},
+          {"name": "A Tangled Web - Tank Showdown - Tank 1"},
+          {"name": "A Tangled Web - Tank Showdown - Tank 2"},
+          {"name": "A Tangled Web - Tank Showdown - Tank 3"},
+          {"name": "A Tangled Web - Tank Showdown - Tank 4"},
+          {"name": "A Tangled Web - Tank Showdown - Tank 5"},
+          {"name": "A Tangled Web - Tank Showdown - Tank 6"}
         ],
         "map_locations": [{
           "map":  "A Tangled Web",
@@ -71,7 +108,10 @@
       {
         "name": "Crypt Hack",
         "sections": [
-          {"name": "A Tangled Web - Crypt Hack"}
+          {"name": "A Tangled Web - Crypt Hack"},
+          {"name": "A Tangled Web - Crypt Hack - Terminal 1"},
+          {"name": "A Tangled Web - Crypt Hack - Terminal 2"},
+          {"name": "A Tangled Web - Crypt Hack - Terminal 3"}
         ],
         "map_locations": [{
           "map":  "A Tangled Web",
@@ -82,7 +122,12 @@
       {
         "name": "Operation: High Road",
         "sections": [
-          {"name": "A Tangled Web - Operation: High Road"}
+          {"name": "A Tangled Web - Operation: High Road"},
+          {"name": "A Tangled Web - Operation: High Road - Old Terminal"},
+          {"name": "A Tangled Web - Operation: High Road - Catch Neyla"},
+          {"name": "A Tangled Web - Operation: High Road - Shoot Down Planes"},
+          {"name": "A Tangled Web - Operation: High Road - Defeat The Contessa 1"},
+          {"name": "A Tangled Web - Operation: High Road - Stop Carmelita"}
         ],
         "map_locations": [{
           "map":  "A Tangled Web",

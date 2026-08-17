@@ -5,7 +5,16 @@
       {
         "name": "Recon the Ballroom",
         "sections": [
-          {"name": "A Starry Eyed Encounter - Recon the Ballroom"}
+          {"name": "A Starry Eyed Encounter - Recon the Ballroom"},
+          {"name": "A Starry Eyed Encounter - Recon the Ballroom - Picture (Winch)"},
+          {"name": "A Starry Eyed Encounter - Recon the Ballroom - Picture (Wing 1)"},
+          {"name": "A Starry Eyed Encounter - Recon the Ballroom - Picture (Wing 2)"},
+          {"name": "A Starry Eyed Encounter - Recon the Ballroom - Picture (Rajan)"},
+          {"name": "A Starry Eyed Encounter - Recon the Ballroom - Picture (Jean Bison)"},
+          {"name": "A Starry Eyed Encounter - Recon the Ballroom - Picture (Contessa)"},
+          {"name": "A Starry Eyed Encounter - Recon the Ballroom - Picture (Neyla)"},
+          {"name": "A Starry Eyed Encounter - Recon the Ballroom - Picture (Carmelita)"},
+          {"name": "A Starry Eyed Encounter - Recon the Ballroom - Picture (Arpeggio)"}
         ],
         "map_locations": [{
           "map":  "A Starry Eyed Encounter",
@@ -16,7 +25,12 @@
       {
         "name": "Lower the Drawbridge",
         "sections": [
-          {"name": "A Starry Eyed Encounter - Lower the Drawbridge"}
+          {"name": "A Starry Eyed Encounter - Lower the Drawbridge"},
+          {"name": "A Starry Eyed Encounter - Lower the Drawbridge - Winch Key 1"},
+          {"name": "A Starry Eyed Encounter - Lower the Drawbridge - Winch Key 2"},
+          {"name": "A Starry Eyed Encounter - Lower the Drawbridge - Winch Key 3"},
+          {"name": "A Starry Eyed Encounter - Lower the Drawbridge - Winch Key 4"},
+          {"name": "A Starry Eyed Encounter - Lower the Drawbridge - Winch Key 5"}
         ],
         "map_locations": [{
           "map":  "A Starry Eyed Encounter",
@@ -27,7 +41,12 @@
       {
         "name": "Steal a Tuxedo",
         "sections": [
-          {"name": "A Starry Eyed Encounter - Steal a Tuxedo"}
+          {"name": "A Starry Eyed Encounter - Steal a Tuxedo"},
+          {"name": "A Starry Eyed Encounter - Steal a Tuxedo - Jacket"},
+          {"name": "A Starry Eyed Encounter - Steal a Tuxedo - Bow Tie"},
+          {"name": "A Starry Eyed Encounter - Steal a Tuxedo - Shoes"},
+          {"name": "A Starry Eyed Encounter - Steal a Tuxedo - Gloves"},
+          {"name": "A Starry Eyed Encounter - Steal a Tuxedo - Shirt"}
         ],
         "map_locations": [{
           "map":  "A Starry Eyed Encounter",
@@ -64,6 +83,7 @@
         ],
         "sections": [
           {"name": "A Starry Eyed Encounter - Boardroom Brawl"},
+          {"name": "A Starry Eyed Encounter - Boardroom Brawl - Gain Entry"},
           {
             "name": "A Starry Eyed Encounter - Vault",
             "visibility_rules": "include_vaultson"
@@ -89,7 +109,13 @@
       {
         "name": "Elephant Rampage",
         "sections": [
-          {"name": "A Starry Eyed Encounter - Elephant Rampage"}
+          {"name": "A Starry Eyed Encounter - Elephant Rampage"},
+          {"name": "A Starry Eyed Encounter - Elephant Rampage - Gem 1"},
+          {"name": "A Starry Eyed Encounter - Elephant Rampage - Gem 2"},
+          {"name": "A Starry Eyed Encounter - Elephant Rampage - Gem 3"},
+          {"name": "A Starry Eyed Encounter - Elephant Rampage - Gem 4"},
+          {"name": "A Starry Eyed Encounter - Elephant Rampage - Gem 5"},
+          {"name": "A Starry Eyed Encounter - Elephant Rampage - Gem 6"}
         ],
         "map_locations": [{
           "map":  "A Starry Eyed Encounter",
@@ -100,7 +126,25 @@
       {
         "name": "Operation: Hippo Drop",
         "sections": [
-          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop"}
+          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop"},
+          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop - Bridge Support 1"},
+          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop - Bridge Support 2"},
+          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop - Bridge Support 3"},
+          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop - Bridge Support 4"},
+          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop - Bridge Support 5"},
+          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop - Bridge Support 6"},
+          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop - Bridge Support 7"},
+          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop - Bridge Support 8"},
+          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop - Bridge Support 9"},
+          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop - Bridge Support 10"},
+          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop - Bridge Support 11"},
+          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop - Bridge Support 12"},
+          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop - Bridge Support 13"},
+          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop - Bridge Support 14"},
+          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop - Bridge Support 15"},
+          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop - Bridge Support 16"},
+          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop - Bridge Support 17"},
+          {"name": "A Starry Eyed Encounter - Operation: Hippo Drop - Dance"}
         ],
         "map_locations": [{
           "map":  "A Starry Eyed Encounter",

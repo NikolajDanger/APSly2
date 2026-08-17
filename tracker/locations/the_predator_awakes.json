@@ -5,7 +5,11 @@
       {
         "name": "Spice Room Recon",
         "sections": [
-          {"name": "The Predator Awakens - Spice Room Recon"}
+          {"name": "The Predator Awakens - Spice Room Recon"},
+          {"name": "The Predator Awakens - Spice Room Recon - Picture (Clockwerk's Heart)"},
+          {"name": "The Predator Awakens - Spice Room Recon - Picture (Crane Controls)"},
+          {"name": "The Predator Awakens - Spice Room Recon - Picture (Entrance)"},
+          {"name": "The Predator Awakens - Spice Room Recon - Picture (Rajan)"}
         ],
         "map_locations": [{
           "map": "The Predator Awakes",
@@ -27,7 +31,13 @@
       {
         "name": "Freeing the Elephants",
         "sections": [
-          {"name": "The Predator Awakens - Freeing the Elephants"}
+          {"name": "The Predator Awakens - Freeing the Elephants"},
+          {"name": "The Predator Awakens - Freeing the Elephants - Spice Plant 1"},
+          {"name": "The Predator Awakens - Freeing the Elephants - Spice Plant 2"},
+          {"name": "The Predator Awakens - Freeing the Elephants - Spice Plant 3"},
+          {"name": "The Predator Awakens - Freeing the Elephants - Spice Plant 4"},
+          {"name": "The Predator Awakens - Freeing the Elephants - Spice Plant 5"},
+          {"name": "The Predator Awakens - Freeing the Elephants - Spice Plant 6"}
         ],
         "map_locations": [{
           "map": "The Predator Awakes",
@@ -38,7 +48,10 @@
       {
         "name": "Leading Rajan",
         "sections": [
-          {"name": "The Predator Awakens - Leading Rajan"}
+          {"name": "The Predator Awakens - Leading Rajan"},
+          {"name": "The Predator Awakens - Leading Rajan - Blueprint 2"},
+          {"name": "The Predator Awakens - Leading Rajan - Blueprint 3"},
+          {"name": "The Predator Awakens - Leading Rajan - Blueprint 1"}
         ],
         "map_locations": [{
           "map": "The Predator Awakes",
@@ -49,7 +62,10 @@
       {
         "name": "Neyla's Secret",
         "sections": [
-          {"name": "The Predator Awakens - Neyla's Secret"}
+          {"name": "The Predator Awakens - Neyla's Secret"},
+          {"name": "The Predator Awakens - Neyla's Secret - Enter Spice Room"},
+          {"name": "The Predator Awakens - Neyla's Secret - Crane Key 1"},
+          {"name": "The Predator Awakens - Neyla's Secret - Crane Key 2"}
         ],
         "map_locations": [{
           "map": "The Predator Awakes",
@@ -60,7 +76,11 @@
       {
         "name": "Spice Grinder Destruction",
         "sections": [
-          {"name": "The Predator Awakens - Spice Grinder Destruction"}
+          {"name": "The Predator Awakens - Spice Grinder Destruction"},
+          {"name": "The Predator Awakens - Spice Grinder Destruction - Blow Up Door 4"},
+          {"name": "The Predator Awakens - Spice Grinder Destruction - Blow Up Door 2"},
+          {"name": "The Predator Awakens - Spice Grinder Destruction - Blow Up Door 3"},
+          {"name": "The Predator Awakens - Spice Grinder Destruction - Blow Up Door 1"}
         ],
         "map_locations": [{
           "map": "The Predator Awakes",
@@ -82,7 +102,8 @@
       {
         "name": "Rip-Off the Ruby",
         "sections": [
-          {"name": "The Predator Awakens - Rip-Off the Ruby"}
+          {"name": "The Predator Awakens - Rip-Off the Ruby"},
+          {"name": "The Predator Awakens - Rip-Off the Ruby - Checkpoint"}
         ],
         "map_locations": [{
           "map": "The Predator Awakes",
@@ -93,7 +114,9 @@
       {
         "name": "Operation: Wet Tiger",
         "sections": [
-          {"name": "The Predator Awakens - Operation: Wet Tiger"}
+          {"name": "The Predator Awakens - Operation: Wet Tiger"},
+          {"name": "The Predator Awakens - Operation: Wet Tiger - Protect Murray"},
+          {"name": "The Predator Awakens - Operation: Wet Tiger - Flood the Palace"}
         ],
         "map_locations": [{
           "map": "The Predator Awakes",

@@ -5,7 +5,13 @@
       {
         "name": "Cabin Crimes",
         "sections": [
-          {"name": "He Who Tames the Iron Horse - Cabin Crimes"}
+          {"name": "He Who Tames the Iron Horse - Cabin Crimes"},
+          {"name": "He Who Tames the Iron Horse - Cabin Crimes - Picture (Iron Horse 3)"},
+          {"name": "He Who Tames the Iron Horse - Cabin Crimes - Picture (Iron Horse 2)"},
+          {"name": "He Who Tames the Iron Horse - Cabin Crimes - Picture (Iron Horse 1)"},
+          {"name": "He Who Tames the Iron Horse - Cabin Crimes - Iron Horse Blueprints 1"},
+          {"name": "He Who Tames the Iron Horse - Cabin Crimes - Iron Horse Blueprints 2"},
+          {"name": "He Who Tames the Iron Horse - Cabin Crimes - Iron Horse Blueprints 3"}
         ],
         "map_locations": [{
           "map": "He Who Tames the Iron Horse",
@@ -16,7 +22,10 @@
       {
         "name": "Spice in the Sky",
         "sections": [
-          {"name": "He Who Tames the Iron Horse - Spice in the Sky"}
+          {"name": "He Who Tames the Iron Horse - Spice in the Sky"},
+          {"name": "He Who Tames the Iron Horse - Spice in the Sky - Open Up Iron Horse 1"},
+          {"name": "He Who Tames the Iron Horse - Spice in the Sky - Open Up Iron Horse 2"},
+          {"name": "He Who Tames the Iron Horse - Spice in the Sky - Open Up Iron Horse 3"}
         ],
         "map_locations": [{
           "map": "He Who Tames the Iron Horse",
@@ -27,7 +36,11 @@
       {
         "name": "A Friend in Need",
         "sections": [
-          {"name": "He Who Tames the Iron Horse - A Friend in Need"}
+          {"name": "He Who Tames the Iron Horse - A Friend in Need"},
+          {"name": "He Who Tames the Iron Horse - A Friend in Need - Follow Carmelita"},
+          {"name": "He Who Tames the Iron Horse - A Friend in Need - Key 1"},
+          {"name": "He Who Tames the Iron Horse - A Friend in Need - Key 2"},
+          {"name": "He Who Tames the Iron Horse - A Friend in Need - Key 3"}
         ],
         "map_locations": [{
           "map": "He Who Tames the Iron Horse",
@@ -60,7 +73,9 @@
       {
         "name": "Bear Cub Kidnapping",
         "sections": [
-          {"name": "He Who Tames the Iron Horse - Bear Cub Kidnapping"}
+          {"name": "He Who Tames the Iron Horse - Bear Cub Kidnapping"},
+          {"name": "He Who Tames the Iron Horse - Bear Cub Kidnapping - Bear Cub 1"},
+          {"name": "He Who Tames the Iron Horse - Bear Cub Kidnapping - Bear Cub 2"}
         ],
         "map_locations": [{
           "map": "He Who Tames the Iron Horse",
@@ -82,7 +97,9 @@
       {
         "name": "Operation: Choo-Choo",
         "sections": [
-          {"name": "He Who Tames the Iron Horse - Operation: Choo-Choo"}
+          {"name": "He Who Tames the Iron Horse - Operation: Choo-Choo"},
+          {"name": "He Who Tames the Iron Horse - Operation: Choo-Choo - Defeat Neyla 1"},
+          {"name": "He Who Tames the Iron Horse - Operation: Choo-Choo - Defeat Neyla 2"}
         ],
         "map_locations": [{
           "map": "He Who Tames the Iron Horse",

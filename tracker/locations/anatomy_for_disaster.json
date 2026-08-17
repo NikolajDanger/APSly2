@@ -4,7 +4,22 @@
     "children": [
         {
         "name": "Blimp HQ Recon",
-        "sections": [{"name": "Anatomy for Disaster - Blimp HQ Recon"}],
+        "sections": [
+          {"name": "Anatomy for Disaster - Blimp HQ Recon"},
+          {"name": "Anatomy for Disaster - Blimp HQ Recon - Picture (Eggs)"},
+          {"name": "Anatomy for Disaster - Blimp HQ Recon - Picture (Clockwerk)"},
+          {"name": "Anatomy for Disaster - Blimp HQ Recon - Picture (Electro-platform)"},
+          {"name": "Anatomy for Disaster - Blimp HQ Recon - Picture (Neyla)"},
+          {"name": "Anatomy for Disaster - Blimp HQ Recon - Picture (Arpeggio)"},
+          {"name": "Anatomy for Disaster - Blimp HQ Recon - Key 1"},
+          {"name": "Anatomy for Disaster - Blimp HQ Recon - Key 2"},
+          {"name": "Anatomy for Disaster - Blimp HQ Recon - Key 3"},
+          {"name": "Anatomy for Disaster - Blimp HQ Recon - Key 4"},
+          {"name": "Anatomy for Disaster - Blimp HQ Recon - Reverse Magnet 1"},
+          {"name": "Anatomy for Disaster - Blimp HQ Recon - Reverse Magnet 2"},
+          {"name": "Anatomy for Disaster - Blimp HQ Recon - Reverse Magnet 3"},
+          {"name": "Anatomy for Disaster - Blimp HQ Recon - Reverse Magnet 4"}
+        ],
         "map_locations": [{
           "map": "Anatomy for Disaster",
           "x": 315,
@@ -13,7 +28,12 @@
       },
         {
         "name": "Charged TNT Run",
-        "sections": [{"name": "Anatomy for Disaster - Charged TNT Run"}],
+        "sections": [
+          {"name": "Anatomy for Disaster - Charged TNT Run"},
+          {"name": "Anatomy for Disaster - Charged TNT Run - Collect Booster 1"},
+          {"name": "Anatomy for Disaster - Charged TNT Run - Collect Booster 2"},
+          {"name": "Anatomy for Disaster - Charged TNT Run - Collect Booster 3"}
+        ],
         "map_locations": [{
           "map": "Anatomy for Disaster",
           "x": 469,
@@ -22,7 +42,15 @@
       },
         {
         "name": "Murray/Sly Tag Team",
-        "sections": [{"name": "Anatomy for Disaster - Murray/Sly Tag Team"}],
+        "sections": [
+          {"name": "Anatomy for Disaster - Murray/Sly Tag Team"},
+          {"name": "Anatomy for Disaster - Murray/Sly Tag Team - Power Station 1"},
+          {"name": "Anatomy for Disaster - Murray/Sly Tag Team - Power Station 2"},
+          {"name": "Anatomy for Disaster - Murray/Sly Tag Team - Power Station 3"},
+          {"name": "Anatomy for Disaster - Murray/Sly Tag Team - Power Station 4"},
+          {"name": "Anatomy for Disaster - Murray/Sly Tag Team - Power Station 5"},
+          {"name": "Anatomy for Disaster - Murray/Sly Tag Team - Open Door"}
+        ],
         "map_locations": [{
           "map": "Anatomy for Disaster",
           "x": 1035,
@@ -31,7 +59,15 @@
       },
         {
         "name": "Sly/Bentley Conspire",
-        "sections": [{"name": "Anatomy for Disaster - Sly/Bentley Conspire"}],
+        "sections": [
+          {"name": "Anatomy for Disaster - Sly/Bentley Conspire"},
+          {"name": "Anatomy for Disaster - Sly/Bentley Conspire - Key 1"},
+          {"name": "Anatomy for Disaster - Sly/Bentley Conspire - Key 2"},
+          {"name": "Anatomy for Disaster - Sly/Bentley Conspire - Key 3"},
+          {"name": "Anatomy for Disaster - Sly/Bentley Conspire - Key 4"},
+          {"name": "Anatomy for Disaster - Sly/Bentley Conspire - Key 5"},
+          {"name": "Anatomy for Disaster - Sly/Bentley Conspire - Open Door"}
+        ],
         "map_locations": [{
           "map": "Anatomy for Disaster",
           "x": 966,
@@ -40,7 +76,13 @@
       },
         {
         "name": "Bentley/Murray Team Up",
-        "sections": [{"name": "Anatomy for Disaster - Bentley/Murray Team Up"}],
+        "sections": [
+          {"name": "Anatomy for Disaster - Bentley/Murray Team Up"},
+          {"name": "Anatomy for Disaster - Bentley/Murray Team Up - Terminal 1"},
+          {"name": "Anatomy for Disaster - Bentley/Murray Team Up - Terminal 2"},
+          {"name": "Anatomy for Disaster - Bentley/Murray Team Up - Terminal 3"},
+          {"name": "Anatomy for Disaster - Bentley/Murray Team Up - Open Door"}
+        ],
         "map_locations": [{
           "map": "Anatomy for Disaster",
           "x": 1032,
@@ -51,7 +93,13 @@
         "name": "Mega-Jump Job + Carmelita's Gunner",
         "sections": [
           {"name": "Anatomy for Disaster - Mega-Jump Job"},
-          {"name": "Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la"}
+          {"name": "Anatomy for Disaster - Mega-Jump Job - Radio transmitter 1"},
+          {"name": "Anatomy for Disaster - Mega-Jump Job - Radio transmitter 2"},
+          {"name": "Anatomy for Disaster - Mega-Jump Job - Radio transmitter 3"},
+          {"name": "Anatomy for Disaster - Mega-Jump Job - Radio transmitter 4"},
+          {"name": "Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la"},
+          {"name": "Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la - Shoot Down Clock-La"},
+          {"name": "Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la - Crash Clock-La"}
         ],
         "map_locations": [{
           "map": "Anatomy for Disaster",

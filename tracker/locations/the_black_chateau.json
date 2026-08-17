@@ -5,7 +5,10 @@
       {
         "name": "Satellite Sabotage",
         "sections": [
-          {"name": "The Black Chateau - Satellite Sabotage"}
+          {"name": "The Black Chateau - Satellite Sabotage"},
+          {"name": "The Black Chateau - Satellite Sabotage - Satellite Dish 1"},
+          {"name": "The Black Chateau - Satellite Sabotage - Satellite Dish 2"},
+          {"name": "The Black Chateau - Satellite Sabotage - Satellite Dish 3"}
         ],
         "map_locations": [{
           "map": "The Black Chateau",
@@ -16,7 +19,13 @@
       {
         "name": "Breaking and Entering",
         "sections": [
-          {"name": "The Black Chateau - Breaking and Entering"}
+          {"name": "The Black Chateau - Breaking and Entering"},
+          {"name": "The Black Chateau - Breaking and Entering - Fight"},
+          {"name": "The Black Chateau - Breaking and Entering - Table Crawling"},
+          {"name": "The Black Chateau - Breaking and Entering - Stealth Slam"},
+          {"name": "The Black Chateau - Breaking and Entering - Picture (Generator)"},
+          {"name": "The Black Chateau - Breaking and Entering - Picture (Dimitri)"},
+          {"name": "The Black Chateau - Breaking and Entering - Picture (Tail Feathers)"}
         ],
         "map_locations": [{
           "map": "The Black Chateau",
@@ -49,7 +58,10 @@
       {
         "name": "Waterpump Destruction",
         "sections": [
-          {"name": "The Black Chateau - Waterpump Destruction"}
+          {"name": "The Black Chateau - Waterpump Destruction"},
+          {"name": "The Black Chateau - Waterpump Destruction - Power Box 1"},
+          {"name": "The Black Chateau - Waterpump Destruction - Power Box 2"},
+          {"name": "The Black Chateau - Waterpump Destruction - Guard"}
         ],
         "map_locations": [{
           "map": "The Black Chateau",
@@ -60,7 +72,10 @@
       {
         "name": "Silence the Alarms",
         "sections": [
-          {"name": "The Black Chateau - Silence the Alarms"}
+          {"name": "The Black Chateau - Silence the Alarms"},
+          {"name": "The Black Chateau - Silence the Alarms - Alarm 1"},
+          {"name": "The Black Chateau - Silence the Alarms - Alarm 2"},
+          {"name": "The Black Chateau - Silence the Alarms - Alarm 3"}
         ],
         "map_locations": [{
           "map": "The Black Chateau",
@@ -71,7 +86,13 @@
       {
         "name": "Theater Pickpocketing",
         "sections": [
-          {"name": "The Black Chateau - Theater Pickpocketing"}
+          {"name": "The Black Chateau - Theater Pickpocketing"},
+          {"name": "The Black Chateau - Theater Pickpocketing - Key 1"},
+          {"name": "The Black Chateau - Theater Pickpocketing - Key 2"},
+          {"name": "The Black Chateau - Theater Pickpocketing - Key 3"},
+          {"name": "The Black Chateau - Theater Pickpocketing - Key 4"},
+          {"name": "The Black Chateau - Theater Pickpocketing - Key 5"},
+          {"name": "The Black Chateau - Theater Pickpocketing - Key 6"}
         ],
         "map_locations": [{
           "map": "The Black Chateau",
@@ -93,7 +114,11 @@
       {
         "name": "Disco Demolitions",
         "sections": [
-          {"name": "The Black Chateau - Disco Demolitions"}
+          {"name": "The Black Chateau - Disco Demolitions"},
+          {"name": "The Black Chateau - Disco Demolitions - Pillar 1"},
+          {"name": "The Black Chateau - Disco Demolitions - Pillar 2"},
+          {"name": "The Black Chateau - Disco Demolitions - Pillar 3"},
+          {"name": "The Black Chateau - Disco Demolitions - Pillar 4"}
         ],
         "map_locations": [{
           "map": "The Black Chateau",
@@ -104,7 +129,10 @@
       {
         "name": "Operation: Thunder Beak",
         "sections": [
-          {"name": "The Black Chateau - Operation: Thunder Beak"}
+          {"name": "The Black Chateau - Operation: Thunder Beak"},
+          {"name": "The Black Chateau - Operation: Thunder Beak - Valves"},
+          {"name": "The Black Chateau - Operation: Thunder Beak - Truck Keys"},
+          {"name": "The Black Chateau - Operation: Thunder Beak - Sign Destruction"}
         ],
         "map_locations": [{
           "map": "The Black Chateau",

@@ -16,7 +16,13 @@
       {
         "name": "Train Hack",
         "sections": [
-          {"name": "Jailbreak - Train Hack"}
+          {"name": "Jailbreak - Train Hack"},
+          {"name": "Jailbreak - Train Hack - Terminal 1"},
+          {"name": "Jailbreak - Train Hack - Terminal 2"},
+          {"name": "Jailbreak - Train Hack - Terminal 3"},
+          {"name": "Jailbreak - Train Hack - Terminal 4"},
+          {"name": "Jailbreak - Train Hack - Terminal 5"},
+          {"name": "Jailbreak - Train Hack - Terminal 6"}
         ],
         "map_locations": [{
           "map": "Jailbreak",
@@ -27,7 +33,14 @@
       {
         "name": "Wall Bombing",
         "sections": [
-          {"name": "Jailbreak - Wall Bombing"}
+          {"name": "Jailbreak - Wall Bombing"},
+          {"name": "Jailbreak - Wall Bombing - Guard 1"},
+          {"name": "Jailbreak - Wall Bombing - Guard 2"},
+          {"name": "Jailbreak - Wall Bombing - Guard 3"},
+          {"name": "Jailbreak - Wall Bombing - Guard 4"},
+          {"name": "Jailbreak - Wall Bombing - Guard 5"},
+          {"name": "Jailbreak - Wall Bombing - Guard 6"},
+          {"name": "Jailbreak - Wall Bombing - Guard 7"}
         ],
         "map_locations": [{
           "map": "Jailbreak",
@@ -49,7 +62,12 @@
       {
         "name": "Lightning Action",
         "sections": [
-          {"name": "Jailbreak - Lightning Action"}
+          {"name": "Jailbreak - Lightning Action"},
+          {"name": "Jailbreak - Lightning Action - Lightning Rod 1"},
+          {"name": "Jailbreak - Lightning Action - Lightning Rod 2"},
+          {"name": "Jailbreak - Lightning Action - Lightning Rod 3"},
+          {"name": "Jailbreak - Lightning Action - Lightning Rod 4"},
+          {"name": "Jailbreak - Lightning Action - Lightning Rod 5"}
         ],
         "map_locations": [{
           "map": "Jailbreak",
@@ -60,7 +78,9 @@
       {
         "name": "Disguise Bridge",
         "sections": [
-          {"name": "Jailbreak - Disguise Bridge"}
+          {"name": "Jailbreak - Disguise Bridge"},
+          {"name": "Jailbreak - Disguise Bridge - Lower"},
+          {"name": "Jailbreak - Disguise Bridge - Upper"}
         ],
         "map_locations": [{
           "map": "Jailbreak",
@@ -71,7 +91,11 @@
       {
         "name": "Code Capture",
         "sections": [
-          {"name": "Jailbreak - Code Capture"}
+          {"name": "Jailbreak - Code Capture"},
+          {"name": "Jailbreak - Code Capture - Code 1"},
+          {"name": "Jailbreak - Code Capture - Code 2"},
+          {"name": "Jailbreak - Code Capture - Code 3"},
+          {"name": "Jailbreak - Code Capture - Code 4"}
         ],
         "map_locations": [{
           "map": "Jailbreak",
@@ -82,7 +106,10 @@
       {
         "name": "Close to Contessa",
         "sections": [
-          {"name": "Jailbreak - Close to Contessa"}
+          {"name": "Jailbreak - Close to Contessa"},
+          {"name": "Jailbreak - Close to Contessa - Key 1"},
+          {"name": "Jailbreak - Close to Contessa - Key 2"},
+          {"name": "Jailbreak - Close to Contessa - Tank Patrol Schedule"}
         ],
         "map_locations": [{
           "map": "Jailbreak",
@@ -93,7 +120,17 @@
       {
         "name": "Operation: Trojan Tank",
         "sections": [
-          {"name": "Jailbreak - Operation: Trojan Tank"}
+          {"name": "Jailbreak - Operation: Trojan Tank"},
+          {"name": "Jailbreak - Operation: Trojan Tank - Enter Prison"},
+          {"name": "Jailbreak - Operation: Trojan Tank - Climb to Control Panel"},
+          {"name": "Jailbreak - Operation: Trojan Tank - Code Pad 1"},
+          {"name": "Jailbreak - Operation: Trojan Tank - Code Pad 2"},
+          {"name": "Jailbreak - Operation: Trojan Tank - Code Pad 3"},
+          {"name": "Jailbreak - Operation: Trojan Tank - Hypno-box 1"},
+          {"name": "Jailbreak - Operation: Trojan Tank - Hypno-box 2"},
+          {"name": "Jailbreak - Operation: Trojan Tank - Hypno-box 3"},
+          {"name": "Jailbreak - Operation: Trojan Tank - Hypno-box 4"},
+          {"name": "Jailbreak - Operation: Trojan Tank - Lift Levers"}
         ],
         "map_locations": [{
           "map": "Jailbreak",
