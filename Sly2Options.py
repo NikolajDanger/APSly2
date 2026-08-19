@@ -400,11 +400,11 @@ class BottleSanity(DefaultOnToggle):
 
   display_name = "Bottlesanity"
 
-# This is an option planned for the future, to be able to turn off LootSanity and
-# to have loot be counted using one of a few other options: either as an overall
-# total, or as total unique loot. However, for the initial implementation,
-# LootSanity will just be on by default, along with the option of turning loot as
-# locations off, similar to vaults.
+# This is an option planned for the future, to be able to turn off LootSanity
+# and to have loot be counted using one of a few other options: either as an
+# overall total, or as total unique loot. However, for the initial
+# implementation, LootSanity will just be on by default, along with the option
+# of turning loot as locations off, similar to vaults.
 #
 # To see OTHER possible options related to loot being considered, check out what
 # has been writen in pull request #3 for this game's AP on GitHub.

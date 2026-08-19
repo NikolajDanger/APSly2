@@ -465,7 +465,14 @@ LOOT = {
   "Gold Comb": [(1,True,1)],
 
   "Bronze Ring": [(1,False,5), (2,False,1), (3,False,1)],
-  "Silver Ring": [(1,False,6), (1,True,6), (2,False,2), (2,True,2), (3,False,2), (3,True,2)],
+  "Silver Ring": [
+    (1,False,6),
+    (1,True,6),
+    (2,False,2),
+    (2,True,2),
+    (3,False,2),
+    (3,True,2)
+  ],
   "Gold Ring": [(1,True,5), (2,True,1), (3,True,1)],
 
   "Bronze Watch": [(1,False,3)],
@@ -477,7 +484,16 @@ LOOT = {
   "Gold Pen": [(2,True,3), (3,True,3)],
 
   "Bronze Medal": [(2,False,5), (3,False,5), (4,False,1), (5,False,1)],
-  "Silver Medal": [(2,False,6), (2,True,6), (3,False,6), (3,True,6), (4,False,2), (4,True,2), (5,False,2), (5,True,2)],
+  "Silver Medal": [
+    (2,False,6),
+    (2,True,6),
+    (3,False,6),
+    (3,True,6),
+    (4,False,2),
+    (4,True,2),
+    (5,False,2),
+    (5,True,2)
+  ],
   "Gold Medal": [(2,True,5), (3,True,5), (4,True,1), (5,True,1)],
 
   "Bronze Pocket Watch": [(4,False,3), (5,False,3)],
@@ -485,11 +501,27 @@ LOOT = {
   "Gold Pocket Watch": [(4,True,3), (5,True,3)],
 
   "Small Nugget": [(6,False,3), (7,False,3), (8,False,1)],
-  "Medium Nugget": [(6,False,4), (6,True,4), (7,False,4), (7,True,4), (8,False,2), (8,True,2)],
+  "Medium Nugget": [
+    (6,False,4),
+    (6,True,4),
+    (7,False,4),
+    (7,True,4),
+    (8,False,2),
+    (8,True,2)
+  ],
   "Large Gold Bar": [(6,True,3), (7,True,3), (8,True,1)],
 
   "Topaz": [(4,False,5), (5,False,5), (6,False,1), (7,False,1)],
-  "Sapphire": [(4,False,6), (4,True,6), (5,False,6), (5,True,6), (6,False,2), (6,True,2), (7,False,2), (7,True,2)],
+  "Sapphire": [
+    (4,False,6),
+    (4,True,6),
+    (5,False,6),
+    (5,True,6),
+    (6,False,2),
+    (6,True,2),
+    (7,False,2),
+    (7,True,2)
+  ],
   "Ruby": [(4,True,5), (5,True,5), (6,True,1), (7,True,1)],
 
   "Small Diamond": [(8,False,5)],
@@ -497,7 +529,14 @@ LOOT = {
   "Large Diamond": [(8,True,5)],
 
   "Small Necklace": [(6,False,5), (7,False,5), (8,False,3)],
-  "Medium Necklace": [(6,False,6), (6,True,6), (7,False,6), (7,True,6), (8,False,4), (8,True,4)],
+  "Medium Necklace": [
+    (6,False,6),
+    (6,True,6),
+    (7,False,6),
+    (7,True,6),
+    (8,False,4),
+    (8,True,4)
+  ],
   "Large Necklace": [(6,True,5), (7,True,5), (8,True,3)],
 }
 
@@ -610,7 +649,7 @@ DEATH_TYPES = {
   0x800: "{player} was electrocuted",
   0x1000: "{player} was burned to death",
   0x2000: "{player} drowned",
-  0x1000: "{player} fell to their death",
+  # 0x1000: "{player} fell to their death",
 }
 
 ADDRESSES = {
@@ -1137,17 +1176,20 @@ POWERUP_TEXT = {
   "Turnbuckle Launch": "Jump to heroic heights",
   "Juggernaut Throw": "Thrown objects explode on impact",
   "Atlas Strength": "You can jump while carrying somebody",
-  "Diablo Fire Slam": "Use while carrying an enemy to create a deadly firestorm",
+  "Diablo Fire Slam":
+    "Use while carrying an enemy to create a deadly firestorm",
   "Berserker Charge": "Scatter enemies with this powerful run",
   "Guttural Roar": "Terrify your foes",
-  "Raging Inferno Flop": "Use while jumping to create a wall of flame on impact",
+  "Raging Inferno Flop":
+    "Use while jumping to create a wall of flame on impact",
 
   "Smoke Bomb": "Obscure the vision of your enemies for a hasty getaway",
   "Combat Dodge": "Sidestep enemies in combat",
   "Stealth Slide": "Roll through the level. Silently!",
   "Alarm Clock": "Confuse your enemies with this distracting alarm clock",
   "Paraglide": "Fly through the air with this quick-deploy paraglider",
-  "Silent Obliteration": "Finish off juggled enemies without attracting attention",
+  "Silent Obliteration":
+    "Finish off juggled enemies without attracting attention",
   "Thief Reflexes": "Slow time to a crawl",
   "Feral Pounce": "Jump over vast distances",
 }
@@ -1314,5 +1356,13 @@ PICKPOCKET_LOOT_TABLE_CHANCES = [
 ]
 
 CAIRO_RETURN_DATA = (
-  "4E A8 89 61 7A 56 E3 D1 1C 6C 04 FB 2D 05 A9 A1 B5 7C 6F 59 3A 10 EB FC F7 1B 3C 01 32 5E E4 77 3D 6B 28 BB B8 72 FE 3B 68 2A 84 67 79 9F 7E 0E F3 FF D7 A8 AE B9 8C 61 41 6C 04 FB DC 76 7B D1 89 01 00 00 FF FF FF FF 4E A8 89 61 7A 56 E3 D1 1C 6C 04 FB 2D 05 A9 A1 B5 7C 6F 59 3A 10 EB FC F7 1B 3C 01 32 5E E4 77 3D 6B 28 BB B8 72 FE 3B 68 2A 84 67 79 9F 7E 0E F3 FF D7 A8 AE B9 8C 61 41 6C 04 FB DC 76 7B D1"
+  "4E A8 89 61 7A 56 E3 D1 1C 6C 04 FB 2D 05 A9 A1 "
+  "B5 7C 6F 59 3A 10 EB FC F7 1B 3C 01 32 5E E4 77 "
+  "3D 6B 28 BB B8 72 FE 3B 68 2A 84 67 79 9F 7E 0E "
+  "F3 FF D7 A8 AE B9 8C 61 41 6C 04 FB DC 76 7B D1 "
+  "89 01 00 00 FF FF FF FF 4E A8 89 61 7A 56 E3 D1 "
+  "1C 6C 04 FB 2D 05 A9 A1 B5 7C 6F 59 3A 10 EB FC "
+  "F7 1B 3C 01 32 5E E4 77 3D 6B 28 BB B8 72 FE 3B "
+  "68 2A 84 67 79 9F 7E 0E F3 FF D7 A8 AE B9 8C 61 "
+  "41 6C 04 FB DC 76 7B D1"
 ).replace(" ","")

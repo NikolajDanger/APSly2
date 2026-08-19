@@ -9,10 +9,12 @@ from .data.Constants import EPISODES, TASKS, episode_key
 if typing.TYPE_CHECKING:
   from . import Sly2World
 
-def set_rules(world: "Sly2World"):
+def set_rules(world: "Sly2World") -> None:
   player = world.player
 
-  def add_job_rule(ep, job, rule):
+  def add_job_rule(
+    ep: str, job: str, rule: typing.Callable[[CollectionState], bool]
+  ) -> None:
     add_rule(world.get_location(f"{ep} - {job}"), rule)
     if world.options.tasksanity:
       for _, task in TASKS.get(ep, {}).get(job, []):
@@ -71,11 +73,11 @@ def set_rules(world: "Sly2World"):
           )
 
     """
-        For the Ep8 bottles below, although it is technically possible to get them
-        during the job, "Mega Jump Job", because this availability is only temporary
-        and there is currently no way of replaying completed jobs in Sly 2, this
-        specific corner-case has not been included as part of legitimate logic, in
-        order to avoid soft-lock situations.
+        For the Ep8 bottles below, although it is technically possible to get
+        them during the job, "Mega Jump Job", because this availability is only
+        temporary and there is currently no way of replaying completed jobs in
+        Sly 2, this specific corner-case has not been included as part of
+        legitimate logic, in order to avoid soft-lock situations.
     """
     if world.options.bottle_location_bundle_size.value == 1 and bottlesanity:
       add_rule(
@@ -96,7 +98,8 @@ def set_rules(world: "Sly2World"):
           state.has("Hover Pack", player)  or
           state.has("Turnbuckle Launch", player) # or
           # state.has("Progressive Anatomy for Disaster", player, 3)
-          # Obtainable during Mega Jump Job. If jobs were replayable, this rule COULD be applied if desired.
+          # Obtainable during Mega Jump Job. If jobs were replayable, this
+          # rule COULD be applied if desired.
         )
       )
     else:
@@ -118,7 +121,8 @@ def set_rules(world: "Sly2World"):
           state.has("Hover Pack", player) or
           state.has("Turnbuckle Launch", player) # or
           # state.has("Progressive Anatomy for Disaster", player, 3)
-          # Obtainable during Mega Jump Job. If jobs were replayable, this rule COULD be applied if desired.
+          # Obtainable during Mega Jump Job. If jobs were replayable, this
+          # rule COULD be applied if desired.
 
         )
       )
@@ -148,7 +152,8 @@ def set_rules(world: "Sly2World"):
   # items to be in logic, second group requires 4, etc. Skipped when
   # tracking, except under the fuzzer, whose UT hook compares the tracker's
   # logic against the real generation's spheres.
-  if not getattr(world.multiworld, "generation_is_fake", False) or world.fuzzing:
+  generation_is_fake = getattr(world.multiworld, "generation_is_fake", False)
+  if not generation_is_fake or world.fuzzing:
     for i in range(1,25):
       episode_items_n = ceil(i/3)*2
       if restrictive_start and i <= 3:
@@ -170,12 +175,16 @@ def set_rules(world: "Sly2World"):
       "Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la"
     ][world.options.goal.value]
 
-    victory_location = world.multiworld.get_location(victory_condition, world.player)
+    victory_location = world.multiworld.get_location(
+      victory_condition, world.player
+    )
     victory_location.address = None
     victory_location.place_locked_item(world.create_event("Victory"))
-    world.multiworld.completion_condition[world.player] = lambda state: state.has("Victory", world.player)
+    world.multiworld.completion_condition[world.player] = (
+      lambda state: state.has("Victory", world.player)
+    )
   elif world.options.goal.value == 5:
-    def access_rule(state: CollectionState):
+    def access_rule(state: CollectionState) -> bool:
       victory_conditions = [
         "The Black Chateau - Operation: Thunder Beak",
         "The Predator Awakens - Operation: Wet Tiger",
@@ -192,13 +201,15 @@ def set_rules(world: "Sly2World"):
     world.multiworld.completion_condition[world.player] = access_rule
 
   elif world.options.goal.value == 6:
-    world.multiworld.completion_condition[world.player] = lambda state: state.has_group(
-      "Clockwerk Part",
-      world.player,
-      world.options.required_keys_goal.value
+    world.multiworld.completion_condition[world.player] = (
+      lambda state: state.has_group(
+        "Clockwerk Part",
+        world.player,
+        world.options.required_keys_goal.value
+      )
     )
   elif world.options.goal.value == 7:
-    def access_rule(state: CollectionState):
+    def access_rule(state: CollectionState) -> bool:
       victory_conditions = [f"{ep} - Vault" for ep in EPISODES]
 
       return all(
@@ -219,7 +230,7 @@ def set_rules(world: "Sly2World"):
     need_parts = conditions.get("clockwerk_hunt")
     required = world.options.required_keys_goal.value
 
-    def access_rule(state: CollectionState):
+    def access_rule(state: CollectionState) -> bool:
       if need_parts and not state.has_group(
         "Clockwerk Part", world.player, required
       ):

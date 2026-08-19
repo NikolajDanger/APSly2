@@ -1,14 +1,15 @@
 """
 The PINE API.
 This is the client side implementation of the PINE protocol.
-It allows for a three-way communication between the emulated game, the emulator and an external
-tool, using the external tool as a relay for all communication. It is a socket based IPC that
-is _very_ fast.
+It allows for a three-way communication between the emulated game, the
+emulator and an external tool, using the external tool as a relay for all
+communication. It is a socket based IPC that is _very_ fast.
 
-If you want to draw comparisons you can think of this as an equivalent of the BizHawk LUA API,
-although with the logic out of the core and in an external tool. While BizHawk would run a lua
-script at each frame in the core of the emulator we opt instead to keep the entire logic out of
-the emulator to make it more easily extensible, more portable, require less code and be more
+If you want to draw comparisons you can think of this as an equivalent of the
+BizHawk LUA API, although with the logic out of the core and in an external
+tool. While BizHawk would run a lua script at each frame in the core of the
+emulator we opt instead to keep the entire logic out of the emulator to make it
+more easily extensible, more portable, require less code and be more
 performant.
 """
 import os
@@ -19,20 +20,31 @@ import socket
 
 
 class Pine:
-  """ Exposes PS2 memory within a running instance of the PCSX2 emulator using the Pine IPC Protocol. """
+  """
+  Exposes PS2 memory within a running instance of the PCSX2 emulator using the
+  Pine IPC Protocol.
+  """
 
-  """ Maximum memory used by an IPC message request. Equivalent to 50,000 Write64 requests. """
+  """
+  Maximum memory used by an IPC message request. Equivalent to 50,000 Write64
+  requests.
+  """
   MAX_IPC_SIZE: int = 650000
 
-  """ Maximum memory used by an IPC message reply. Equivalent to 50,000 Read64 replies. """
+  """
+  Maximum memory used by an IPC message reply. Equivalent to 50,000 Read64
+  replies.
+  """
   MAX_IPC_RETURN_SIZE: int = 450000
 
   """ Maximum number of commands sent in a batch message. """
   MAX_BATCH_REPLY_COUNT: int = 50000
 
   class IPCResult(IntEnum):
-    """ IPC result codes. A list of possible result codes the IPC can send back. Each one of them is what we call an
-    "opcode" or "tag" and is the first byte sent by the IPC to differentiate between results.
+    """
+    IPC result codes. A list of possible result codes the IPC can send back.
+    Each one of them is what we call an "opcode" or "tag" and is the first
+    byte sent by the IPC to differentiate between results.
     """
     IPC_OK = 0  # IPC command successfully completed.
     IPC_FAIL = 0xFF  # IPC command failed to complete.
@@ -62,7 +74,7 @@ class Pine:
     INT32 = 4
     INT64 = 8
 
-  def __init__(self, slot: int = 28011):
+  def __init__(self, slot: int = 28011) -> None:
     if not 0 < slot <= 65536:
       raise ValueError("Provided slot number is outside valid range")
     self._slot: int = slot
@@ -112,15 +124,15 @@ class Pine:
     request = Pine._create_request(Pine.IPCCommand.READ8, address, 9)
     return Pine.from_bytes(self._send_request(request)[-1:])
 
-  def read_int16(self, address) -> int:
+  def read_int16(self, address: int) -> int:
     request = Pine._create_request(Pine.IPCCommand.READ16, address, 9)
     return Pine.from_bytes(self._send_request(request)[-2:])
 
-  def read_int32(self, address) -> int:
+  def read_int32(self, address: int) -> int:
     request = Pine._create_request(Pine.IPCCommand.READ32, address, 9)
     return Pine.from_bytes(self._send_request(request)[-4:])
 
-  def read_int64(self, address) -> int:
+  def read_int64(self, address: int) -> int:
     request = Pine._create_request(Pine.IPCCommand.READ64, address, 9)
     return Pine.from_bytes(self._send_request(request)[-8:])
 
@@ -129,38 +141,60 @@ class Pine:
     data = b''
     while len(data) < length:
       if length - len(data) >= 8:
-        data += self._send_request(Pine._create_request(Pine.IPCCommand.READ64, address + len(data), 9))[-8:]
+        request = Pine._create_request(
+          Pine.IPCCommand.READ64, address + len(data), 9
+        )
+        data += self._send_request(request)[-8:]
       elif length - len(data) >= 4:
-        data += self._send_request(Pine._create_request(Pine.IPCCommand.READ32, address + len(data), 9))[-4:]
+        request = Pine._create_request(
+          Pine.IPCCommand.READ32, address + len(data), 9
+        )
+        data += self._send_request(request)[-4:]
       elif length - len(data) >= 2:
-        data += self._send_request(Pine._create_request(Pine.IPCCommand.READ16, address + len(data), 9))[-2:]
+        request = Pine._create_request(
+          Pine.IPCCommand.READ16, address + len(data), 9
+        )
+        data += self._send_request(request)[-2:]
       elif length - len(data) >= 1:
-        data += self._send_request(Pine._create_request(Pine.IPCCommand.READ8, address + len(data), 9))[-1:]
+        request = Pine._create_request(
+          Pine.IPCCommand.READ8, address + len(data), 9
+        )
+        data += self._send_request(request)[-1:]
 
     return data
 
   def write_int8(self, address: int, value: int) -> None:
-    request = Pine._create_request(Pine.IPCCommand.WRITE8, address, 9 + Pine.DataSize.INT8)
+    request = Pine._create_request(
+      Pine.IPCCommand.WRITE8, address, 9 + Pine.DataSize.INT8
+    )
     request += value.to_bytes(length=1, byteorder="little")
     self._send_request(request)
 
   def write_int16(self, address: int, value: int) -> None:
-    request = Pine._create_request(Pine.IPCCommand.WRITE16, address, 9 + Pine.DataSize.INT16)
+    request = Pine._create_request(
+      Pine.IPCCommand.WRITE16, address, 9 + Pine.DataSize.INT16
+    )
     request += value.to_bytes(length=2, byteorder="little")
     self._send_request(request)
 
   def write_int32(self, address: int, value: int) -> None:
-    request = Pine._create_request(Pine.IPCCommand.WRITE32, address, 9 + Pine.DataSize.INT32)
+    request = Pine._create_request(
+      Pine.IPCCommand.WRITE32, address, 9 + Pine.DataSize.INT32
+    )
     request += value.to_bytes(length=4, byteorder="little")
     self._send_request(request)
 
   def write_int64(self, address: int, value: int) -> None:
-    request = Pine._create_request(Pine.IPCCommand.WRITE64, address, 9 + Pine.DataSize.INT64)
+    request = Pine._create_request(
+      Pine.IPCCommand.WRITE64, address, 9 + Pine.DataSize.INT64
+    )
     request += value.to_bytes(length=8, byteorder="little")
     self._send_request(request)
 
   def write_float(self, address: int, value: float) -> None:
-    request = Pine._create_request(Pine.IPCCommand.WRITE32, address, 9 + Pine.DataSize.INT32)
+    request = Pine._create_request(
+      Pine.IPCCommand.WRITE32, address, 9 + Pine.DataSize.INT32
+    )
     request += struct.pack("<f", value)
     self._send_request(request)
 
@@ -169,28 +203,47 @@ class Pine:
     bytes_written = 0
     while bytes_written < len(data):
       if len(data) - bytes_written >= 8:
-        request = self._create_request(Pine.IPCCommand.WRITE64, address + bytes_written, 9 + Pine.DataSize.INT64)
+        request = self._create_request(
+          Pine.IPCCommand.WRITE64,
+          address + bytes_written,
+          9 + Pine.DataSize.INT64
+        )
         request += data[bytes_written:bytes_written + 8]
         self._send_request(request)
         bytes_written += 8
       elif len(data) - bytes_written >= 4:
-        request = self._create_request(Pine.IPCCommand.WRITE32, address + bytes_written, 9 + Pine.DataSize.INT32)
+        request = self._create_request(
+          Pine.IPCCommand.WRITE32,
+          address + bytes_written,
+          9 + Pine.DataSize.INT32
+        )
         request += data[bytes_written:bytes_written + 4]
         self._send_request(request)
         bytes_written += 4
       elif len(data) - bytes_written >= 2:
-        request = self._create_request(Pine.IPCCommand.WRITE16, address + bytes_written, 9 + Pine.DataSize.INT16)
+        request = self._create_request(
+          Pine.IPCCommand.WRITE16,
+          address + bytes_written,
+          9 + Pine.DataSize.INT16
+        )
         request += data[bytes_written:bytes_written + 2]
         self._send_request(request)
         bytes_written += 2
       elif len(data) - bytes_written >= 1:
-        request = self._create_request(Pine.IPCCommand.WRITE8, address + bytes_written, 9 + Pine.DataSize.INT8)
+        request = self._create_request(
+          Pine.IPCCommand.WRITE8,
+          address + bytes_written,
+          9 + Pine.DataSize.INT8
+        )
         request += data[bytes_written:bytes_written + 1]
         self._send_request(request)
         bytes_written += 1
 
   def batch_read_int32(self, addresses: list[int]) -> list[int]:
-    """Read multiple int32 values in a single request. Much faster than individual reads."""
+    """
+    Read multiple int32 values in a single request. Much faster than
+    individual reads.
+    """
     if not addresses:
       return []
 
@@ -270,7 +323,10 @@ class Pine:
     return results
 
   def batch_write_int32(self, operations: list[tuple[int, int]]) -> None:
-    """Write multiple int32 values in a single request. Each operation is (address, value)."""
+    """
+    Write multiple int32 values in a single request. Each operation is
+    (address, value).
+    """
     if not operations:
       return
 
@@ -286,7 +342,10 @@ class Pine:
     self._send_request(request)
 
   def batch_write_float(self, operations: list[tuple[int, float]]) -> None:
-    """Write multiple float values in a single request. Each operation is (address, value)."""
+    """
+    Write multiple float values in a single request. Each operation is
+    (address, value).
+    """
     if not operations:
       return
 
@@ -328,7 +387,8 @@ class Pine:
       except TimeoutError:
         raise TimeoutError(
           "Response timed out. "
-          "This might be caused by having two PINE connections open on the same slot"
+          "This might be caused by having two PINE connections open on the "
+          "same slot"
         )
 
       if len(response) <= 0:
@@ -351,7 +411,9 @@ class Pine:
     return result
 
   @staticmethod
-  def _create_request(command: IPCCommand, address: int, size: int = 0) -> bytes:
+  def _create_request(
+    command: IPCCommand, address: int, size: int = 0
+  ) -> bytes:
     ipc = Pine.to_bytes(size, 4)
     ipc += Pine.to_bytes(command, 1)
     ipc += Pine.to_bytes(address, 4)

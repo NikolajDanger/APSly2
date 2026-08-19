@@ -6,7 +6,18 @@ from math import ceil
 from NetUtils import ClientStatus
 
 from .data import Items, Locations
-from .data.Constants import EPISODES, TASKS, POWERUP_TEXT, OTHER_POWERUPS, TREASURES, DEATH_TYPES, LOOT, PICKPOCKET_LOOT_TABLE_CHANCES, MEGA_JUMP_GADGET_ID, episode_key
+from .data.Constants import (
+  EPISODES,
+  TASKS,
+  POWERUP_TEXT,
+  OTHER_POWERUPS,
+  TREASURES,
+  DEATH_TYPES,
+  LOOT,
+  PICKPOCKET_LOOT_TABLE_CHANCES,
+  MEGA_JUMP_GADGET_ID,
+  episode_key
+)
 from .Sly2Interface import Sly2Episode, PowerUps
 
 if TYPE_CHECKING:
@@ -98,7 +109,7 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
 
   boot_from_invalid_episode(ctx, ap_connected)
 
-def episode_loot(loot_table, i: int, j: int) -> list:
+def episode_loot(loot_table: dict[str, list], i: int, j: int) -> list[str]:
   loot = []
   for k in range(1, 7):
     for loot_name, loot_locations in loot_table.items():
@@ -107,7 +118,13 @@ def episode_loot(loot_table, i: int, j: int) -> list:
         break
   return loot
 
-def dynamic_loot_odds(loot_table, checked, i: int, j: int, base_odds) -> tuple:
+def dynamic_loot_odds(
+  loot_table: dict[str, list],
+  checked: set[int],
+  i: int,
+  j: int,
+  base_odds: tuple
+) -> tuple:
   names = episode_loot(loot_table, i, j)
   if len(names) != 6:
     return base_odds
@@ -146,35 +163,38 @@ def loot_odds_row(ctx: 'Sly2Context', i: int, j: int) -> tuple:
   if ctx.slot_data is None:
     return PICKPOCKET_LOOT_TABLE_CHANCES[49]
 
-  base = PICKPOCKET_LOOT_TABLE_CHANCES[ctx.slot_data["loot_table_distribution"]-1]
+  distribution = ctx.slot_data["loot_table_distribution"]
+  base = PICKPOCKET_LOOT_TABLE_CHANCES[distribution-1]
   if not ctx.slot_data["dynamic_loot_tables"]:
     return base
 
   checked = ctx.checked_locations | ctx.locations_checked
   return dynamic_loot_odds(ctx.slot_data["loot_table"], checked, i, j, base)
 
-def set_pickpocketing(ctx: 'Sly2Context'):
-  """Set pickpocking chances to be higher"""
+def set_pickpocketing(ctx: 'Sly2Context') -> None:
+  """Set pickpocketing chances to be higher"""
   if ctx.current_episode is None or ctx.slot_data is None:
     return
 
   small_guard = ctx.slot_data["small_guard_loot_chance"]/100.0
   large_guard = ctx.slot_data["large_guard_loot_chance"]/100.0
-  ctx.game_interface.set_loot_chance(ctx.current_episode, (small_guard, large_guard))
+  ctx.game_interface.set_loot_chance(
+    ctx.current_episode, (small_guard, large_guard)
+  )
   episode_index = ctx.current_episode.value-1
   ctx.game_interface.set_loot_table_odds(ctx.current_episode, (
     loot_odds_row(ctx, episode_index, 0),
     loot_odds_row(ctx, episode_index, 1)
   ))
 
-def set_loot_table(ctx: 'Sly2Context'):
+def set_loot_table(ctx: 'Sly2Context') -> None:
   if ctx.slot_data is None or ctx.current_episode is None:
     return
 
   loot_table = ctx.slot_data["loot_table"]
   ctx.game_interface.set_loot_table(ctx.current_episode, loot_table)
 
-def set_prices(ctx: 'Sly2Context'):
+def set_prices(ctx: 'Sly2Context') -> None:
   if ctx.slot_data is None:
     return
 
@@ -185,7 +205,7 @@ def set_prices(ctx: 'Sly2Context'):
     ctx.slot_data["loot_prices"], ctx.slot_data["treasure_prices"]
   )
 
-def fix_mega_jump(ctx: 'Sly2Context'):
+def fix_mega_jump(ctx: 'Sly2Context') -> None:
   """Keeps Mega Jump bound. The game strips it two ways: natively on a level
   transition (unbinds to -1, patched out here) and from the episode 8 level
   script on entry (unbinds to 0, can't be patched), so also re-bind it into
@@ -243,18 +263,21 @@ async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
         "default": {},
         "want_reply": False,
         "operations": [
-          {"operation": "replace",  "value": list(EPISODES.keys())[ctx.current_episode-1]}
+          {
+            "operation": "replace",
+            "value": list(EPISODES.keys())[ctx.current_episode-1]
+          }
         ]
       }])
 
-def set_bottles_collected(ctx: 'Sly2Context'):
+def set_bottles_collected(ctx: 'Sly2Context') -> None:
   """Sets the "Bottles Collected" text in the pause menu"""
   ep = ctx.game_interface.get_current_episode()
   bottles = ctx.game_interface.get_bottles(ep)
   ctx.game_interface.set_text("right back",f"Bottles Collected: {bottles}")
 
 
-def set_bottles(ctx: 'Sly2Context'):
+def set_bottles(ctx: 'Sly2Context') -> None:
   """Sets the bottles in the episode"""
   if ctx.current_episode is None:
     return
@@ -262,7 +285,7 @@ def set_bottles(ctx: 'Sly2Context'):
   bottles = ctx.all_bottles[ctx.current_episode]
   ctx.game_interface.set_bottles(bottles)
 
-async def set_thiefnet(ctx: 'Sly2Context'):
+async def set_thiefnet(ctx: 'Sly2Context') -> None:
   """Sets the randomized ThiefNet items"""
   if ctx.slot_data is None:
     return
@@ -275,7 +298,9 @@ async def set_thiefnet(ctx: 'Sly2Context'):
       location_info = info[Locations.location_dict[f"ThiefNet {i+1:02}"].code]
 
       player_name = ctx.player_names[location_info.player]
-      item_name = ctx.item_names.lookup_in_slot(location_info.item,location_info.player)
+      item_name = ctx.item_names.lookup_in_slot(
+        location_info.item, location_info.player
+      )
       string = f"{player_name}'s {item_name}"
 
       ctx.thiefnet_items.append(string)
@@ -305,7 +330,7 @@ async def set_thiefnet(ctx: 'Sly2Context'):
     ctx.game_interface.set_thiefnet_cost(i,ctx.slot_data["thiefnet_costs"][i])
     ctx.game_interface.set_thiefnet(i,(f"Check #{i+1}",item))
 
-def unset_thiefnet(ctx: 'Sly2Context'):
+def unset_thiefnet(ctx: 'Sly2Context') -> None:
   """Returns powerups to the original state"""
   ctx.thiefnet_purchases = ctx.game_interface.read_powerups()
   set_powerups(ctx)
@@ -344,7 +369,9 @@ def replace_text(ctx: 'Sly2Context') -> None:
     else:
       if i == 8 and ctx.slot_data["episode_8_keys"] != 4:
         required_keys = ctx.slot_data["required_keys_episode_8"]
-        rep_text = f"{ctx.clockwerk_parts_count}/{required_keys} Clockwerk parts"
+        rep_text = (
+          f"{ctx.clockwerk_parts_count}/{required_keys} Clockwerk parts"
+        )
       else:
         rep_text = "Locked"
     ctx.game_interface.set_text(
@@ -355,7 +382,6 @@ def replace_text(ctx: 'Sly2Context') -> None:
 def boot_from_invalid_episode(ctx: 'Sly2Context', ap_connected: bool) -> None:
   """Sends the player to the episode menu if they are in an invalid episode"""
   current_episode = ctx.current_episode
-  current_job = ctx.game_interface.get_current_job()
 
   if current_episode is None:
     return
@@ -366,14 +392,6 @@ def boot_from_invalid_episode(ctx: 'Sly2Context', ap_connected: bool) -> None:
     current_episode != 0 and
     ctx.available_episodes[current_episode] == 0
   )
-  skip_intro = (
-    ap_connected and
-    current_episode == 0 and
-    current_job == 1583 and
-    ctx.slot_data is not None and
-    ctx.slot_data["skip_intro"]
-  )
-
   # Skipping the intro breaks saving
 
   if not_connected or locked_episode:
@@ -442,7 +460,8 @@ def set_jobs(ctx: 'Sly2Context') -> None:
   if ctx.current_episode is None:
     return
 
-  episode_jobs = ctx.game_interface.addresses["jobs"][ctx.current_episode.value-1]
+  episode_index = ctx.current_episode.value-1
+  episode_jobs = ctx.game_interface.addresses["jobs"][episode_index]
   available = ctx.available_episodes[ctx.current_episode]
   completed_jobs = ctx.jobs_completed[ctx.current_episode-1]
   for i, chapter in enumerate(episode_jobs):
@@ -498,11 +517,11 @@ def handle_episode_hint(ctx: 'Sly2Context') -> None:
     )
   ctx.episode_hint_shown = True
 
-def set_powerups(ctx: 'Sly2Context'):
+def set_powerups(ctx: 'Sly2Context') -> None:
   """Loads the correct powerups into the game"""
   ctx.game_interface.load_powerups(ctx.powerups)
 
-def fix_jobs(ctx: 'Sly2Context'):
+def fix_jobs(ctx: 'Sly2Context') -> None:
   """Fixes jobs in case they are broken"""
   current_job = ctx.game_interface.get_current_job()
   in_hub = ctx.game_interface.in_hub()
@@ -814,7 +833,9 @@ async def handle_checks(ctx: 'Sly2Context') -> None:
   # Only send location checks if there are new locations
   new_locations = ctx.locations_checked - ctx.last_checked_locations
   if new_locations:
-    await ctx.send_msgs([{"cmd": 'LocationChecks', "locations": ctx.locations_checked}])
+    await ctx.send_msgs([
+      {"cmd": "LocationChecks", "locations": ctx.locations_checked}
+    ])
     ctx.last_checked_locations = ctx.locations_checked.copy()
 
 
@@ -832,7 +853,8 @@ async def handle_deathlink(ctx: 'Sly2Context') -> None:
     else:
       damage_type = ctx.game_interface.get_damage_type()
       player_name = ctx.player_names[ctx.slot if ctx.slot else 0]
-      death_message = DEATH_TYPES.get(damage_type, "{player} died").format(player=player_name)
+      death_message = DEATH_TYPES.get(damage_type, "{player} died")
+      death_message = death_message.format(player=player_name)
 
       await ctx.send_death(death_message)
       ctx.deathlink_timestamp = time()
@@ -885,9 +907,14 @@ async def handle_check_goal(ctx: 'Sly2Context') -> None:
     if (conditions.get("clockwerk_hunt") and
       ctx.clockwerk_parts_count < ctx.slot_data["required_keys_goal"]):
       goaled = False
-    if conditions.get("all_vaults") and not ctx.game_interface.all_vaults_opened():
+    if (
+      conditions.get("all_vaults") and
+      not ctx.game_interface.all_vaults_opened()
+    ):
       goaled = False
 
 
   if goaled:
-    await ctx.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
+    await ctx.send_msgs([
+      {"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}
+    ])

@@ -1,4 +1,4 @@
-from typing import NamedTuple, List
+from typing import NamedTuple
 
 from .Constants import EPISODES, TREASURES, LOOT, TASKS
 
@@ -51,7 +51,15 @@ tasksanity_list = [
   for _, task in tasks
 ]
 
-location_list = jobs_list + vaults_list + treasures_list + bottles_list + purchases_list + pickpocket_list + tasksanity_list
+location_list = (
+  jobs_list +
+  vaults_list +
+  treasures_list +
+  bottles_list +
+  purchases_list +
+  pickpocket_list +
+  tasksanity_list
+)
 
 base_code = 321_000
 
@@ -61,7 +69,11 @@ location_dict = {
 }
 
 location_groups = {
-  key: {location.name for location in location_dict.values() if location.category == key}
+  key: {
+    location.name
+    for location in location_dict.values()
+    if location.category == key
+  }
   for key in [
     "Job",
     "Bottle",
@@ -95,8 +107,14 @@ for ep in EPISODES:
   }
 
 def from_id(location_id: int) -> Sly2LocationData:
-  matching = [location for location in location_dict.values() if location.code == location_id]
+  matching = [
+    location
+    for location in location_dict.values()
+    if location.code == location_id
+  ]
   if len(matching) == 0:
     raise ValueError(f"No location data for location id '{location_id}'")
-  assert len(matching) < 2, f"Multiple locations data with id '{location_id}'. Please report."
+  assert len(matching) < 2, (
+    f"Multiple locations data with id '{location_id}'. Please report."
+  )
   return matching[0]

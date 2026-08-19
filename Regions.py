@@ -10,34 +10,41 @@ if typing.TYPE_CHECKING:
   from . import Sly2World
   from .Sly2Options import Sly2Options
 
-def create_access_rule(episode: str, n: int, options: "Sly2Options", player: int):
-  """Returns a function that checks if the player has access to a specific region"""
-  def rule(state: CollectionState):
+def create_access_rule(
+  episode: str, n: int, options: "Sly2Options", player: int
+) -> typing.Callable[[CollectionState], bool]:
+  """Returns a function that checks if the player has access to a specific
+  region"""
+  def rule(state: CollectionState) -> bool:
     access = True
     item_name = f"Progressive {episode}"
 
-    if episode == "Anatomy for Disaster" and options.episode_8_keys.value == 0:
+    ep_8 = episode == "Anatomy for Disaster"
+    keys_mode = options.episode_8_keys.value
+    required_keys = options.required_keys_episode_8
+
+    if ep_8 and keys_mode == 0:
       access = (
         access and
-        state.count_group("Clockwerk Part", player) >= options.required_keys_episode_8 and
+        state.count_group("Clockwerk Part", player) >= required_keys and
         state.count(item_name, player) >= n-1
       )
-    elif episode == "Anatomy for Disaster" and options.episode_8_keys.value == 1 and n == 4:
+    elif ep_8 and keys_mode == 1 and n == 4:
       access = (
         access and
-        state.count_group("Clockwerk Part", player) >= options.required_keys_episode_8 and
+        state.count_group("Clockwerk Part", player) >= required_keys and
         state.count(item_name, player) >= n-1
       )
-    elif episode == "Anatomy for Disaster" and options.episode_8_keys.value == 2:
+    elif ep_8 and keys_mode == 2:
       access = (
         access and
-        state.count_group("Clockwerk Part", player) >= options.required_keys_episode_8
+        state.count_group("Clockwerk Part", player) >= required_keys
       )
-    elif episode == "Anatomy for Disaster" and options.episode_8_keys.value == 3:
+    elif ep_8 and keys_mode == 3:
       access = (
         access and
         state.count_group("Clockwerk Part", player) >=
-        ceil(options.required_keys_episode_8.value * n / 4)
+        ceil(required_keys.value * n / 4)
       )
     else:
       access = access and state.count(item_name, player) >= n
@@ -56,7 +63,7 @@ def create_access_rule(episode: str, n: int, options: "Sly2Options", player: int
 
   return rule
 
-def create_regions(world: "Sly2World"):
+def create_regions(world: "Sly2World") -> None:
   """Creates a region for each chapter of each episode"""
   menu = Region("Menu", world.player, world.multiworld)
   menu.add_locations({
@@ -93,7 +100,7 @@ def create_regions(world: "Sly2World"):
   bottle_n = world.options.bottle_location_bundle_size.value
   bottlesanity = world.options.bottlesanity
 
-  def add_bottles(episode: str, region: str, n:int):
+  def add_bottles(episode: str, region: str, n:int) -> None:
     """Adds a location for n bottles collected in a specific episode"""
     location_name = f"{episode} - {n:02} bottles collected"
     world.get_region(region).add_locations(
@@ -119,7 +126,7 @@ def create_regions(world: "Sly2World"):
         add_bottles(episode, f"Episode {i+1} (1)", 30)
 
 
-  def add_vault(episode: str, region: str):
+  def add_vault(episode: str, region: str) -> None:
     world.get_region(region).add_locations(
       {f"{episode} - Vault": location_dict[f"{episode} - Vault"].code}
     )
@@ -143,8 +150,9 @@ def create_regions(world: "Sly2World"):
       )
 
   if world.options.include_pickpocketing:
-    # Because loot can be found in multiple episodes but AP locations can only be in 1 region, we make "hybrid-
-    # regions" for these loot locations that can be accessed if the player has access to any 1 of the "base regions"
+    # Because loot can be found in multiple episodes but AP locations can only
+    # be in 1 region, we make "hybrid-regions" for these loot locations that
+    # can be accessed if the player has access to any 1 of the "base regions"
     hybrid_region_names = []
     for loot, eps in world.loot_table.items():
       location_name = f"Pickpocket {loot}"
@@ -158,19 +166,25 @@ def create_regions(world: "Sly2World"):
 
       region_name = "/".join(regions)
 
-      # If it is in only 1 episode or a hybrid region that's already made, then add that location to that region.
+      # If it is in only 1 episode or a hybrid region that's already made,
+      # then add that location to that region.
       if len(regions) == 1 or region_name in hybrid_region_names:
         world.get_region(region_name).add_locations(
           {location_name: location_dict[location_name].code}
         )
 
-      # If it is in multiple episodes & that hybrid region has not been made yet, then create that hybrid region, add
-      # the location to it, and connect that hybrid region to each of the episodes that this loot can be found in.
+      # If it is in multiple episodes & that hybrid region has not been made
+      # yet, then create that hybrid region, add the location to it, and
+      # connect that hybrid region to each of the episodes that this loot can
+      # be found in.
       else:
         region = Region(region_name, world.player, world.multiworld)
-        region.add_locations({location_name: location_dict[location_name].code})
+        region.add_locations(
+          {location_name: location_dict[location_name].code}
+        )
 
-        # Connect that hybrid region to each of the episodes' regions that this loot can be found in
+        # Connect that hybrid region to each of the episodes' regions that
+        # this loot can be found in
         world.multiworld.regions.append(region)
         for r in regions:
           other_region = world.get_region(r)

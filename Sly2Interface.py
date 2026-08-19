@@ -1,5 +1,5 @@
 from enum import IntEnum
-from typing import Optional, NamedTuple, Tuple, Dict, List
+from typing import Optional, NamedTuple, Tuple, Dict, List, Iterator
 from math import ceil
 import struct
 import sys
@@ -8,7 +8,15 @@ from time import time
 import traceback
 
 from .pcsx2_interface.pine import Pine
-from .data.Constants import MENU_RETURN_DATA, CAIRO_RETURN_DATA, ADDRESSES, POWERUP_TEXT, HUB_MAPS, LOOT_IDS, MEGA_JUMP_GADGET_ID, MEGA_JUMP_UNLOAD_CALL
+from .data.Constants import (
+  MENU_RETURN_DATA,
+  ADDRESSES,
+  POWERUP_TEXT,
+  HUB_MAPS,
+  LOOT_IDS,
+  MEGA_JUMP_GADGET_ID,
+  MEGA_JUMP_UNLOAD_CALL
+)
 
 class Sly2Episode(IntEnum):
   Title_Screen = 0
@@ -90,7 +98,7 @@ class GameInterface():
   current_game: Optional[str] = None
   addresses: Dict = {}
 
-  def __init__(self, logger) -> None:
+  def __init__(self, logger: Logger) -> None:
     self.logger = logger
     self.reported_bad_writes = set()
     self.refused_patches = set()
@@ -104,7 +112,9 @@ class GameInterface():
   def set_write_trace(self, enabled: bool) -> None:
     self.write_logger.setLevel(DEBUG if enabled else CRITICAL)
 
-  def _log_write(self, kind: str, address, value) -> None:
+  def _log_write(
+    self, kind: str, address: int | list[int], value: object
+  ) -> None:
     if not self.write_logger.isEnabledFor(DEBUG):
       return
     # sys._getframe(2) is the method that issued the write, past this
@@ -129,27 +139,27 @@ class GameInterface():
       )
     return False
 
-  def _read8(self, address: int):
+  def _read8(self, address: int) -> int:
     if not in_ee_ram(address, 1):
       return 0
     return self.pcsx2_interface.read_int8(address)
 
-  def _read16(self, address: int):
+  def _read16(self, address: int) -> int:
     if not in_ee_ram(address, 2):
       return 0
     return self.pcsx2_interface.read_int16(address)
 
-  def _read32(self, address: int):
+  def _read32(self, address: int) -> int:
     if not in_ee_ram(address):
       return 0
     return self.pcsx2_interface.read_int32(address)
 
-  def _read_bytes(self, address: int, n: int):
+  def _read_bytes(self, address: int, n: int) -> bytes:
     if not in_ee_ram(address, n):
       return bytes(n)
     return self.pcsx2_interface.read_bytes(address, n)
 
-  def _read_float(self, address: int):
+  def _read_float(self, address: int) -> float:
     return struct.unpack("f", self._read_bytes(address, 4))[0]
 
   def _batch_read8(self, addresses: list[int]) -> list[int]:
@@ -161,27 +171,27 @@ class GameInterface():
   def _batch_read32(self, addresses: list[int]) -> list[int]:
     return self.pcsx2_interface.batch_read_int32(addresses)
 
-  def _write8(self, address: int, value: int):
+  def _write8(self, address: int, value: int) -> None:
     if self._writable(address, 1):
       self._log_write("w8", address, value)
       self.pcsx2_interface.write_int8(address, value)
 
-  def _write16(self, address: int, value: int):
+  def _write16(self, address: int, value: int) -> None:
     if self._writable(address, 2):
       self._log_write("w16", address, value)
       self.pcsx2_interface.write_int16(address, value)
 
-  def _write32(self, address: int, value: int):
+  def _write32(self, address: int, value: int) -> None:
     if self._writable(address):
       self._log_write("w32", address, value)
       self.pcsx2_interface.write_int32(address, value)
 
-  def _write_bytes(self, address: int, value: bytes):
+  def _write_bytes(self, address: int, value: bytes) -> None:
     if self._writable(address, len(value)):
       self._log_write("wbytes", address, value.hex())
       self.pcsx2_interface.write_bytes(address, value)
 
-  def _write_float(self, address: int, value: float):
+  def _write_float(self, address: int, value: float) -> None:
     if self._writable(address):
       self._log_write("wfloat", address, value)
       self.pcsx2_interface.write_float(address, value)
@@ -222,7 +232,7 @@ class GameInterface():
               [v for _, v in valid])
       self.pcsx2_interface.batch_write_float(valid)
 
-  def connect_to_game(self):
+  def connect_to_game(self) -> None:
     """
     Initializes the connection to PCSX2 and verifies it is connected to the
     right game
@@ -234,7 +244,8 @@ class GameInterface():
       self.logger.info("Connected to PCSX2 Emulator")
     try:
       game_id = self.pcsx2_interface.get_game_id()
-      # The first read of the address will be null if the client is faster than the emulator
+      # The first read of the address will be null if the client is faster
+      # than the emulator
       self.current_game = None
       if game_id == "":
         self.logger.debug("No game connected")
@@ -243,7 +254,11 @@ class GameInterface():
       if game_id in ADDRESSES.keys():
         self.current_game = game_id
         self.addresses = ADDRESSES[game_id]
-      if self.current_game is None and self.game_id_error != game_id and game_id != b'\x00\x00\x00\x00\x00\x00':
+      if (
+        self.current_game is None and
+        self.game_id_error != game_id and
+        game_id != b'\x00\x00\x00\x00\x00\x00'
+      ):
         self.logger.warning(
           f"Connected to the wrong game ({game_id})")
         self.game_id_error = game_id
@@ -252,7 +267,7 @@ class GameInterface():
     except ConnectionError:
       self.logger.debug(traceback.format_exc())
 
-  def disconnect_from_game(self):
+  def disconnect_from_game(self) -> None:
     self.pcsx2_interface.disconnect()
     self.current_game = None
     self.logger.info("Disconnected from PCSX2 Emulator")
@@ -265,7 +280,7 @@ class GameInterface():
       return False
 
 class Sly2Interface(GameInterface):
-  def __init__(self, logger) -> None:
+  def __init__(self, logger: Logger) -> None:
     super().__init__(logger)
     self.last_skip = time()
 
@@ -280,13 +295,13 @@ class Sly2Interface(GameInterface):
 
     return pointer
 
-  def _read_job_status(self, address: int):
+  def _read_job_status(self, address: int) -> int:
     return self._read32(self._get_job_address(address)+0x54)
 
-  def _write_job_status(self, address: int, status: int):
+  def _write_job_status(self, address: int, status: int) -> None:
     self._write32(self._get_job_address(address)+0x54, status)
 
-  def _read_task_mission(self, address: int, status: int):
+  def _read_task_mission(self, address: int, status: int) -> None:
     self._write32(self._get_job_address(address)+0x54, status)
 
   def _get_task_parents(self, task: int) -> List[int]:
@@ -295,14 +310,14 @@ class Sly2Interface(GameInterface):
     parents_list = self._read32(address+0x98)
     return [self._read32(parents_list+4*i) for i in range(parents_n)]
 
-  def _task_parents_finished(self, task: int):
+  def _task_parents_finished(self, task: int) -> bool:
     parents = self._get_task_parents(task)
     return all([
       self._read32(p+0x54) == 3
       for p in parents
     ])
 
-  def _reload(self, reload_data: bytes):
+  def _reload(self, reload_data: bytes) -> None:
     self._write_bytes(
       self.addresses["reload values"],
       reload_data
@@ -329,9 +344,10 @@ class Sly2Interface(GameInterface):
     # Collect health addresses to check based on character/episode/map
     health_checks = []
 
+    iron_horse = Sly2Episode.He_Who_Tames_the_Iron_Horse
     if active_character == 7:
       health_checks.append(self.addresses["health"]["Sly"])
-      if episode == Sly2Episode.He_Who_Tames_the_Iron_Horse and current_map == 30:
+      if episode == iron_horse and current_map == 30:
         health_checks.append(self.addresses["health"]["ChopperCanada2"])
       elif episode == Sly2Episode.Anatomy_for_Disaster and current_map == 38:
         health_checks.append(self.addresses["health"]["ChopperCarmelita"])
@@ -341,7 +357,7 @@ class Sly2Interface(GameInterface):
         health_checks.append(self.addresses["health"]["ChopperPrague"])
       elif episode == Sly2Episode.A_Tangled_Web and current_map == 17:
         health_checks.append(self.addresses["health"]["Blimp"])
-      elif episode == Sly2Episode.He_Who_Tames_the_Iron_Horse and current_map == 29:
+      elif episode == iron_horse and current_map == 29:
         health_checks.append(self.addresses["health"]["ChopperCanada1"])
       elif episode == Sly2Episode.A_Starry_Eyed_Encounter and current_map == 8:
         health_checks.append(self.addresses["health"]["ChopperIndia"])
@@ -354,7 +370,10 @@ class Sly2Interface(GameInterface):
         health_checks.append(self.addresses["health"]["TurretIndia"])
       elif episode == Sly2Episode.A_Tangled_Web and current_map == 17:
         health_checks.append(self.addresses["health"]["Tank"])
-      elif episode == Sly2Episode.Menace_from_the_North_Eh and current_map == 33:
+      elif (
+        episode == Sly2Episode.Menace_from_the_North_Eh and
+        current_map == 33
+      ):
         health_checks.append(self.addresses["health"]["RCTank"])
 
     # Check if hackpack health needs to be checked
@@ -374,13 +393,14 @@ class Sly2Interface(GameInterface):
 
     health_values = self._batch_read32(health_checks)
 
-    # If hackpack needed, the last value is hackpack pointer, need to read its health
+    # If hackpack needed, the last value is hackpack pointer, need to read
+    # its health
     if needs_hackpack:
       hackpack_pointer = health_values[-1]
       hackpack_health = self._read32(hackpack_pointer + 0x184)
       if hackpack_health == 0:
         return False
-      health_values = health_values[:-1]  # Remove hackpack pointer from health checks
+      health_values = health_values[:-1]
 
     # All health values must be non-zero
     return all(health > 0 for health in health_values)
@@ -561,7 +581,9 @@ class Sly2Interface(GameInterface):
   # Loot & Treasure
   # =====================================================
 
-  def set_loot_chance(self, episode: Sly2Episode, loot_chances: tuple[float, float]):
+  def set_loot_chance(
+    self, episode: Sly2Episode, loot_chances: tuple[float, float]
+  ) -> None:
     addresses = self.addresses["loot chance"][episode.value-1]
     # Batch write both loot chances
     self._batch_write_float([
@@ -569,7 +591,9 @@ class Sly2Interface(GameInterface):
       (addresses[1], loot_chances[1])
     ])
 
-  def set_loot_table_odds(self, episode: Sly2Episode, loot_table: tuple[tuple[int,int,int,int,int,int],tuple[int,int,int,int,int,int]]):
+  def set_loot_table_odds(
+    self, episode: Sly2Episode, loot_table: tuple[tuple[int, ...], ...]
+  ) -> None:
     addresses = self.addresses["loot table odds"][episode.value-1]
     # Batch write all loot table odds at once
     write_operations = []
@@ -578,7 +602,9 @@ class Sly2Interface(GameInterface):
         write_operations.append((addresses[i][j], chance))
     self._batch_write32(write_operations)
 
-  def set_loot_table(self, episode: Sly2Episode, loot_table: dict[str, list[tuple[int,bool,int]]]):
+  def set_loot_table(
+    self, episode: Sly2Episode, loot_table: dict[str, list[tuple[int,bool,int]]]
+  ) -> None:
     addresses = self.addresses["loot table"][episode.value-1]
 
     # Batch write all loot table values
@@ -629,7 +655,7 @@ class Sly2Interface(GameInterface):
   # Powerup/ThiefNet
   # =====================================================
 
-  def load_powerups(self, powerups: PowerUps):
+  def load_powerups(self, powerups: PowerUps) -> None:
     booleans = list(powerups)
     byte_list = [
       [False]*7+[booleans[0]],
@@ -646,7 +672,7 @@ class Sly2Interface(GameInterface):
 
     self._write_bytes(self.addresses["gadgets"], data)
 
-  def read_powerups(self):
+  def read_powerups(self) -> PowerUps:
     data = self._read_bytes(self.addresses["gadgets"], 6)
     bits = [
       bool(int(b))
@@ -728,7 +754,7 @@ class Sly2Interface(GameInterface):
   def current_infobox(self) -> int:
     return self._read32(self.addresses["infobox string"])
 
-  def set_infobox(self, text: str):
+  def set_infobox(self, text: str) -> None:
     ep = self.get_current_episode()
     if ep == 0 or self.in_safehouse():
       return
@@ -743,7 +769,7 @@ class Sly2Interface(GameInterface):
     # For some reason this has to be done sometimes?
     self._write32(self.addresses["infobox scrolling"],1)
 
-  def disable_infobox(self):
+  def disable_infobox(self) -> None:
     infobox_pointer = self._read32(self.addresses["infobox"])
     if self._read32(infobox_pointer+0x64) != 1:
       self._write32(infobox_pointer+0x64,2)
@@ -753,7 +779,7 @@ class Sly2Interface(GameInterface):
   # Coins/Items Methods
   # =====================================================
 
-  def add_coins(self, to_add: int):
+  def add_coins(self, to_add: int) -> None:
     current_amount = self._read32(self.addresses["coins"])
     new_amount = max(current_amount + to_add,0)
     self._write32(self.addresses["coins"],new_amount)
@@ -778,7 +804,7 @@ class Sly2Interface(GameInterface):
 
     return self._read32(active_character + 0xe2c)
 
-  def kill_player(self):
+  def kill_player(self) -> None:
     if self.in_safehouse() or self.get_current_episode() == 0:
       return
 
@@ -797,7 +823,7 @@ class Sly2Interface(GameInterface):
     pointer = self._read32(self.addresses["active character pointer"])
     return pointer if in_ee_ram(pointer) else 0
 
-  def _walk_guards(self):
+  def _walk_guards(self) -> Iterator[int]:
     """
     Yields every currently spawned guard.
 
@@ -855,7 +881,9 @@ class Sly2Interface(GameInterface):
     values = self._batch_read32([base + 4*i for i in range(3)])
     return [v - 0x1_0000_0000 if v >= 0x8000_0000 else v for v in values]
 
-  def set_sly_binding(self, slot: int, gadget: int = MEGA_JUMP_GADGET_ID) -> None:
+  def set_sly_binding(
+    self, slot: int, gadget: int = MEGA_JUMP_GADGET_ID
+  ) -> None:
     operations = [(self.addresses["sly bindings"] + 4*slot, gadget)]
     sly = self._read32(self.addresses["sly pointer"])
     if in_ee_ram(sly):
@@ -930,7 +958,8 @@ class Sly2Interface(GameInterface):
     # via `addiu $a1, $zero, 0x800`; zeroing the mask makes Start a no-op
     # there while Select (menu) keeps working.
     enabled_mask, disabled_mask = 0x24050800, 0x24050000
+    address = self.addresses["title start mask"]
     if enabled:
-      self.safe_patch(self.addresses["title start mask"], enabled_mask, disabled_mask)
+      self.safe_patch(address, enabled_mask, disabled_mask)
     else:
-      self.safe_patch(self.addresses["title start mask"], disabled_mask, enabled_mask)
+      self.safe_patch(address, disabled_mask, enabled_mask)

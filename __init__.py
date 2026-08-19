@@ -11,7 +11,6 @@ from worlds.LauncherComponents import (
   Component,
   Type,
   components,
-  launch_subprocess,
   launch,
   icon_paths,
 )
@@ -35,13 +34,18 @@ from .Rules import set_rules
 
 
 ## Client stuff
-def run_client():
+def run_client() -> None:
   from .Sly2Client import launch_client
   launch(launch_client, name="Sly2Client")
 
 icon_paths["sly2_ico"] = f"ap:{__name__}/icon.png"
 components.append(
-  Component("Sly 2 Client", func=run_client, component_type=Type.CLIENT, icon="sly2_ico")
+  Component(
+    "Sly 2 Client",
+    func=run_client,
+    component_type=Type.CLIENT,
+    icon="sly2_ico"
+  )
 )
 
 
@@ -145,7 +149,7 @@ class Sly2World(World):
     logging.warning(f"{self.player_name}: {error_text} {coercion_text}")
     return True
 
-  def validate_options(self, opt: Sly2Options):
+  def validate_options(self, opt: Sly2Options) -> None:
     # This part is in order to get a better, more representative sample
     # from the fuzzer. Any yaml with a bunch of random values _should_ be
     # called with permissive_yaml on.
@@ -182,16 +186,21 @@ class Sly2World(World):
 
       if self._coerce_or_raise(
         opt,
-        bool(conditions.get("clockwerk_hunt")) and opt.required_keys_goal > opt.keys_in_pool,
-        f"The \"clockwerk_hunt\" Pick and Mix condition requires {opt.required_keys_goal} keys but only {opt.keys_in_pool} keys in pool.",
+        bool(conditions.get("clockwerk_hunt")) and
+        opt.required_keys_goal > opt.keys_in_pool,
+        "The \"clockwerk_hunt\" Pick and Mix condition requires "
+        f"{opt.required_keys_goal} keys but only {opt.keys_in_pool} keys in "
+        "pool.",
         "Lowering the requirement."
       ):
         opt.required_keys_goal.value = opt.keys_in_pool.value
 
     if self._coerce_or_raise(
       opt,
-      opt.episode_8_keys.value != 4 and opt.required_keys_episode_8 > opt.keys_in_pool,
-      f"Episode 8 requires {opt.required_keys_episode_8} keys but only {opt.keys_in_pool} keys in pool.",
+      opt.episode_8_keys.value != 4 and
+      opt.required_keys_episode_8 > opt.keys_in_pool,
+      f"Episode 8 requires {opt.required_keys_episode_8} keys but only "
+      f"{opt.keys_in_pool} keys in pool.",
       "Lowering the requirement.",
       warn_only="Proceeding as written; Episode 8 cannot be unlocked."
     ):
@@ -200,7 +209,8 @@ class Sly2World(World):
     if self._coerce_or_raise(
       opt,
       opt.goal == 6 and opt.required_keys_goal > opt.keys_in_pool,
-      f"Clockwerk Hunt goal requires {opt.required_keys_goal} keys but only {opt.keys_in_pool} keys in pool.",
+      f"Clockwerk Hunt goal requires {opt.required_keys_goal} keys but only "
+      f"{opt.keys_in_pool} keys in pool.",
       "Lowering the requirement."
     ):
       opt.required_keys_goal.value = opt.keys_in_pool.value
@@ -209,15 +219,21 @@ class Sly2World(World):
       opt,
       opt.episode_8_keys.value in [0,2,3] and
       opt.starting_episode == StartingEpisode.option_Anatomy_for_Disaster,
-      f"Incompatible options: Episode 8 Keys: ({opt.episode_8_keys}) and Starting Episode: ({opt.starting_episode}).",
+      f"Incompatible options: Episode 8 Keys: ({opt.episode_8_keys}) and "
+      f"Starting Episode: ({opt.starting_episode}).",
       "Changing Episode 8 Keys to \"Last Section\"."
     ):
       opt.episode_8_keys.value = 1
 
     if self._coerce_or_raise(
       opt,
-      (opt.bottle_item_bundle_size == 0 and opt.bottle_location_bundle_size != 0) or
-      (opt.bottle_item_bundle_size != 0 and opt.bottle_location_bundle_size == 0),
+      (
+        opt.bottle_item_bundle_size == 0 and
+        opt.bottle_location_bundle_size != 0
+      ) or (
+        opt.bottle_item_bundle_size != 0 and
+        opt.bottle_location_bundle_size == 0
+      ),
       "Bottles need both a bottle item bundle size and a bottle location "
       "bundle size. One is set but the other is 0. To include bottles, set "
       "both bottle_item_bundle_size and bottle_location_bundle_size to at "
@@ -230,7 +246,8 @@ class Sly2World(World):
     if self._coerce_or_raise(
       opt,
       opt.coins_maximum < opt.coins_minimum,
-      f"Coins minimum cannot be larger than maximum (min: {opt.coins_minimum}, max: {opt.coins_maximum}).",
+      f"Coins minimum cannot be larger than maximum "
+      f"(min: {opt.coins_minimum}, max: {opt.coins_maximum}).",
       "Swapping values."
     ):
       opt.coins_minimum.value, opt.coins_maximum.value = (
@@ -240,7 +257,8 @@ class Sly2World(World):
     if self._coerce_or_raise(
       opt,
       opt.thiefnet_maximum < opt.thiefnet_minimum,
-      f"Thiefnet minimum cannot be larger than maximum (min: {opt.thiefnet_minimum}, max: {opt.thiefnet_maximum}).",
+      f"Thiefnet minimum cannot be larger than maximum "
+      f"(min: {opt.thiefnet_minimum}, max: {opt.thiefnet_maximum}).",
       "Swapping values."
     ):
       opt.thiefnet_minimum.value, opt.thiefnet_maximum.value = (
@@ -250,7 +268,8 @@ class Sly2World(World):
     if self._coerce_or_raise(
       opt,
       opt.loot_value_maximum < opt.loot_value_minimum,
-      f"Loot value minimum cannot be larger than maximum (min: {opt.loot_value_minimum}, max: {opt.loot_value_maximum}).",
+      f"Loot value minimum cannot be larger than maximum "
+      f"(min: {opt.loot_value_minimum}, max: {opt.loot_value_maximum}).",
       "Swapping values."
     ):
       opt.loot_value_minimum.value, opt.loot_value_maximum.value = (
@@ -260,7 +279,9 @@ class Sly2World(World):
     if self._coerce_or_raise(
       opt,
       opt.treasure_value_maximum < opt.treasure_value_minimum,
-      f"Treasure value minimum cannot be larger than maximum (min: {opt.treasure_value_minimum}, max: {opt.treasure_value_maximum}).",
+      "Treasure value minimum cannot be larger than maximum "
+      f"(min: {opt.treasure_value_minimum}, "
+      f"max: {opt.treasure_value_maximum}).",
       "Swapping values."
     ):
       opt.treasure_value_minimum.value, opt.treasure_value_maximum.value = (
@@ -305,11 +326,13 @@ class Sly2World(World):
     if n_items > n_locations:
       if not opt.permissive_yaml:
         raise OptionError(
-          f"More items than locations ({n_items} items; {n_locations} locations)"
+          f"More items than locations ({n_items} items; "
+          f"{n_locations} locations)"
         )
       logging.warning(
         f"{self.player_name}: " +
-        f"More items than locations ({n_items} items; {n_locations} locations)\n"+
+        f"More items than locations ({n_items} items; "
+        f"{n_locations} locations)\n" +
         "Adjusting Clockwerk part amounts."
       )
       if using_parts:
@@ -325,7 +348,8 @@ class Sly2World(World):
 
       if n_items > n_locations and opt.bottle_item_bundle_size.value != 0:
         bottles = ceil(30/opt.bottle_item_bundle_size.value)*8
-        for bundle in list(range(opt.bottle_item_bundle_size.value + 1, 31)) + [0]:
+        bundle_sizes = list(range(opt.bottle_item_bundle_size.value + 1, 31))
+        for bundle in bundle_sizes + [0]:
           new_bottles = ceil(30/bundle)*8 if bundle else 0
           if n_items - bottles + new_bottles <= n_locations:
             logging.warning(
@@ -460,42 +484,45 @@ class Sly2World(World):
         self.loot_table = slot_data["loot_table"]
         self.loot_prices = slot_data["loot_prices"]
         self.treasure_prices = slot_data["treasure_prices"]
-        self.options.starting_episode.value = slot_data["starting_episode"]
-        self.options.permissive_yaml.value = slot_data["permissive_yaml"]
-        self.options.goal.value = slot_data["goal"]
-        self.options.pick_and_mix.value = slot_data["pick_and_mix"]
-        self.options.keys_in_pool.value = slot_data["keys_in_pool"]
-        self.options.episode_8_keys.value = slot_data["episode_8_keys"]
-        self.options.required_keys_episode_8.value = slot_data["required_keys_episode_8"]
-        self.options.required_keys_goal.value = slot_data["required_keys_goal"]
-        self.options.include_tom.value = slot_data["include_tom"]
-        self.options.include_mega_jump.value = slot_data["include_mega_jump"]
-        self.options.include_time_rush.value = slot_data["include_time_rush"]
-        self.options.coins_minimum.value = slot_data["coins_minimum"]
-        self.options.coins_maximum.value = slot_data["coins_maximum"]
-        self.options.thiefnet_minimum.value = slot_data["thiefnet_minimum"]
-        self.options.thiefnet_maximum.value = slot_data["thiefnet_maximum"]
-        self.options.include_vaults.value = slot_data["include_vaults"]
-        self.options.include_pickpocketing.value = slot_data["include_pickpocketing"]
-        self.options.tasksanity.value = slot_data["tasksanity"]
-        self.options.small_guard_loot_chance.value = slot_data["small_guard_loot_chance"]
-        self.options.large_guard_loot_chance.value = slot_data["large_guard_loot_chance"]
-        self.options.loot_table_distribution.value = slot_data["loot_table_distribution"]
-        self.options.randomize_loot.value = slot_data["randomize_loot"]
-        self.options.dynamic_loot_tables.value = slot_data["dynamic_loot_tables"]
-        self.options.loot_values.value = slot_data["loot_values"]
-        self.options.loot_value_minimum.value = slot_data["loot_value_minimum"]
-        self.options.loot_value_maximum.value = slot_data["loot_value_maximum"]
-        self.options.treasure_values.value = slot_data["treasure_values"]
-        self.options.treasure_value_minimum.value = slot_data["treasure_value_minimum"]
-        self.options.treasure_value_maximum.value = slot_data["treasure_value_maximum"]
-        self.options.bottle_item_bundle_size.value = slot_data["bottle_item_bundle_size"]
-        self.options.bottle_location_bundle_size.value = slot_data["bottle_location_bundle_size"]
-        self.options.bottlesanity.value = slot_data["bottlesanity"]
-        self.options.scout_thiefnet.value = slot_data["scout_thiefnet"]
-        self.options.trap_chance.value = slot_data["trap_chance"]
-        self.options.trap_weights.value = slot_data["trap_weights"]
-        self.options.ring_link.value = slot_data["ring_link"]
+        for name in [
+          "starting_episode",
+          "permissive_yaml",
+          "goal",
+          "pick_and_mix",
+          "keys_in_pool",
+          "episode_8_keys",
+          "required_keys_episode_8",
+          "required_keys_goal",
+          "include_tom",
+          "include_mega_jump",
+          "include_time_rush",
+          "coins_minimum",
+          "coins_maximum",
+          "thiefnet_minimum",
+          "thiefnet_maximum",
+          "include_vaults",
+          "include_pickpocketing",
+          "tasksanity",
+          "small_guard_loot_chance",
+          "large_guard_loot_chance",
+          "loot_table_distribution",
+          "randomize_loot",
+          "dynamic_loot_tables",
+          "loot_values",
+          "loot_value_minimum",
+          "loot_value_maximum",
+          "treasure_values",
+          "treasure_value_minimum",
+          "treasure_value_maximum",
+          "bottle_item_bundle_size",
+          "bottle_location_bundle_size",
+          "bottlesanity",
+          "scout_thiefnet",
+          "trap_chance",
+          "trap_weights",
+          "ring_link"
+        ]:
+          getattr(self.options, name).value = slot_data[name]
       return
 
     self.validate_options(self.options)
@@ -542,7 +569,7 @@ class Sly2World(World):
 
     return Sly2Item(name, item.classification, item.code, self.player)
 
-  def create_event(self, name: str):
+  def create_event(self, name: str) -> Sly2Item:
     return Sly2Item(name, ItemClassification.progression, None, self.player)
 
   def create_items(self) -> None:
@@ -624,8 +651,11 @@ class Sly2World(World):
             if (i+1,bool(j),k) in loot_locations:
               loot.append(loot_name)
               break
-        loot_odds = PICKPOCKET_LOOT_TABLE_CHANCES[self.options.loot_table_distribution-1]
-        loot_text = ", ".join(f"{l} ({loot_odds[i]}%)" for i, l in enumerate(loot))
+        distribution = self.options.loot_table_distribution-1
+        loot_odds = PICKPOCKET_LOOT_TABLE_CHANCES[distribution]
+        loot_text = ", ".join(
+          f"{name} ({loot_odds[i]}%)" for i, name in enumerate(loot)
+        )
         spoiler_text += f"\n- {enemy}: {loot_text}"
 
     spoiler_text += "\n======= Sly 2 Sell Values ========"

@@ -63,7 +63,7 @@ def gen_clockwerk(world: "Sly2World") -> list[Item]:
   else:
     num_keys = 0
 
-  def get_parts():
+  def get_parts() -> list[str]:
     distinct = list(CLOCKWERK_CORE)
     if num_keys <= len(distinct):
       return world.random.sample(distinct, num_keys)
@@ -91,7 +91,7 @@ def gen_clockwerk(world: "Sly2World") -> list[Item]:
     get_parts()
   ]
 
-def gen_bottles(world: "Sly2World"):
+def gen_bottles(world: "Sly2World") -> list[Item]:
   """Generate the bottle items for the item pool"""
   if world.options.bottle_item_bundle_size == 0:
     return []
@@ -142,7 +142,10 @@ def gen_pool(world: "Sly2World") -> list[Item]:
   remaining = len(unfilled_locations)-len(item_pool)
   if world.options.goal.value < 5:
     remaining -= 1
-  assert remaining >= 0, f"There are more items than locations ({len(item_pool)} items; {len(unfilled_locations)} locations)"
+  assert remaining >= 0, (
+    f"There are more items than locations ({len(item_pool)} items; "
+    f"{len(unfilled_locations)} locations)"
+  )
 
   # Replace a portion of the filler with traps. gen_traps returns nothing if
   # no trap types are enabled, so those slots fall back to filler.

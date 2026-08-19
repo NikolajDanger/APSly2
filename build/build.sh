@@ -17,7 +17,7 @@ set -eo pipefail
 shopt -s globstar
 
 CWD="$(dirname $(realpath $0))"
-REQS=("zip" "rsync" "pip")
+REQS=("zip" "rsync" "pip" "ruff")
 SUPPORTED_PLATFORMS=("win_amd64" "manylinux_2_17_x86_64")
 PYTHON_VERSIONS=("3.10" "3.11" "3.12")
 
@@ -26,7 +26,7 @@ PYTHON_VERSIONS=("3.10" "3.11" "3.12")
 ##
 function pre_flight() {
     local bad="0"
-    for r in ${reqs[@]}; do
+    for r in ${REQS[@]}; do
         if ! command -v $r > /dev/null; then
             echo "!=> Unable to locate the '${r}' utility in \$PATH. Make sure it is installed."
             bad="1"
@@ -99,6 +99,9 @@ function main() {
         local project="$(realpath ${CWD}/..)"
         local bundle="${bundle_base}-${tag}"
         local destdir="${target_path}/${bundle}"
+
+        echo "=> Linting"
+        ruff check "${project}"
 
         mk_apworld "${project}" "${destdir}"
         cp_data "${project}" "${destdir}"

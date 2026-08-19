@@ -1,4 +1,5 @@
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
+import argparse
 from collections import deque
 from time import time
 import asyncio
@@ -10,14 +11,20 @@ from CommonClient import get_base_parser, server_loop, gui_enabled
 import NetUtils
 import Utils
 
-# Child of CommonClient's "Client" logger so records propagate to the UI log
-# pane, which only has handlers on "Client" itself.
-logger = logging.getLogger("Client.Sly2")
-
 from .data import Locations, Items
 from .data.Constants import EPISODES, TASKS, ENEMIES, episode_key
 from .Sly2Interface import Sly2Interface, Sly2Episode, PowerUps
-from .Callbacks import init, update, compute_available_episodes, episode_loot, loot_odds_row
+from .Callbacks import (
+  init,
+  update,
+  compute_available_episodes,
+  episode_loot,
+  loot_odds_row
+)
+
+# Child of CommonClient's "Client" logger so records propagate to the UI log
+# pane, which only has handlers on "Client" itself.
+logger = logging.getLogger("Client.Sly2")
 
 # Load Universal Tracker
 tracker_loaded: bool = False
@@ -34,7 +41,7 @@ except ImportError:
 
 
 class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
-  def _cmd_deathlink(self):
+  def _cmd_deathlink(self) -> None:
     """Toggle deathlink from client. Overrides default setting."""
     if isinstance(self.ctx, Sly2Context):
       self.ctx.death_link_enabled = not self.ctx.death_link_enabled
@@ -44,11 +51,12 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
         ),
         name="Update Deathlink"
       )
-      message = f"Deathlink {'enabled' if self.ctx.death_link_enabled else 'disabled'}"
+      state = 'enabled' if self.ctx.death_link_enabled else 'disabled'
+      message = f"Deathlink {state}"
       logger.info(message)
       self.ctx.notification(message)
 
-  def _cmd_trace(self):
+  def _cmd_trace(self) -> None:
     """Toggle logging every memory write to the log file, for diagnosing
     crashes. Off by default; produces a lot of output when enabled."""
     if isinstance(self.ctx, Sly2Context):
@@ -59,7 +67,7 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
       logger.info(message)
       self.ctx.notification(message)
 
-  def _cmd_ringlink(self):
+  def _cmd_ringlink(self) -> None:
     """Toggle ring link from client. Overrides default setting."""
     if isinstance(self.ctx, Sly2Context):
       self.ctx.ring_link_enabled = not self.ctx.ring_link_enabled
@@ -69,26 +77,27 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
         ),
         name="Update Ringlink"
       )
-      message = f"Ringlink {'enabled' if self.ctx.ring_link_enabled else 'disabled'}"
+      state = 'enabled' if self.ctx.ring_link_enabled else 'disabled'
+      message = f"Ringlink {state}"
       logger.info(message)
       self.ctx.notification(message)
 
-  def _cmd_notification(self, message: str):
+  def _cmd_notification(self, message: str) -> None:
     """Send a message to the game interface."""
     if isinstance(self.ctx, Sly2Context):
       self.ctx.notification(message)
 
-  def _cmd_kill(self):
+  def _cmd_kill(self) -> None:
     """Kill the game."""
     if isinstance(self.ctx, Sly2Context):
       self.ctx.game_interface.kill_player()
 
-  def _cmd_menu(self):
+  def _cmd_menu(self) -> None:
     """Reload to the episode menu"""
     if isinstance(self.ctx, Sly2Context):
       self.ctx.game_interface.to_episode_menu()
 
-  def _cmd_clockwerk_parts(self):
+  def _cmd_clockwerk_parts(self) -> None:
     """Show the current amount of Clockwerk parts"""
     if isinstance(self.ctx, Sly2Context):
       clockwerk_parts = [
@@ -100,12 +109,18 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
         return
 
       if self.ctx.slot_data["episode_8_keys"] != 4:
-        logger.info(f"Clockwerk parts needed to unlock episode 8: {self.ctx.slot_data['required_keys_episode_8']}")
+        needed = self.ctx.slot_data['required_keys_episode_8']
+        logger.info(f"Clockwerk parts needed to unlock episode 8: {needed}")
 
       if self.ctx.slot_data["goal"] == 6:
-        logger.info(f"Clockwerk parts needed to complete Clockwerk Hunt goal: {self.ctx.slot_data['required_keys_goal']}")
+        needed = self.ctx.slot_data['required_keys_goal']
+        logger.info(
+          f"Clockwerk parts needed to complete Clockwerk Hunt goal: {needed}"
+        )
 
-  def _episode_loot(self, loot_table, i: int, j: int) -> list:
+  def _episode_loot(
+    self, loot_table: dict[str, list], i: int, j: int
+  ) -> list[str]:
     return episode_loot(loot_table, i, j)
 
   def _print_json_line(self, parts: list) -> None:
@@ -114,7 +129,7 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
     else:
       logger.info(self.ctx.jsontotextparser(parts))
 
-  def _cmd_sell_values(self):
+  def _cmd_sell_values(self) -> None:
     """Get the sell value of each piece of loot and each treasure"""
     if self.ctx.slot_data is None:
       return
@@ -129,7 +144,7 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
 
     logger.info(sell_value_text)
 
-  def _cmd_loot_tables(self):
+  def _cmd_loot_tables(self) -> None:
     """Get the loot tables for each episode"""
     if self.ctx.slot_data is None:
       return
@@ -146,7 +161,7 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
           loot = self._episode_loot(loot_table, i, j)
           loot_odds = loot_odds_row(self.ctx, i, j)
           loot_text = ", ".join(
-            f"{l} ({loot_odds[k]}%)" for k, l in enumerate(loot)
+            f"{name} ({loot_odds[k]}%)" for k, name in enumerate(loot)
           )
           loot_table_text += f"\n- {enemy}: {loot_text}"
       logger.info(loot_table_text)
@@ -172,17 +187,17 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
         loot = self._episode_loot(loot_table, i, j)
         loot_odds = loot_odds_row(self.ctx, i, j)
         parts = [{"text": f"- {enemy}: "}]
-        for k, l in enumerate(loot):
+        for k, name in enumerate(loot):
           if k:
             parts.append({"text": ", "})
           parts.append({
             "type": "color",
-            "color": loot_color(l, accessible),
-            "text": f"{l} ({loot_odds[k]}%)",
+            "color": loot_color(name, accessible),
+            "text": f"{name} ({loot_odds[k]}%)",
           })
         self._print_json_line(parts)
 
-  def _cmd_goal(self):
+  def _cmd_goal(self) -> None:
     """Show what the goal is set to"""
     if isinstance(self.ctx, Sly2Context):
       if self.ctx.slot_data is None:
@@ -216,7 +231,10 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
       elif goal_idx == 6:
         goal_text = "Goal: Clockwerk Hunt"
         needed = self.ctx.slot_data['required_keys_goal']
-        goal_text += f"\nProgress: {self.ctx.clockwerk_parts_count}/{needed} Clockwerk Parts"
+        goal_text += (
+          f"\nProgress: {self.ctx.clockwerk_parts_count}/{needed} "
+          "Clockwerk Parts"
+        )
       elif goal_idx == 7:
         goal_text = "Goal: All Vaults"
         if self.ctx.game_interface.get_connection_state():
@@ -237,7 +255,10 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
             goal_text += f"\n{ep}: {'X' if done else ''}"
         if conditions.get("clockwerk_hunt"):
           needed = self.ctx.slot_data["required_keys_goal"]
-          goal_text += f"\nClockwerk Hunt: {self.ctx.clockwerk_parts_count}/{needed} Clockwerk Parts"
+          goal_text += (
+            f"\nClockwerk Hunt: {self.ctx.clockwerk_parts_count}/{needed} "
+            "Clockwerk Parts"
+          )
         if conditions.get("all_vaults"):
           status = ""
           if connected:
@@ -293,13 +314,15 @@ class Sly2Context(CommonContext): # type: ignore[misc]
   episode_hint_shown: bool = False
   vaults: list[bool]
   clockwerk_parts_count: int = 0  # Cached count to avoid repeated filtering
-  notified_items: int = 0  # Session high-water of items already notified/counted
+  notified_items: int = 0  # Session high-water of items already notified
   trap_cursor: int = 0  # High-water of items eligible for trap activation
   trap_baseline_pending: bool = False  # Re-baseline trap_cursor after connect
   last_checked_locations: set[int]  # Track what was already sent
   active_traps: dict[Items.Trap, float]  # Active trap -> time it expires
 
-  def __init__(self, server_address, password):
+  def __init__(
+    self, server_address: Optional[str], password: Optional[str]
+  ) -> None:
     super().__init__(server_address, password)
     self.version = [1,1,0]
     self.game_interface = Sly2Interface(logger)
@@ -316,7 +339,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     restarting the client doesn't carry state over from the old slot.
     Everything here is re-derived from game memory or the server's
     checked_locations, so it is safe to run on every connect."""
-    self.inventory = {l.code: 0 for l in Items.item_dict.values()}
+    self.inventory = {item.code: 0 for item in Items.item_dict.values()}
     self.available_episodes = {e: 0 for e in Sly2Episode}
     self.all_bottles = {e: 0 for e in Sly2Episode}
     self.jobs_completed = [
@@ -336,20 +359,20 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     self.locations_checked = set()
     self.last_checked_locations = set()
 
-  def reset_server_state(self):
+  def reset_server_state(self) -> None:
     # Wipe per-slot caches the moment the connection drops. The base client
-    # resends locations_checked while handling the next Connected packet
+    # re-sends locations_checked while handling the next Connected packet
     # (before on_package runs), so a different slot would otherwise be sent
     # the previous slot's checks.
     super().reset_server_state()
     self.reset_world_state()
 
-  def run_generator(self):
+  def run_generator(self) -> None:
     if tracker_loaded:
       super().run_generator()
       # Utils.init_logging("Sly 2 Client")
 
-  def notification(self, text: str):
+  def notification(self, text: str) -> None:
     logger.debug("Notification: "+text)
     self.notification_queue.append(text)
 
@@ -385,7 +408,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
       }
     }])
 
-  def make_gui(self):
+  def make_gui(self) -> Any:
     ui = super().make_gui()
     ui.base_title = f"Sly 2 Client v{'.'.join([str(i) for i in self.version])}"
     if tracker_loaded:
@@ -395,7 +418,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     ui.base_title += " | Archipelago"
     return ui
 
-  def build_gui(self, manager):
+  def build_gui(self, manager: Any) -> None:
     super().build_gui(manager)
     try:
       visual_tracker = getattr(self.map_page_coords_func, "__self__", None)
@@ -404,7 +427,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     except Exception:
       logger.debug("Failed to install loot marker", exc_info=True)
 
-  def _add_loot_marker(self, visual_tracker):
+  def _add_loot_marker(self, visual_tracker: Any) -> None:
     from kvui import HoverBehavior, ToolTip, ApAsyncImage
     from kivymd.uix.tooltip import MDTooltip
     from kivy.metrics import dp
@@ -413,27 +436,27 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     tracker_map = visual_tracker.ids.tracker_map
 
     class Sly2LootMarker(HoverBehavior, ApAsyncImage, MDTooltip):
-      def __init__(self, **kwargs):
+      def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._tooltip = ToolTip(text="")
         self._tooltip.markup = True
         self._tooltip.pos_hint = {}
 
-      def to_window(self, x, y):
+      def to_window(self, x: float, y: float) -> Any:
         if isinstance(self.border_point, (tuple, list)):
           return self.border_point
         return super().to_window(x, y)
 
-      def on_enter(self):
+      def on_enter(self) -> None:
         if not self.opacity:
           return
         self._tooltip.text = self.get_text()
         self.display_tooltip()
 
-      def on_leave(self):
+      def on_leave(self) -> None:
         self.animation_tooltip_dismiss()
 
-      def get_text(self):
+      def get_text(self) -> str:
         if ctx.slot_data is None or getattr(ctx, "map_id", None) is None:
           return ""
         episode = ctx.map_id
@@ -453,14 +476,14 @@ class Sly2Context(CommonContext): # type: ignore[misc]
         return "\n".join(lines)
 
     marker = Sly2LootMarker(
-      source=f"ap:{__package__}/tracker/Goldwatch.png",
+      source=f"ap:{__package__}/tracker/Gold_watch.png",
       size_hint=(None, None),
       size=(dp(40), dp(40)),
       opacity=0,
     )
     self._loot_marker = marker
 
-    def reposition(*args):
+    def reposition(*args: Any) -> None:
       marker.pos = (
         tracker_map.x + dp(10),
         tracker_map.top - marker.height - dp(10)
@@ -471,7 +494,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     tracker_map.add_widget(marker)
     self._update_loot_marker()
 
-  def _update_loot_marker(self):
+  def _update_loot_marker(self) -> None:
     marker = getattr(self, "_loot_marker", None)
     if marker is None:
       return
@@ -487,7 +510,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     await self.get_username()
     await self.send_connect()
 
-  def on_package(self, cmd: str, args: dict):
+  def on_package(self, cmd: str, args: dict) -> None:
     super().on_package(cmd, args)
     if cmd == "Bounced":
       if "RingLink" in args.get("tags", []) and self.ring_link_enabled:
@@ -498,10 +521,16 @@ class Sly2Context(CommonContext): # type: ignore[misc]
       self.slot_data = args["slot_data"]
 
       if self.version[:2] != args["slot_data"]["world_version"][:2]:
-        raise Exception(f"World generation version and client version don't match up. The world was generated with version {args["slot_data"]["world_version"]}, but the client is version {self.version}")
+        raise Exception(
+          "World generation version and client version don't match up. "
+          "The world was generated with version "
+          f"{args['slot_data']['world_version']}, but the client is version "
+          f"{self.version}"
+        )
 
       self.thiefnet_purchases = PowerUps(*[
-        Locations.location_dict[f"ThiefNet {i+1:02}"].code in self.checked_locations
+        Locations.location_dict[f"ThiefNet {i+1:02}"].code
+        in self.checked_locations
         for i in range(24)
       ])
 
@@ -532,18 +561,20 @@ class Sly2Context(CommonContext): # type: ignore[misc]
 
       self._update_loot_marker()
 
-def update_connection_status(ctx: Sly2Context, status: bool):
+def update_connection_status(ctx: Sly2Context, status: bool) -> None:
   if ctx.is_connected_to_game == status:
     return
 
   if status:
     logger.info("Connected to Sly 2")
   else:
-    logger.info("Unable to connect to the PCSX2 instance, attempting to reconnect...")
+    logger.info(
+      "Unable to connect to the PCSX2 instance, attempting to reconnect..."
+    )
 
   ctx.is_connected_to_game = status
 
-async def pcsx2_sync_task(ctx: Sly2Context):
+async def pcsx2_sync_task(ctx: Sly2Context) -> None:
   logger.info("Starting Sly 2 Connector, attempting to connect to emulator...")
   ctx.game_interface.connect_to_game()
   while not ctx.exit_event.is_set():
@@ -608,16 +639,16 @@ async def _handle_game_ready(ctx: Sly2Context) -> None:
     await asyncio.sleep(1)
 
 
-async def _handle_game_not_ready(ctx: Sly2Context):
-  """If the game is not connected, this will attempt to retry connecting to the game."""
+async def _handle_game_not_ready(ctx: Sly2Context) -> None:
+  """If the game is not connected, this will retry connecting to the game."""
   if not ctx.exit_event.is_set():
     ctx.game_interface.connect_to_game()
   await asyncio.sleep(3)
 
-def launch_client():
+def launch_client() -> None:
   Utils.init_logging("Sly 2 Client")
 
-  async def main(args):
+  async def main(args: argparse.Namespace) -> None:
     multiprocessing.freeze_support()
     logger.info("main")
     ctx = Sly2Context(args.connect, args.password)
@@ -635,7 +666,9 @@ def launch_client():
     ctx.run_cli()
 
     logger.info("Running game...")
-    ctx.pcsx2_sync_task = asyncio.create_task(pcsx2_sync_task(ctx), name="PCSX2 Sync")
+    ctx.pcsx2_sync_task = asyncio.create_task(
+      pcsx2_sync_task(ctx), name="PCSX2 Sync"
+    )
 
     await ctx.exit_event.wait()
     ctx.server_address = None
