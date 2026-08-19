@@ -616,6 +616,8 @@ DEATH_TYPES = {
 ADDRESSES = {
   "SCUS-97316": {
     "unload mega jump": 0x20ECD4,
+    "sly pointer": 0x2E1E40,
+    "sly bindings": 0x3D4ABC,
     "title start mask": 0x1DD968,
     "loading": 0x3D3980,
     "world id": 0x3D4A60,
@@ -1164,6 +1166,10 @@ OTHER_POWERUPS = [
   "TOM",
   "Time Rush"
 ]
+
+MEGA_JUMP_GADGET_ID = 0x1F
+# `jal 0x14C258` at ADDRESSES["unload mega jump"]
+MEGA_JUMP_UNLOAD_CALL = 0x0C053096
 
 MENU_RETURN_DATA = (
   "8F1B8DAE"+

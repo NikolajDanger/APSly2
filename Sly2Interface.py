@@ -8,7 +8,7 @@ from time import time
 import traceback
 
 from .pcsx2_interface.pine import Pine
-from .data.Constants import MENU_RETURN_DATA, CAIRO_RETURN_DATA, ADDRESSES, POWERUP_TEXT, HUB_MAPS, LOOT_IDS
+from .data.Constants import MENU_RETURN_DATA, CAIRO_RETURN_DATA, ADDRESSES, POWERUP_TEXT, HUB_MAPS, LOOT_IDS, MEGA_JUMP_GADGET_ID, MEGA_JUMP_UNLOAD_CALL
 
 class Sly2Episode(IntEnum):
   Title_Screen = 0
@@ -93,6 +93,7 @@ class GameInterface():
   def __init__(self, logger) -> None:
     self.logger = logger
     self.reported_bad_writes = set()
+    self.refused_patches = set()
     # Own logger so /trace can enable write logging by setting its level to
     # DEBUG. It propagates to the root file handler regardless of the root
     # level, so the writes reach the log file even when the client is at
@@ -184,6 +185,22 @@ class GameInterface():
     if self._writable(address):
       self._log_write("wfloat", address, value)
       self.pcsx2_interface.write_float(address, value)
+
+  def safe_patch(self, address: int, value: int, expected: int) -> None:
+    """Write a code patch only if the word there is the instruction we mean
+    to replace (or already the patch). Refusing on anything else stops a
+    wrong address from corrupting code."""
+    current = self._read32(address)
+    if current == value:
+      return
+    if current == expected:
+      self._write32(address, value)
+    elif address not in self.refused_patches:
+      self.refused_patches.add(address)
+      self.logger.warning(
+        f"Refused patch at {address:#010x}: found {current:#010x}, "
+        f"expected {expected:#010x}"
+      )
 
   def _batch_write32(self, operations: list[tuple[int, int]]) -> None:
     valid = []
@@ -827,6 +844,24 @@ class Sly2Interface(GameInterface):
       self._write32(health_pointer, value)
       self.logger.debug(f"New health value: {self._read32(health_pointer)}")
 
+  def patch_mega_jump_unload(self) -> None:
+    self.safe_patch(
+      self.addresses["unload mega jump"], 0, MEGA_JUMP_UNLOAD_CALL
+    )
+
+  def get_sly_bindings(self) -> list[int]:
+    """Sly's three button bindings as gadget ids (0 or -1 = empty)"""
+    base = self.addresses["sly bindings"]
+    values = self._batch_read32([base + 4*i for i in range(3)])
+    return [v - 0x1_0000_0000 if v >= 0x8000_0000 else v for v in values]
+
+  def set_sly_binding(self, slot: int, gadget: int = MEGA_JUMP_GADGET_ID) -> None:
+    operations = [(self.addresses["sly bindings"] + 4*slot, gadget)]
+    sly = self._read32(self.addresses["sly pointer"])
+    if in_ee_ram(sly):
+      operations.append((sly + 0x1180 + 0xC*slot, gadget))
+    self._batch_write32(operations)
+
   def set_current_gadget_power(self, value: int) -> None:
     self.logger.debug(f"Setting gadget power to {value}")
     active_character = self.get_active_character()
@@ -894,7 +929,8 @@ class Sly2Interface(GameInterface):
     # The title screen asks the pad for pressed buttons & 0x800 (Start)
     # via `addiu $a1, $zero, 0x800`; zeroing the mask makes Start a no-op
     # there while Select (menu) keeps working.
-    address = self.addresses["title start mask"]
-    value = 0x24050800 if enabled else 0x24050000
-    if self._read32(address) != value:
-      self._write32(address, value)
+    enabled_mask, disabled_mask = 0x24050800, 0x24050000
+    if enabled:
+      self.safe_patch(self.addresses["title start mask"], enabled_mask, disabled_mask)
+    else:
+      self.safe_patch(self.addresses["title start mask"], disabled_mask, enabled_mask)

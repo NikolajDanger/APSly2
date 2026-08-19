@@ -6,7 +6,7 @@ from math import ceil
 from NetUtils import ClientStatus
 
 from .data import Items, Locations
-from .data.Constants import EPISODES, TASKS, POWERUP_TEXT, OTHER_POWERUPS, TREASURES, DEATH_TYPES, LOOT, PICKPOCKET_LOOT_TABLE_CHANCES, episode_key
+from .data.Constants import EPISODES, TASKS, POWERUP_TEXT, OTHER_POWERUPS, TREASURES, DEATH_TYPES, LOOT, PICKPOCKET_LOOT_TABLE_CHANCES, MEGA_JUMP_GADGET_ID, episode_key
 from .Sly2Interface import Sly2Episode, PowerUps
 
 if TYPE_CHECKING:
@@ -186,9 +186,24 @@ def set_prices(ctx: 'Sly2Context'):
   )
 
 def fix_mega_jump(ctx: 'Sly2Context'):
-  if ctx.powerups.mega_jump:
-    address = ctx.game_interface.addresses["unload mega jump"]
-    ctx.game_interface._write32(address,0)
+  """Keeps Mega Jump bound. The game strips it two ways: natively on a level
+  transition (unbinds to -1, patched out here) and from the episode 8 level
+  script on entry (unbinds to 0, can't be patched), so also re-bind it into
+  the first empty slot whenever it's owned but unbound."""
+  mega_jump = Items.item_dict["Mega Jump"].code
+  if not (
+    ctx.powerups.mega_jump or
+    any(i.item == mega_jump for i in ctx.items_received)
+  ):
+    return
+
+  ctx.game_interface.patch_mega_jump_unload()
+
+  bindings = ctx.game_interface.get_sly_bindings()
+  if MEGA_JUMP_GADGET_ID not in bindings:
+    empty = [i for i, b in enumerate(bindings) if b in (0, -1)]
+    if empty:
+      ctx.game_interface.set_sly_binding(empty[0])
 
 async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
   """Called when the player connects to the AP server or enters a new episode"""
@@ -218,9 +233,6 @@ async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
     # they re-roll their pockets from the randomized table and loot chance.
     if ctx.slot_data["include_pickpocketing"]:
       ctx.game_interface.despawn_guards()
-
-    # Stop mega jump from being unselected
-    # fix_mega_jump(ctx)
 
     if ctx.current_episode != 0:
       fix_jobs(ctx)
