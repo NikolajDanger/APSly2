@@ -465,7 +465,6 @@ class Sly2Context(CommonContext): # type: ignore[misc]
                           tracker_map.top - marker.height - dp(10))
 
         tracker_map.bind(pos=reposition, size=reposition)
-        marker.bind(size=reposition)
         reposition()
         tracker_map.add_widget(marker)
         self._update_loot_marker()
@@ -625,7 +624,7 @@ def launch_client():
         # Runs Universal Tracker's internal generator
         if tracker_loaded:
             ctx.run_generator()
-            ctx.tags.remove("Tracker")
+            ctx.tags -= {"Tracker"}
 
         if gui_enabled:
             ctx.run_gui()
