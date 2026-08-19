@@ -4,159 +4,159 @@ from BaseClasses import Item
 
 from .data.Constants import EPISODES
 from .data.Items import (
-    ordered_group, Trap,
-    CLOCKWERK_CORE, CLOCKWERK_ADDITIONAL, CLOCKWERK_SILLY, CLOCKWERK_REPEATABLE
+  ordered_group, Trap,
+  CLOCKWERK_CORE, CLOCKWERK_ADDITIONAL, CLOCKWERK_SILLY, CLOCKWERK_REPEATABLE
 )
 # from .Sly2Options import StartingEpisode
 
 if typing.TYPE_CHECKING:
-    from . import Sly2World
+  from . import Sly2World
 
 def gen_powerups(world: "Sly2World") -> list[Item]:
-    """Generate the power-ups for the item pool"""
-    powerups = []
-    for item_name in ordered_group("Power-Up"):
-        if (
-            (item_name == "TOM" and not world.options.include_tom) or
-            (item_name == "Mega Jump" and not world.options.include_mega_jump) or
-            (item_name == "Time Rush" and not world.options.include_time_rush)
-        ):
-            continue
-        else:
-            powerups.append(world.create_item(item_name))
+  """Generate the power-ups for the item pool"""
+  powerups = []
+  for item_name in ordered_group("Power-Up"):
+    if (
+      (item_name == "TOM" and not world.options.include_tom) or
+      (item_name == "Mega Jump" and not world.options.include_mega_jump) or
+      (item_name == "Time Rush" and not world.options.include_time_rush)
+    ):
+      continue
+    else:
+      powerups.append(world.create_item(item_name))
 
-    return powerups
+  return powerups
 
 def gen_episodes(world: "Sly2World") -> list[Item]:
-    """Generate the progressive episodes items for the item pool"""
-    all_episodes = [
-        item_name for item_name in ordered_group("Episode")
-        for _ in range(4)
-    ]
-    all_episodes.remove("Progressive Jailbreak") # Jailbreak only has 3 chapters
-    if world.options.episode_8_keys in [0,1,2,3]:
-        all_episodes.remove("Progressive Anatomy for Disaster")
+  """Generate the progressive episodes items for the item pool"""
+  all_episodes = [
+    item_name for item_name in ordered_group("Episode")
+    for _ in range(4)
+  ]
+  all_episodes.remove("Progressive Jailbreak") # Jailbreak only has 3 chapters
+  if world.options.episode_8_keys in [0,1,2,3]:
+    all_episodes.remove("Progressive Anatomy for Disaster")
 
-    if world.options.episode_8_keys in [2,3]:
-        all_episodes.remove("Progressive Anatomy for Disaster")
-        all_episodes.remove("Progressive Anatomy for Disaster")
-        all_episodes.remove("Progressive Anatomy for Disaster")
+  if world.options.episode_8_keys in [2,3]:
+    all_episodes.remove("Progressive Anatomy for Disaster")
+    all_episodes.remove("Progressive Anatomy for Disaster")
+    all_episodes.remove("Progressive Anatomy for Disaster")
 
-    # Make sure the starting episode is precollected
-    starting_episode_n = world.options.starting_episode.value
-    starting_episode = f"Progressive {list(EPISODES.keys())[starting_episode_n]}"
-    all_episodes.remove(starting_episode)
-    world.multiworld.push_precollected(world.create_item(starting_episode))
+  # Make sure the starting episode is precollected
+  starting_episode_n = world.options.starting_episode.value
+  starting_episode = f"Progressive {list(EPISODES.keys())[starting_episode_n]}"
+  all_episodes.remove(starting_episode)
+  world.multiworld.push_precollected(world.create_item(starting_episode))
 
-    return [world.create_item(e) for e in all_episodes]
+  return [world.create_item(e) for e in all_episodes]
 
 def gen_clockwerk(world: "Sly2World") -> list[Item]:
-    """Generate the clockwerk part items for the item pool"""
-    using_parts = (
-        world.options.episode_8_keys.value != 4 or
-        world.options.goal.value == 6 or
-        (world.options.goal.value == 8 and
-            world.options.pick_and_mix.value.get("clockwerk_hunt"))
-    )
-    if using_parts:
-        num_keys = world.options.keys_in_pool.value
+  """Generate the clockwerk part items for the item pool"""
+  using_parts = (
+    world.options.episode_8_keys.value != 4 or
+    world.options.goal.value == 6 or
+    (world.options.goal.value == 8 and
+      world.options.pick_and_mix.value.get("clockwerk_hunt"))
+  )
+  if using_parts:
+    num_keys = world.options.keys_in_pool.value
+  else:
+    num_keys = 0
+
+  def get_parts():
+    distinct = list(CLOCKWERK_CORE)
+    if num_keys <= len(distinct):
+      return world.random.sample(distinct, num_keys)
     else:
-        num_keys = 0
+      distinct += CLOCKWERK_ADDITIONAL
 
-    def get_parts():
-        distinct = list(CLOCKWERK_CORE)
-        if num_keys <= len(distinct):
-            return world.random.sample(distinct, num_keys)
-        else:
-            distinct += CLOCKWERK_ADDITIONAL
+    if num_keys > 100:
+      distinct += CLOCKWERK_SILLY
 
-        if num_keys > 100:
-            distinct += CLOCKWERK_SILLY
+    if num_keys <= len(distinct):
+      clockwerk_parts = world.random.sample(distinct, num_keys)
+    else:
+      clockwerk_parts = list(distinct)
+      clockwerk_parts += world.random.choices(
+        [name for name, _ in CLOCKWERK_REPEATABLE],
+        weights=[weight for _, weight in CLOCKWERK_REPEATABLE],
+        k=num_keys - len(distinct)
+      )
 
-        if num_keys <= len(distinct):
-            clockwerk_parts = world.random.sample(distinct, num_keys)
-        else:
-            clockwerk_parts = list(distinct)
-            clockwerk_parts += world.random.choices(
-                [name for name, _ in CLOCKWERK_REPEATABLE],
-                weights=[weight for _, weight in CLOCKWERK_REPEATABLE],
-                k=num_keys - len(distinct)
-            )
+    return clockwerk_parts
 
-        return clockwerk_parts
-
-    return [
-        world.create_item(p)
-        for p in
-        get_parts()
-    ]
+  return [
+    world.create_item(p)
+    for p in
+    get_parts()
+  ]
 
 def gen_bottles(world: "Sly2World"):
-    """Generate the bottle items for the item pool"""
-    if world.options.bottle_item_bundle_size == 0:
-        return []
+  """Generate the bottle items for the item pool"""
+  if world.options.bottle_item_bundle_size == 0:
+    return []
 
-    bottles = []
-    bottle_n = world.options.bottle_item_bundle_size
-    for ep in EPISODES.keys():
-        total_bottles = 30
-        while total_bottles >= bottle_n:
-            total_bottles -= bottle_n
-            if bottle_n == 1:
-                item_name = f"Bottle - {ep}"
-            else:
-                item_name = f"{bottle_n} bottles - {ep}"
+  bottles = []
+  bottle_n = world.options.bottle_item_bundle_size
+  for ep in EPISODES.keys():
+    total_bottles = 30
+    while total_bottles >= bottle_n:
+      total_bottles -= bottle_n
+      if bottle_n == 1:
+        item_name = f"Bottle - {ep}"
+      else:
+        item_name = f"{bottle_n} bottles - {ep}"
 
-            bottles.append(world.create_item(item_name))
+      bottles.append(world.create_item(item_name))
 
-        if total_bottles > 0:
-            if total_bottles == 1:
-                item_name = f"Bottle - {ep}"
-            else:
-                item_name = f"{total_bottles} bottles - {ep}"
-            bottles.append(world.create_item(item_name))
+    if total_bottles > 0:
+      if total_bottles == 1:
+        item_name = f"Bottle - {ep}"
+      else:
+        item_name = f"{total_bottles} bottles - {ep}"
+      bottles.append(world.create_item(item_name))
 
-    return bottles
+  return bottles
 
 def gen_traps(world: "Sly2World", count: int) -> list[Item]:
-    """Generate `count` trap items, distributed by their configured weights"""
-    weights = world.options.trap_weights.value
-    enabled = [trap for trap in Trap if weights.get(trap.key, 0) > 0]
-    if count <= 0 or not enabled:
-        return []
+  """Generate `count` trap items, distributed by their configured weights"""
+  weights = world.options.trap_weights.value
+  enabled = [trap for trap in Trap if weights.get(trap.key, 0) > 0]
+  if count <= 0 or not enabled:
+    return []
 
-    chosen = world.random.choices(
-        enabled, weights=[weights[trap.key] for trap in enabled], k=count
-    )
-    return [world.create_item(trap.item_name) for trap in chosen]
+  chosen = world.random.choices(
+    enabled, weights=[weights[trap.key] for trap in enabled], k=count
+  )
+  return [world.create_item(trap.item_name) for trap in chosen]
 
 def gen_pool(world: "Sly2World") -> list[Item]:
-    """Generate the item pool for the world"""
-    item_pool = []
-    item_pool += gen_powerups(world)
-    item_pool += gen_episodes(world)
-    item_pool += gen_bottles(world)
-    item_pool += gen_clockwerk(world)
+  """Generate the item pool for the world"""
+  item_pool = []
+  item_pool += gen_powerups(world)
+  item_pool += gen_episodes(world)
+  item_pool += gen_bottles(world)
+  item_pool += gen_clockwerk(world)
 
-    unfilled_locations = world.multiworld.get_unfilled_locations(world.player)
-    remaining = len(unfilled_locations)-len(item_pool)
-    if world.options.goal.value < 5:
-        remaining -= 1
-    assert remaining >= 0, f"There are more items than locations ({len(item_pool)} items; {len(unfilled_locations)} locations)"
+  unfilled_locations = world.multiworld.get_unfilled_locations(world.player)
+  remaining = len(unfilled_locations)-len(item_pool)
+  if world.options.goal.value < 5:
+    remaining -= 1
+  assert remaining >= 0, f"There are more items than locations ({len(item_pool)} items; {len(unfilled_locations)} locations)"
 
-    # Replace a portion of the filler with traps. gen_traps returns nothing if
-    # no trap types are enabled, so those slots fall back to filler.
-    trap_count = 0
-    if world.options.trap_chance.value > 0:
-        trap_count = sum(
-            1 for _ in range(remaining)
-            if world.random.randint(1,100) <= world.options.trap_chance.value
-        )
-    traps = gen_traps(world, trap_count)
-    item_pool += traps
-    item_pool += [
-        world.create_item(world.get_filler_item_name())
-        for _ in range(remaining-len(traps))
-    ]
+  # Replace a portion of the filler with traps. gen_traps returns nothing if
+  # no trap types are enabled, so those slots fall back to filler.
+  trap_count = 0
+  if world.options.trap_chance.value > 0:
+    trap_count = sum(
+      1 for _ in range(remaining)
+      if world.random.randint(1,100) <= world.options.trap_chance.value
+    )
+  traps = gen_traps(world, trap_count)
+  item_pool += traps
+  item_pool += [
+    world.create_item(world.get_filler_item_name())
+    for _ in range(remaining-len(traps))
+  ]
 
-    return item_pool
+  return item_pool

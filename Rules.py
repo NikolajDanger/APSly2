@@ -7,227 +7,227 @@ from worlds.generic.Rules import add_rule
 from .data.Constants import EPISODES, TASKS, episode_key
 
 if typing.TYPE_CHECKING:
-    from . import Sly2World
+  from . import Sly2World
 
 def set_rules(world: "Sly2World"):
-    player = world.player
+  player = world.player
 
-    def add_job_rule(ep, job, rule):
-        add_rule(world.get_location(f"{ep} - {job}"), rule)
-        if world.options.tasksanity:
-            for _, task in TASKS.get(ep, {}).get(job, []):
-                add_rule(world.get_location(f"{ep} - {job} - {task}"), rule)
+  def add_job_rule(ep, job, rule):
+    add_rule(world.get_location(f"{ep} - {job}"), rule)
+    if world.options.tasksanity:
+      for _, task in TASKS.get(ep, {}).get(job, []):
+        add_rule(world.get_location(f"{ep} - {job} - {task}"), rule)
 
-    add_rule(
-        world.get_location("A Tangled Web - Crystal Vase"),
-        lambda state: (
-            state.has("Paraglider", player) or
-            state.has("Mega Jump", player) or
-            state.has("Hover Pack", player) or
-            state.has("Turnbuckle Launch", player)
-        )
+  add_rule(
+    world.get_location("A Tangled Web - Crystal Vase"),
+    lambda state: (
+      state.has("Paraglider", player) or
+      state.has("Mega Jump", player) or
+      state.has("Hover Pack", player) or
+      state.has("Turnbuckle Launch", player)
     )
-    add_job_rule(
-        "A Tangled Web", "Operation: High Road",
-        lambda state: state.has("Paraglider", player)
-    )
-    add_job_rule(
-        "He Who Tames the Iron Horse", "Spice in the Sky",
-        lambda state: state.has("Paraglider", player)
-    )
-    add_job_rule(
-        "He Who Tames the Iron Horse", "Ride the Iron Horse",
-        lambda state: state.has("Paraglider", player)
-    )
-    add_job_rule(
-        "Menace from the North, Eh!", "Thermal Ride",
-        lambda state: state.has("Paraglider", player)
-    )
+  )
+  add_job_rule(
+    "A Tangled Web", "Operation: High Road",
+    lambda state: state.has("Paraglider", player)
+  )
+  add_job_rule(
+    "He Who Tames the Iron Horse", "Spice in the Sky",
+    lambda state: state.has("Paraglider", player)
+  )
+  add_job_rule(
+    "He Who Tames the Iron Horse", "Ride the Iron Horse",
+    lambda state: state.has("Paraglider", player)
+  )
+  add_job_rule(
+    "Menace from the North, Eh!", "Thermal Ride",
+    lambda state: state.has("Paraglider", player)
+  )
 
-    bottle_n = world.options.bottle_item_bundle_size.value
-    bottlesanity = world.options.bottlesanity
-    if bottle_n != 0:
-        bundle_count = 30//bottle_n
-        remainder = 30%bottle_n
-        if world.options.include_vaults:
-            for ep in EPISODES.keys():
-                if bottle_n == 1:
-                    bundle_name = f"Bottle - {ep}"
-                else:
-                    bundle_name = f"{bottle_n} bottles - {ep}"
-                add_rule(
-                    world.get_location(f"{ep} - Vault"),
-                    lambda state, bn=bundle_name: state.has(bn, player, bundle_count)
-                )
-
-                if remainder > 0:
-                    if remainder == 1:
-                        bundle_name = f"Bottle - {ep}"
-                    else:
-                        bundle_name = f"{remainder} bottles - {ep}"
-                    add_rule(
-                        world.get_location(f"{ep} - Vault"),
-                        lambda state, bn=bundle_name: state.has(bn, player)
-                    )
-
-        """
-            For the Ep8 bottles below, although it is technically possible to get them
-            during the job, "Mega Jump Job", because this availability is only temporary
-            and there is currently no way of replaying completed jobs in Sly 2, this
-            specific corner-case has not been included as part of legitimate logic, in
-            order to avoid soft-lock situations.
-        """
-        if world.options.bottle_location_bundle_size.value == 1 and bottlesanity:
-            add_rule(
-                world.get_location("Menace from the North, Eh! - Bottle #04"),
-                lambda state: (
-                    state.has("Paraglider", player) or
-                    state.has("Mega Jump", player) or
-                    state.has("Feral Pounce", player) or
-                    state.has("Hover Pack", player) or
-                    state.has("Turnbuckle Launch", player)
-                )
-            )
-            add_rule(
-                world.get_location("Anatomy for Disaster - Bottle #03"),
-                lambda state: (
-                    state.has("Mega Jump", player) or
-                    state.has("Feral Pounce", player) or
-                    state.has("Hover Pack", player)  or
-                    state.has("Turnbuckle Launch", player) # or
-                    # state.has("Progressive Anatomy for Disaster", player, 3)
-                    # Obtainable during Mega Jump Job. If jobs were replayable, this rule COULD be applied if desired.
-                )
-            )
+  bottle_n = world.options.bottle_item_bundle_size.value
+  bottlesanity = world.options.bottlesanity
+  if bottle_n != 0:
+    bundle_count = 30//bottle_n
+    remainder = 30%bottle_n
+    if world.options.include_vaults:
+      for ep in EPISODES.keys():
+        if bottle_n == 1:
+          bundle_name = f"Bottle - {ep}"
         else:
-            add_rule(
-                world.get_location("Menace from the North, Eh! - 30 bottles collected"),
-                lambda state: (
-                    state.has("Paraglider", player) or
-                    state.has("Mega Jump", player) or
-                    state.has("Feral Pounce", player) or
-                    state.has("Hover Pack", player) or
-                    state.has("Turnbuckle Launch", player)
-                )
-            )
-            add_rule(
-                world.get_location("Anatomy for Disaster - 30 bottles collected"),
-                lambda state: (
-                    state.has("Mega Jump", player) or
-                    state.has("Feral Pounce", player) or
-                    state.has("Hover Pack", player) or
-                    state.has("Turnbuckle Launch", player) # or
-                    # state.has("Progressive Anatomy for Disaster", player, 3)
-                    # Obtainable during Mega Jump Job. If jobs were replayable, this rule COULD be applied if desired.
+          bundle_name = f"{bottle_n} bottles - {ep}"
+        add_rule(
+          world.get_location(f"{ep} - Vault"),
+          lambda state, bn=bundle_name: state.has(bn, player, bundle_count)
+        )
 
-                )
-            )
+        if remainder > 0:
+          if remainder == 1:
+            bundle_name = f"Bottle - {ep}"
+          else:
+            bundle_name = f"{remainder} bottles - {ep}"
+          add_rule(
+            world.get_location(f"{ep} - Vault"),
+            lambda state, bn=bundle_name: state.has(bn, player)
+          )
 
-    # If the settings forces there to be a bunch of progression items and very
-    # few early locations
-    restrictive_start = (
-        world.options.episode_8_keys.value == 3 or
+    """
+        For the Ep8 bottles below, although it is technically possible to get them
+        during the job, "Mega Jump Job", because this availability is only temporary
+        and there is currently no way of replaying completed jobs in Sly 2, this
+        specific corner-case has not been included as part of legitimate logic, in
+        order to avoid soft-lock situations.
+    """
+    if world.options.bottle_location_bundle_size.value == 1 and bottlesanity:
+      add_rule(
+        world.get_location("Menace from the North, Eh! - Bottle #04"),
+        lambda state: (
+          state.has("Paraglider", player) or
+          state.has("Mega Jump", player) or
+          state.has("Feral Pounce", player) or
+          state.has("Hover Pack", player) or
+          state.has("Turnbuckle Launch", player)
+        )
+      )
+      add_rule(
+        world.get_location("Anatomy for Disaster - Bottle #03"),
+        lambda state: (
+          state.has("Mega Jump", player) or
+          state.has("Feral Pounce", player) or
+          state.has("Hover Pack", player)  or
+          state.has("Turnbuckle Launch", player) # or
+          # state.has("Progressive Anatomy for Disaster", player, 3)
+          # Obtainable during Mega Jump Job. If jobs were replayable, this rule COULD be applied if desired.
+        )
+      )
+    else:
+      add_rule(
+        world.get_location("Menace from the North, Eh! - 30 bottles collected"),
+        lambda state: (
+          state.has("Paraglider", player) or
+          state.has("Mega Jump", player) or
+          state.has("Feral Pounce", player) or
+          state.has("Hover Pack", player) or
+          state.has("Turnbuckle Launch", player)
+        )
+      )
+      add_rule(
+        world.get_location("Anatomy for Disaster - 30 bottles collected"),
+        lambda state: (
+          state.has("Mega Jump", player) or
+          state.has("Feral Pounce", player) or
+          state.has("Hover Pack", player) or
+          state.has("Turnbuckle Launch", player) # or
+          # state.has("Progressive Anatomy for Disaster", player, 3)
+          # Obtainable during Mega Jump Job. If jobs were replayable, this rule COULD be applied if desired.
+
+        )
+      )
+
+  # If the settings forces there to be a bunch of progression items and very
+  # few early locations
+  restrictive_start = (
+    world.options.episode_8_keys.value == 3 or
+    (
+      bool(world.options.include_vaults) and
+      world.options.bottle_item_bundle_size.value != 0 and
+      world.options.bottle_location_bundle_size.value > 5 and
+      bool(world.options.include_pickpocketing) and
+      world.options.episode_8_keys.value != 4 and
+      (
+        world.options.goal.value == 6 or
         (
-            bool(world.options.include_vaults) and
-            world.options.bottle_item_bundle_size.value != 0 and
-            world.options.bottle_location_bundle_size.value > 5 and
-            bool(world.options.include_pickpocketing) and
-            world.options.episode_8_keys.value != 4 and
-            (
-                world.options.goal.value == 6 or
-                (
-                    world.options.goal.value == 8 and
-                    bool(world.options.pick_and_mix.value.get("clockwerk_hunt"))
-                )
-            )
+          world.options.goal.value == 8 and
+          bool(world.options.pick_and_mix.value.get("clockwerk_hunt"))
         )
+      )
     )
+  )
 
-    # Putting ThiefNet stuff out of logic, to make early game less slow.
-    # Divides the items into 8 groups of 3. First groups requires 2 episodes
-    # items to be in logic, second group requires 4, etc. Skipped when
-    # tracking, except under the fuzzer, whose UT hook compares the tracker's
-    # logic against the real generation's spheres.
-    if not getattr(world.multiworld, "generation_is_fake", False) or world.fuzzing:
-        for i in range(1,25):
-            episode_items_n = ceil(i/3)*2
-            if restrictive_start and i <= 3:
-                episode_items_n = 1
-            add_rule(
-                world.get_location(f"ThiefNet {i:02}"),
-                lambda state, n=episode_items_n: (
-                    state.has_group("Episode", player, n)
-                )
-            )
-
-
-    if world.options.goal.value < 5:
-        victory_condition = [
-            "The Black Chateau - Operation: Thunder Beak",
-            "The Predator Awakens - Operation: Wet Tiger",
-            "A Tangled Web - Operation: High Road",
-            "Menace from the North, Eh! - Operation: Canada Games",
-            "Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la"
-        ][world.options.goal.value]
-
-        victory_location = world.multiworld.get_location(victory_condition, world.player)
-        victory_location.address = None
-        victory_location.place_locked_item(world.create_event("Victory"))
-        world.multiworld.completion_condition[world.player] = lambda state: state.has("Victory", world.player)
-    elif world.options.goal.value == 5:
-        def access_rule(state: CollectionState):
-            victory_conditions = [
-                "The Black Chateau - Operation: Thunder Beak",
-                "The Predator Awakens - Operation: Wet Tiger",
-                "A Tangled Web - Operation: High Road",
-                "Menace from the North, Eh! - Operation: Canada Games",
-                "Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la"
-            ]
-
-            return all(
-                world.multiworld.get_location(cond,world.player).can_reach(state)
-                for cond in victory_conditions
-            )
-
-        world.multiworld.completion_condition[world.player] = access_rule
-
-    elif world.options.goal.value == 6:
-        world.multiworld.completion_condition[world.player] = lambda state: state.has_group(
-            "Clockwerk Part",
-            world.player,
-            world.options.required_keys_goal.value
+  # Putting ThiefNet stuff out of logic, to make early game less slow.
+  # Divides the items into 8 groups of 3. First groups requires 2 episodes
+  # items to be in logic, second group requires 4, etc. Skipped when
+  # tracking, except under the fuzzer, whose UT hook compares the tracker's
+  # logic against the real generation's spheres.
+  if not getattr(world.multiworld, "generation_is_fake", False) or world.fuzzing:
+    for i in range(1,25):
+      episode_items_n = ceil(i/3)*2
+      if restrictive_start and i <= 3:
+        episode_items_n = 1
+      add_rule(
+        world.get_location(f"ThiefNet {i:02}"),
+        lambda state, n=episode_items_n: (
+          state.has_group("Episode", player, n)
         )
-    elif world.options.goal.value == 7:
-        def access_rule(state: CollectionState):
-            victory_conditions = [f"{ep} - Vault" for ep in EPISODES]
+      )
 
-            return all(
-                world.multiworld.get_location(cond,world.player).can_reach(state)
-                for cond in victory_conditions
-            )
 
-        world.multiworld.completion_condition[world.player] = access_rule
+  if world.options.goal.value < 5:
+    victory_condition = [
+      "The Black Chateau - Operation: Thunder Beak",
+      "The Predator Awakens - Operation: Wet Tiger",
+      "A Tangled Web - Operation: High Road",
+      "Menace from the North, Eh! - Operation: Canada Games",
+      "Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la"
+    ][world.options.goal.value]
 
-    elif world.options.goal.value == 8:
-        conditions = world.options.pick_and_mix.value
-        victory_locations = [
-            f"{ep} - {EPISODES[ep][-1][-1]}"
-            for ep in EPISODES if conditions.get(episode_key(ep))
-        ]
-        if conditions.get("all_vaults"):
-            victory_locations += [f"{ep} - Vault" for ep in EPISODES]
-        need_parts = conditions.get("clockwerk_hunt")
-        required = world.options.required_keys_goal.value
+    victory_location = world.multiworld.get_location(victory_condition, world.player)
+    victory_location.address = None
+    victory_location.place_locked_item(world.create_event("Victory"))
+    world.multiworld.completion_condition[world.player] = lambda state: state.has("Victory", world.player)
+  elif world.options.goal.value == 5:
+    def access_rule(state: CollectionState):
+      victory_conditions = [
+        "The Black Chateau - Operation: Thunder Beak",
+        "The Predator Awakens - Operation: Wet Tiger",
+        "A Tangled Web - Operation: High Road",
+        "Menace from the North, Eh! - Operation: Canada Games",
+        "Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la"
+      ]
 
-        def access_rule(state: CollectionState):
-            if need_parts and not state.has_group(
-                "Clockwerk Part", world.player, required
-            ):
-                return False
+      return all(
+        world.multiworld.get_location(cond,world.player).can_reach(state)
+        for cond in victory_conditions
+      )
 
-            return all(
-                world.multiworld.get_location(loc,world.player).can_reach(state)
-                for loc in victory_locations
-            )
+    world.multiworld.completion_condition[world.player] = access_rule
 
-        world.multiworld.completion_condition[world.player] = access_rule
+  elif world.options.goal.value == 6:
+    world.multiworld.completion_condition[world.player] = lambda state: state.has_group(
+      "Clockwerk Part",
+      world.player,
+      world.options.required_keys_goal.value
+    )
+  elif world.options.goal.value == 7:
+    def access_rule(state: CollectionState):
+      victory_conditions = [f"{ep} - Vault" for ep in EPISODES]
+
+      return all(
+        world.multiworld.get_location(cond,world.player).can_reach(state)
+        for cond in victory_conditions
+      )
+
+    world.multiworld.completion_condition[world.player] = access_rule
+
+  elif world.options.goal.value == 8:
+    conditions = world.options.pick_and_mix.value
+    victory_locations = [
+      f"{ep} - {EPISODES[ep][-1][-1]}"
+      for ep in EPISODES if conditions.get(episode_key(ep))
+    ]
+    if conditions.get("all_vaults"):
+      victory_locations += [f"{ep} - Vault" for ep in EPISODES]
+    need_parts = conditions.get("clockwerk_hunt")
+    required = world.options.required_keys_goal.value
+
+    def access_rule(state: CollectionState):
+      if need_parts and not state.has_group(
+        "Clockwerk Part", world.player, required
+      ):
+        return False
+
+      return all(
+        world.multiworld.get_location(loc,world.player).can_reach(state)
+        for loc in victory_locations
+      )
+
+    world.multiworld.completion_condition[world.player] = access_rule
