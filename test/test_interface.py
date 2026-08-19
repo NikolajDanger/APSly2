@@ -1,0 +1,593 @@
+import json
+import unittest
+from logging import getLogger
+
+from ..data.Constants import (
+  ADDRESSES,
+  LOOT,
+  LOOT_IDS,
+  LOOT_PRICES,
+  MEGA_JUMP_GADGET_ID,
+  MEGA_JUMP_UNLOAD_CALL,
+  POWERUP_TEXT,
+  TREASURE_PRICES
+)
+from ..Sly2Interface import (
+  EE_RAM_START,
+  MAX_GUARDS,
+  PowerUps,
+  Sly2Episode,
+  Sly2Interface
+)
+from .client_base import (
+  GAME_ID,
+  HEAP,
+  InterfaceTestBase,
+  guard,
+  make_guard_list,
+  set_active_character,
+  set_location,
+  set_string_table,
+  string_buffer
+)
+from .fake_pine import FakePine
+
+WIRE_LOOT = json.loads(json.dumps(LOOT))
+
+
+class TestFakePine(unittest.TestCase):
+  def setUp(self) -> None:
+    self.pine = FakePine()
+
+  def test_untouched_memory_is_zero(self) -> None:
+    self.assertEqual(self.pine.read_int32(0x200000), 0)
+    self.assertEqual(self.pine.read_bytes(0x200000, 4), bytes(4))
+
+  def test_int_round_trips(self) -> None:
+    self.pine.write_int8(0x200000, 0xAB)
+    self.pine.write_int16(0x200010, 0xBEEF)
+    self.pine.write_int32(0x200020, 0xFFFF_FFFF)
+    self.assertEqual(self.pine.read_int8(0x200000), 0xAB)
+    self.assertEqual(self.pine.read_int16(0x200010), 0xBEEF)
+    self.assertEqual(self.pine.read_int32(0x200020), 0xFFFF_FFFF)
+
+  def test_little_endian(self) -> None:
+    self.pine.write_int32(0x200000, 0x11223344)
+    self.assertEqual(self.pine.read_bytes(0x200000, 4), b"\x44\x33\x22\x11")
+
+  def test_float_round_trip(self) -> None:
+    self.pine.write_float(0x200000, 1.5)
+    self.assertEqual(self.pine.peek_float(0x200000), 1.5)
+
+  def test_batch_ops(self) -> None:
+    self.pine.batch_write_int32([(0x200000, 1), (0x200004, 2)])
+    self.pine.batch_write_float([(0x200008, 0.5)])
+    self.assertEqual(self.pine.batch_read_int32([0x200000, 0x200004]), [1, 2])
+    self.assertEqual(self.pine.peek_float(0x200008), 0.5)
+    self.assertEqual(len(self.pine.writes), 3)
+
+  def test_negative_write_raises(self) -> None:
+    with self.assertRaises(OverflowError):
+      self.pine.write_int32(0x200000, -1)
+
+  def test_cstring(self) -> None:
+    self.pine.write_bytes(0x200000, b"abc\0def")
+    self.assertEqual(self.pine.peek_cstring(0x200000), b"abc")
+
+
+class TestConnection(unittest.TestCase):
+  def make(self, game_id: str) -> tuple[Sly2Interface, FakePine]:
+    pine = FakePine(game_id)
+    interface = Sly2Interface(getLogger("Sly2Test"))
+    interface.pcsx2_interface = pine
+    return interface, pine
+
+  def test_right_game(self) -> None:
+    interface, _ = self.make(GAME_ID)
+    interface.connect_to_game()
+    self.assertEqual(interface.current_game, GAME_ID)
+    self.assertIs(interface.addresses, ADDRESSES[GAME_ID])
+    self.assertTrue(interface.get_connection_state())
+
+  def test_no_game(self) -> None:
+    interface, _ = self.make("")
+    with self.assertNoLogs("Sly2Test", "WARNING"):
+      interface.connect_to_game()
+    self.assertIsNone(interface.current_game)
+    self.assertFalse(interface.get_connection_state())
+
+  def test_wrong_game_warns_once(self) -> None:
+    interface, _ = self.make("SLUS-00000")
+    with self.assertLogs("Sly2Test", "WARNING") as logs:
+      interface.connect_to_game()
+    self.assertEqual(len(logs.output), 1)
+    with self.assertNoLogs("Sly2Test", "WARNING"):
+      interface.connect_to_game()
+    self.assertIsNone(interface.current_game)
+
+  def test_disconnected_state(self) -> None:
+    interface, pine = self.make(GAME_ID)
+    interface.connect_to_game()
+    pine.disconnect()
+    self.assertFalse(interface.get_connection_state())
+
+
+class TestMemoryGuards(InterfaceTestBase):
+  def test_read_outside_ram_is_zero(self) -> None:
+    self.pine.memory[0x10] = 5
+    self.assertEqual(self.interface._read32(0x10), 0)
+    self.assertEqual(self.interface._read_bytes(0x10, 4), bytes(4))
+
+  def test_write_outside_ram_refused_once(self) -> None:
+    with self.assertLogs("Sly2Test", "WARNING") as logs:
+      self.interface._write32(0x10, 1)
+      self.interface._write32(0x20, 1)
+    self.assertEqual(len(logs.output), 1)
+    self.assertEqual(self.pine.writes, [])
+
+  def test_write_at_ram_edge(self) -> None:
+    self.interface._write32(EE_RAM_START, 1)
+    self.assertEqual(self.pine.peek32(EE_RAM_START), 1)
+    self.interface._write32(EE_RAM_START - 1, 1)
+    self.assertFalse(self.pine.written(EE_RAM_START - 1))
+
+  def test_batch_write_drops_only_bad_addresses(self) -> None:
+    self.interface._batch_write32([(0x10, 1), (0x200000, 2)])
+    self.assertEqual(
+      self.pine.writes, [("bw32", 0x200000, (2).to_bytes(4, "little"))]
+    )
+
+  def test_safe_patch(self) -> None:
+    address = 0x200000
+    self.pine.poke32(address, 0xAA)
+    self.interface.safe_patch(address, 0xBB, 0xAA)
+    self.assertEqual(self.pine.peek32(address), 0xBB)
+
+    self.pine.clear_writes()
+    self.interface.safe_patch(address, 0xBB, 0xAA)
+    self.assertEqual(self.pine.writes, [])
+
+  def test_safe_patch_refuses_unexpected_word(self) -> None:
+    address = 0x200000
+    self.pine.poke32(address, 0xCC)
+    with self.assertLogs("Sly2Test", "WARNING") as logs:
+      self.interface.safe_patch(address, 0xBB, 0xAA)
+    self.assertEqual(len(logs.output), 1)
+    self.assertEqual(self.pine.peek32(address), 0xCC)
+    with self.assertNoLogs("Sly2Test", "WARNING"):
+      self.interface.safe_patch(address, 0xBB, 0xAA)
+
+
+class TestPowerUps(InterfaceTestBase):
+  def test_round_trip_each_field(self) -> None:
+    for field in PowerUps._fields:
+      powerups = PowerUps(**{field: True})
+      self.interface.load_powerups(powerups)
+      self.assertEqual(self.interface.read_powerups(), powerups, field)
+
+  def test_round_trip_all(self) -> None:
+    powerups = PowerUps(*[True]*len(PowerUps._fields))
+    self.interface.load_powerups(powerups)
+    self.assertEqual(self.interface.read_powerups(), powerups)
+
+  def test_raw_layout(self) -> None:
+    gadgets = self.addr["gadgets"]
+    self.interface.load_powerups(PowerUps(trigger_bomb=True))
+    self.assertEqual(self.pine.peek_bytes(gadgets, 6), b"\x80\0\0\0\0\0")
+    self.interface.load_powerups(PowerUps(size_destabilizer=True))
+    self.assertEqual(self.pine.peek_bytes(gadgets, 6), b"\0\x01\0\0\0\0")
+    self.interface.load_powerups(PowerUps(tom=True, time_rush=True))
+    self.assertEqual(self.pine.peek_bytes(gadgets, 6), b"\0\0\0\0\0\x06")
+
+  def test_ignores_foreign_bits(self) -> None:
+    self.pine.poke_bytes(self.addr["gadgets"], b"\x7f\0\0\0\0\xf8")
+    self.assertEqual(self.interface.read_powerups(), PowerUps())
+
+
+class TestBottles(InterfaceTestBase):
+  def test_count(self) -> None:
+    address = self.addr["bottle flags"][2]
+    self.pine.poke32(address, 0b1011)
+    self.assertEqual(
+      self.interface.get_bottles(Sly2Episode.The_Predator_Awakens), 3
+    )
+    self.assertEqual(self.interface.get_bottles(Sly2Episode.Jailbreak), 0)
+
+  def test_list(self) -> None:
+    address = self.addr["bottle flags"][0]
+    self.pine.poke32(address, 1 << 29)
+    bottles = self.interface.get_bottle_list(Sly2Episode.The_Black_Chateau)
+    self.assertEqual(len(bottles), 30)
+    self.assertEqual(sum(bottles), 1)
+
+  def test_set(self) -> None:
+    self.interface.set_bottles(12)
+    self.assertEqual(self.pine.peek32(self.addr["bottle count"]), 12)
+
+
+class TestText(InterfaceTestBase):
+  def test_direct_address(self) -> None:
+    self.interface.set_text(0x200000, "A&B")
+    self.assertEqual(self.pine.peek_bytes(0x200000, 5), b"A&&B\0")
+
+  def test_named_text_resolves_per_episode(self) -> None:
+    for episode in (1, 3):
+      self.pine.poke32(self.addr["world id"], episode)
+      set_string_table(self.pine, self.addr, episode)
+      self.interface.set_text("infobox", f"ep{episode}")
+      buffer = string_buffer(self.pine, self.addr, "infobox", episode)
+      self.assertEqual(self.pine.peek_cstring(buffer), f"ep{episode}".encode())
+
+  def test_unresolved_pointer_refused(self) -> None:
+    self.pine.poke32(self.addr["world id"], 1)
+    with self.assertLogs("Sly2Test", "WARNING"):
+      self.interface.set_text("infobox", "x")
+    self.assertEqual(self.pine.writes, [])
+
+
+class TestThiefNet(InterfaceTestBase):
+  def setUp(self) -> None:
+    super().setUp()
+    self.pine.poke32(self.addr["world id"], 1)
+    self.texts = self.addr["text"]["powerups"][0]
+
+  def written_text(self, powerup: int) -> tuple[bytes, bytes]:
+    name, description = list(self.texts.values())[powerup]
+    return self.pine.peek_cstring(name), self.pine.peek_cstring(description)
+
+  def test_short_texts_unchanged(self) -> None:
+    self.interface.set_thiefnet(0, ("Check #1", "Tester's Thing"))
+    self.assertEqual(self.written_text(0), (b"Check #1", b"Tester's Thing"))
+
+  def test_name_truncation(self) -> None:
+    # "Trigger Bomb" is 12 chars, so the slot holds 15
+    self.interface.set_thiefnet(0, ("ABCDEFGHIJKLMNO", "d"))
+    self.assertEqual(self.written_text(0)[0], b"ABCDEFGHIJKLMNO")
+    self.interface.set_thiefnet(0, ("ABCDEFGHIJKLMNOP", "d"))
+    self.assertEqual(self.written_text(0)[0], b"ABCDEFGHIJKLM..")
+
+  def test_name_budget_at_multiple_of_16(self) -> None:
+    # "Adrenaline Burst" is 16 chars, so the slot holds 31
+    index = list(POWERUP_TEXT).index("Adrenaline Burst")
+    self.interface.set_thiefnet(index, ("x"*31, "d"))
+    self.assertEqual(self.written_text(index)[0], b"x"*31)
+    self.interface.set_thiefnet(index, ("x"*32, "d"))
+    self.assertEqual(self.written_text(index)[0], b"x"*29 + b"..")
+
+  def test_description_truncation(self) -> None:
+    # The vanilla Trigger Bomb description is 37 chars, so the slot holds 47
+    self.interface.set_thiefnet(0, ("n", "y"*47))
+    self.assertEqual(self.written_text(0)[1], b"y"*47)
+    self.interface.set_thiefnet(0, ("n", "y"*48))
+    self.assertEqual(self.written_text(0)[1], b"y"*45 + b"..")
+
+  def test_cost_and_unlock(self) -> None:
+    self.interface.set_thiefnet_cost(3, 250)
+    self.assertEqual(self.pine.peek32(self.addr["thiefnet costs"][3]), 250)
+    self.interface.set_thiefnet_unlock()
+    for address in self.addr["thiefnet unlock"]:
+      self.assertEqual(self.pine.peek32(address), 1)
+
+  def test_reset(self) -> None:
+    self.interface.set_thiefnet(0, ("Check #1", "Tester's Thing"))
+    self.interface.reset_thiefnet()
+    for i, (name, description) in enumerate(POWERUP_TEXT.items()):
+      self.assertEqual(
+        self.written_text(i), (name.encode(), description.encode())
+      )
+
+
+class TestGoals(InterfaceTestBase):
+  def complete(self, *indices: int) -> None:
+    for address in self.addr["operation completion"]:
+      self.pine.poke32(address, 0)
+    for i in indices:
+      self.pine.poke32(self.addr["operation completion"][i], 1)
+
+  def test_operation_completion(self) -> None:
+    self.complete(1, 7)
+    self.assertEqual(
+      self.interface.get_operation_completion(),
+      [False, True, False, False, False, False, False, True]
+    )
+
+  def test_is_goaled_mapping(self) -> None:
+    for goal, index in enumerate([0, 2, 4, 6, 7]):
+      self.complete(index)
+      self.assertTrue(self.interface.is_goaled(goal), goal)
+      self.complete(*(i for i in range(8) if i != index))
+      self.assertFalse(self.interface.is_goaled(goal), goal)
+
+  def test_all_bosses(self) -> None:
+    self.complete(0, 2, 4, 6)
+    self.assertFalse(self.interface.is_goaled(5))
+    self.complete(0, 2, 4, 6, 7)
+    self.assertTrue(self.interface.is_goaled(5))
+    self.assertFalse(self.interface.is_goaled(6))
+
+
+class TestCollectibles(InterfaceTestBase):
+  def test_treasures(self) -> None:
+    self.pine.poke32(self.addr["treasures"][1][2], 1)
+    self.pine.poke32(self.addr["treasures"][7][0], 5)
+    stolen = self.interface.all_treasures_stolen()
+    self.assertEqual(len(stolen), 8)
+    self.assertTrue(all(len(row) == 3 for row in stolen))
+    self.assertEqual(sum(sum(row) for row in stolen), 2)
+    self.assertTrue(stolen[1][2])
+    self.assertTrue(stolen[7][0])
+
+  def test_loot(self) -> None:
+    self.pine.poke32(self.addr["loot"][4], 1)
+    stolen = self.interface.all_loot_stolen()
+    self.assertEqual(len(stolen), len(LOOT))
+    self.assertEqual([i for i, s in enumerate(stolen) if s], [4])
+
+  def test_vaults(self) -> None:
+    self.assertFalse(self.interface.all_vaults_opened())
+    for address in self.addr["vaults"][1:]:
+      self.pine.poke32(address, 1)
+    self.assertEqual(self.interface.all_vault_statuses(), [False] + [True]*7)
+    self.assertFalse(self.interface.all_vaults_opened())
+    self.pine.poke32(self.addr["vaults"][0], 1)
+    self.assertTrue(self.interface.all_vaults_opened())
+
+
+class TestLootTables(InterfaceTestBase):
+  def test_set_loot_table(self) -> None:
+    episode = Sly2Episode.The_Black_Chateau
+    self.interface.set_loot_table(episode, WIRE_LOOT)
+    tables = self.addr["loot table"][0]
+    for loot, locations in LOOT.items():
+      for ep, large, slot in locations:
+        if ep != 1:
+          continue
+        self.assertEqual(
+          self.pine.peek32(tables[int(large)][slot-1]), LOOT_IDS[loot], loot
+        )
+    other_episodes = [
+      address
+      for i in range(1, 8)
+      for table in self.addr["loot table"][i]
+      for address in table
+    ]
+    self.assertFalse(any(self.pine.written(a) for a in other_episodes))
+
+  def test_set_loot_table_odds(self) -> None:
+    episode = Sly2Episode.Jailbreak
+    odds = ((50, 30, 10, 5, 3, 2), (40, 40, 10, 5, 3, 2))
+    self.interface.set_loot_table_odds(episode, odds)
+    addresses = self.addr["loot table odds"][3]
+    for i in range(2):
+      for j in range(6):
+        self.assertEqual(self.pine.peek32(addresses[i][j]), odds[i][j])
+
+  def test_set_loot_chance(self) -> None:
+    episode = Sly2Episode.A_Tangled_Web
+    self.interface.set_loot_chance(episode, (0.25, 0.5))
+    small, large = self.addr["loot chance"][4]
+    self.assertEqual(self.pine.peek_float(small), 0.25)
+    self.assertEqual(self.pine.peek_float(large), 0.5)
+
+  def test_set_prices(self) -> None:
+    loot_prices = {loot: i + 1 for i, loot in enumerate(LOOT_PRICES)}
+    treasure_prices = {t: i + 100 for i, t in enumerate(TREASURE_PRICES)}
+    self.interface.set_prices(loot_prices, treasure_prices)
+    for loot, price in loot_prices.items():
+      self.assertEqual(self.pine.peek32(self.addr["loot prices"][loot]), price)
+    for treasure, price in treasure_prices.items():
+      address = self.addr["treasure prices"][treasure]
+      self.assertEqual(self.pine.peek32(address), price)
+
+
+class TestCoins(InterfaceTestBase):
+  def test_add_and_clamp(self) -> None:
+    coins = self.addr["coins"]
+    self.pine.poke32(coins, 100)
+    self.interface.add_coins(50)
+    self.assertEqual(self.interface.get_coins(), 150)
+    self.interface.add_coins(-30)
+    self.assertEqual(self.interface.get_coins(), 120)
+    self.interface.add_coins(-500)
+    self.assertEqual(self.interface.get_coins(), 0)
+
+  def test_items_received(self) -> None:
+    self.interface.set_items_received(7)
+    self.assertEqual(self.interface.read_items_received(), 7)
+
+
+class TestBindings(InterfaceTestBase):
+  def test_get_signed(self) -> None:
+    base = self.addr["sly bindings"]
+    self.pine.poke32(base, 0xFFFF_FFFF)
+    self.pine.poke32(base + 4, MEGA_JUMP_GADGET_ID)
+    self.assertEqual(
+      self.interface.get_sly_bindings(), [-1, MEGA_JUMP_GADGET_ID, 0]
+    )
+
+  def test_set_without_sly_object(self) -> None:
+    self.interface.set_sly_binding(2)
+    self.assertEqual(
+      self.pine.peek32(self.addr["sly bindings"] + 8), MEGA_JUMP_GADGET_ID
+    )
+    self.assertEqual(len(self.pine.writes), 1)
+
+  def test_set_with_sly_object(self) -> None:
+    self.pine.poke32(self.addr["sly pointer"], HEAP)
+    self.interface.set_sly_binding(1, 0x10)
+    self.assertEqual(self.pine.peek32(self.addr["sly bindings"] + 4), 0x10)
+    self.assertEqual(self.pine.peek32(HEAP + 0x1180 + 0xC), 0x10)
+
+  def test_patch_mega_jump_unload(self) -> None:
+    address = self.addr["unload mega jump"]
+    self.pine.poke32(address, MEGA_JUMP_UNLOAD_CALL)
+    self.interface.patch_mega_jump_unload()
+    self.assertEqual(self.pine.peek32(address), 0)
+
+
+class TestGuards(InterfaceTestBase):
+  def test_walk_linear(self) -> None:
+    guards = make_guard_list(self.pine, self.addr, 0, 3)
+    self.assertEqual(list(self.interface._walk_guards()), guards)
+
+  def test_walk_all_heads(self) -> None:
+    make_guard_list(self.pine, self.addr, 0, 2)
+    self.pine.poke32(self.addr["guard structs"][2], guard(5))
+    self.assertEqual(
+      list(self.interface._walk_guards()), [guard(0), guard(1), guard(5)]
+    )
+
+  def test_walk_stops_on_cycle(self) -> None:
+    guards = make_guard_list(self.pine, self.addr, 0, 3)
+    self.pine.poke32(guards[2] + 0x20, guards[0])
+    self.assertEqual(list(self.interface._walk_guards()), guards)
+
+  def test_walk_stops_on_implausible_length(self) -> None:
+    make_guard_list(self.pine, self.addr, 0, MAX_GUARDS + 10)
+    self.assertEqual(len(list(self.interface._walk_guards())), MAX_GUARDS)
+
+  def test_walk_ignores_freed_head(self) -> None:
+    self.pine.poke32(self.addr["guard structs"][0], 0x10)
+    self.assertEqual(list(self.interface._walk_guards()), [])
+
+  def test_despawn(self) -> None:
+    guards = make_guard_list(self.pine, self.addr, 0, 2)
+    self.pine.poke32(guards[1] + 0x54, 0)
+    self.interface.despawn_guards()
+    self.assertEqual(self.pine.peek32(guards[0] + 0x800 + 0xA0), 1)
+    self.assertFalse(self.pine.written(0xA0))
+    self.assertEqual(len(self.pine.writes), 1)
+
+  def test_alert_and_release_only_targeting_guards(self) -> None:
+    active = set_active_character(self.pine, self.addr)
+    guards = make_guard_list(self.pine, self.addr, 2, 2)
+    self.pine.poke32(guards[0] + 0x1110, active)
+    self.interface.alert_guards()
+    self.assertEqual(self.pine.peek32(guards[0] + 0x1100), 1)
+    self.assertEqual(self.pine.peek32(guards[0] + 0x1114), 1)
+    self.assertFalse(self.pine.written(guards[1] + 0x1100))
+    self.interface.release_guards()
+    self.assertEqual(self.pine.peek32(guards[0] + 0x1100), 0)
+
+  def test_no_active_character(self) -> None:
+    make_guard_list(self.pine, self.addr, 2, 2)
+    self.interface.alert_guards()
+    self.assertEqual(self.pine.writes, [])
+
+
+class TestCharacter(InterfaceTestBase):
+  def test_active_character_pointer_validated(self) -> None:
+    self.assertEqual(self.interface.get_active_character(), 0)
+    self.pine.poke32(self.addr["active character pointer"], 0x10)
+    self.assertEqual(self.interface.get_active_character(), 0)
+    active = set_active_character(self.pine, self.addr)
+    self.assertEqual(self.interface.get_active_character(), active)
+
+  def test_health_and_power(self) -> None:
+    active = set_active_character(self.pine, self.addr)
+    self.interface.set_current_health(1)
+    self.interface.set_current_gadget_power(0)
+    self.assertEqual(self.pine.peek32(self.pine.peek32(active + 0xe00)), 1)
+    self.assertEqual(self.pine.peek32(self.pine.peek32(active + 0x12fc)), 0)
+
+  def test_damage_type(self) -> None:
+    self.assertEqual(self.interface.get_damage_type(), 0)
+    active = set_active_character(self.pine, self.addr)
+    self.pine.poke32(active + 0xe2c, 0x400)
+    self.assertEqual(self.interface.get_damage_type(), 0x400)
+
+  def test_kill_player(self) -> None:
+    active = set_active_character(self.pine, self.addr)
+    self.pine.poke32(self.addr["world id"], 0)
+    self.interface.kill_player()
+    self.assertFalse(self.pine.written(active + 0xdf4))
+    self.pine.poke32(self.addr["world id"], 1)
+    self.interface.kill_player()
+    self.assertEqual(self.pine.peek32(active + 0xdf4), 8)
+
+  def test_trap_values(self) -> None:
+    self.interface.set_clock_speed(0.5)
+    self.interface.set_friction(0.2)
+    self.assertEqual(self.pine.peek_float(self.addr["clock speed"]), 0.5)
+    self.assertAlmostEqual(
+      self.pine.peek_float(self.addr["friction"]), 0.2, places=6
+    )
+
+
+class TestAlive(InterfaceTestBase):
+  def locate(self, episode: int, map_id: int) -> None:
+    set_location(self.pine, self.addr, episode, map_id)
+
+  def test_no_active_character(self) -> None:
+    self.locate(1, 2)
+    self.assertTrue(self.interface.alive())
+
+  def test_character_health(self) -> None:
+    self.locate(1, 2)
+    set_active_character(self.pine, self.addr, kind=8, health=50)
+    self.assertTrue(self.interface.alive())
+    self.pine.poke32(self.addr["health"]["Bentley"], 0)
+    self.assertFalse(self.interface.alive())
+    self.pine.poke32(self.addr["health"]["Sly"], 0)
+    set_active_character(self.pine, self.addr, kind=9, health=50)
+    self.assertTrue(self.interface.alive())
+
+  def test_vehicle_health_by_map(self) -> None:
+    cases = [
+      (9, 5, 17, "Tank"),
+      (8, 6, 29, "ChopperCanada1"),
+      (7, 6, 30, "ChopperCanada2"),
+      (9, 7, 33, "RCTank"),
+      (8, 2, 8, "ChopperIndia"),
+    ]
+    for kind, episode, map_id, vehicle in cases:
+      self.pine = FakePine()
+      self.interface.pcsx2_interface = self.pine
+      self.locate(episode, map_id)
+      set_active_character(self.pine, self.addr, kind=kind, health=50)
+      self.pine.poke32(self.addr["health"]["Murray"], 50)
+      self.pine.poke32(self.addr["health"][vehicle], 50)
+      self.assertTrue(self.interface.alive(), vehicle)
+      self.pine.poke32(self.addr["health"][vehicle], 0)
+      self.assertFalse(self.interface.alive(), vehicle)
+      self.locate(episode, map_id + 1)
+      self.assertTrue(self.interface.alive(), vehicle)
+
+  def test_hackpack(self) -> None:
+    self.locate(4, 14)
+    set_active_character(self.pine, self.addr, kind=8, health=50)
+    self.pine.poke32(self.addr["health"]["ChopperPrague"], 50)
+    self.pine.poke32(self.addr["hackpack"], HEAP)
+    self.pine.poke32(HEAP + 0x184, 10)
+    self.assertTrue(self.interface.alive())
+    self.pine.poke32(HEAP + 0x184, 0)
+    self.assertFalse(self.interface.alive())
+    self.locate(4, 16)
+    self.assertTrue(self.interface.alive())
+
+
+class TestStateChecks(InterfaceTestBase):
+  def test_stuck_in_cairo(self) -> None:
+    self.assertFalse(self.interface.stuck_in_cairo())
+    self.pine.poke32(self.addr["savefile last world"], 3)
+    self.assertTrue(self.interface.stuck_in_cairo())
+    self.pine.poke32(self.addr["map id"], 2)
+    self.assertFalse(self.interface.stuck_in_cairo())
+
+  def test_in_safehouse(self) -> None:
+    set_location(self.pine, self.addr, 1, 2)
+    self.pine.poke32(self.addr["infobox string"], 306)
+    self.assertTrue(self.interface.in_safehouse())
+    for address, value in [
+      (self.addr["job id"], 5),
+      (self.addr["active character pointer"], HEAP),
+      (self.addr["camera focus"], 1),
+      (self.addr["infobox string"], 1),
+      (self.addr["map id"], 3),
+      (self.addr["world id"], 0),
+    ]:
+      old = self.pine.peek32(address)
+      self.pine.poke32(address, value)
+      self.assertFalse(self.interface.in_safehouse(), hex(address))
+      self.pine.poke32(address, old)
+    self.assertTrue(self.interface.in_safehouse())

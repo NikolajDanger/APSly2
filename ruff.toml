@@ -5,5 +5,11 @@ extend-include = ["set_version"]
 exclude = ["build"]
 
 [lint]
-select = ["E", "F", "W", "ANN"]
+select = ["E", "F", "W", "ANN", "TID252"]
 ignore = ["ANN401"]
+
+[lint.flake8-tidy-imports]
+ban-relative-imports = "parents"
+
+[lint.per-file-ignores]
+"test/*" = ["TID252"]

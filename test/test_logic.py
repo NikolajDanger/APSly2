@@ -186,6 +186,12 @@ class TestGoalClockwerkHunt(GoalTestBase):
 class TestGoalAllVaults(GoalTestBase):
   options = {"goal": "All_Vaults", "include_vaults": True}
 
+  def test_every_vault_required(self) -> None:
+    for ep in list(EPISODES)[1:7]:
+      self.multiworld.state = CollectionState(self.multiworld)
+      self.collect_all_but(f"Progressive {ep}")
+      self.assertBeatable(False)
+
 
 class TestGoalPickAndMixEpisodes(GoalTestBase):
   options = {

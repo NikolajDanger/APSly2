@@ -1,3 +1,5 @@
+import os
+import re
 import unittest
 
 from ..data.Constants import (
@@ -20,8 +22,10 @@ from ..data.Items import from_id as item_from_id
 from ..data.Locations import location_dict, tasksanity_list
 from ..data.Locations import from_id as location_from_id
 from ..Sly2Interface import PowerUps
+from ..Sly2Options import BottleItemBundleSize
 
 GAME_ID = "SCUS-97316"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 RULE_LOCATIONS = [
   "A Tangled Web - Crystal Vase",
@@ -30,6 +34,7 @@ RULE_LOCATIONS = [
   "He Who Tames the Iron Horse - Ride the Iron Horse",
   "Menace from the North, Eh! - Thermal Ride",
   "Menace from the North, Eh! - Bottle #04",
+  "Menace from the North, Eh! - Jeweled Chalice",
   "Anatomy for Disaster - Bottle #03",
   "Menace from the North, Eh! - 30 bottles collected",
   "Anatomy for Disaster - 30 bottles collected",
@@ -77,6 +82,21 @@ class TestEpisodes(unittest.TestCase):
       all_jobs = {job for chapter in EPISODES[ep] for job in chapter}
       self.assertTrue(set(jobs) <= all_jobs, ep)
 
+  def test_job_addresses_match_episode_shape(self) -> None:
+    jobs = ADDRESSES[GAME_ID]["jobs"]
+    self.assertEqual(
+      [[len(chapter) for chapter in episode] for episode in jobs],
+      [[len(chapter) for chapter in episode] for episode in EPISODES.values()]
+    )
+    for i, episode in enumerate(jobs):
+      indices = [
+        index
+        for chapter in episode
+        for job in chapter
+        for index in (job if isinstance(job, tuple) else (job,))
+      ]
+      self.assertEqual(len(indices), len(set(indices)), i)
+
 
 class TestLocationNames(unittest.TestCase):
   def assert_locations(self, names: list[str]) -> None:
@@ -111,6 +131,23 @@ class TestLocationNames(unittest.TestCase):
 
   def test_rule_literals(self) -> None:
     self.assert_locations(RULE_LOCATIONS)
+
+  def test_rule_item_literals(self) -> None:
+    names = set()
+    for module in ("Rules.py", "Regions.py"):
+      with open(os.path.join(REPO_ROOT, module)) as f:
+        names |= set(re.findall(r'state\.has\("([^"]+)"', f.read()))
+    self.assertTrue(names)
+    missing = [
+      name for name in names if name not in item_dict and name != "Victory"
+    ]
+    self.assertEqual(missing, [])
+
+  def test_bottle_items_cover_bundle_range(self) -> None:
+    for ep in EPISODES:
+      self.assertIn(f"Bottle - {ep}", item_dict)
+      for n in range(2, BottleItemBundleSize.range_end + 1):
+        self.assertIn(f"{n} bottles - {ep}", item_dict)
 
   def test_treasure_chapters(self) -> None:
     for ep, t in TREASURES.items():
