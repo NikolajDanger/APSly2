@@ -7,7 +7,9 @@ from logging import Logger, DEBUG, CRITICAL, getLogger
 from time import time
 import traceback
 
-from .pcsx2_interface.pine import Pine
+from .pcsx2_interface.pine import (
+  Pine, PineConnectionError, DuplicateConnectionError
+)
 from .data.Constants import (
   MENU_RETURN_DATA,
   ADDRESSES,
@@ -75,8 +77,7 @@ class PowerUps(NamedTuple):
 # The PS2's main RAM. The first megabyte is kernel space, so a pointer read out
 # of the game's heap that lands there is garbage rather than an object. PCSX2
 # services a write to an address outside this range with a raw EE write that
-# faults inside the emulator itself, so a single bad pointer takes it down —
-# every access is range checked instead of trusted.
+# faults inside the emulator itself, so a single bad pointer takes it down
 EE_RAM_START = 0x0010_0000
 EE_RAM_END = 0x0200_0000
 
@@ -102,6 +103,7 @@ class GameInterface():
     self.logger = logger
     self.reported_bad_writes = set()
     self.refused_patches = set()
+    self.reported_duplicate = False
     # Own logger so /trace can enable write logging by setting its level to
     # DEBUG. It propagates to the root file handler regardless of the root
     # level, so the writes reach the log file even when the client is at
@@ -238,9 +240,19 @@ class GameInterface():
     right game
     """
     if not self.pcsx2_interface.is_connected():
-      self.pcsx2_interface.connect()
-      if not self.pcsx2_interface.is_connected():
+      try:
+        self.pcsx2_interface.connect()
+      except DuplicateConnectionError:
+        if not self.reported_duplicate:
+          self.reported_duplicate = True
+          self.logger.warning(
+            "PCSX2 is not answering; is another PINE client connected on the "
+            "same slot?"
+          )
         return
+      except PineConnectionError:
+        return
+      self.reported_duplicate = False
       self.logger.info("Connected to PCSX2 Emulator")
     try:
       game_id = self.pcsx2_interface.get_game_id()
@@ -276,7 +288,7 @@ class GameInterface():
     try:
       connected = self.pcsx2_interface.is_connected()
       return connected and self.current_game is not None
-    except RuntimeError:
+    except (RuntimeError, ConnectionError):
       return False
 
 class Sly2Interface(GameInterface):

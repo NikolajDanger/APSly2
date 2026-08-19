@@ -19,6 +19,18 @@ from platform import system
 import socket
 
 
+DEFAULT_SLOT = 28011
+
+
+class PineConnectionError(ConnectionError):
+  """The PINE socket could not be opened."""
+
+
+class DuplicateConnectionError(PineConnectionError):
+  """The socket opened but PCSX2 did not answer, which is what happens when
+  another PINE client already holds the slot."""
+
+
 class Pine:
   """
   Exposes PS2 memory within a running instance of the PCSX2 emulator using the
@@ -74,299 +86,242 @@ class Pine:
     INT32 = 4
     INT64 = 8
 
-  def __init__(self, slot: int = 28011) -> None:
-    if not 0 < slot <= 65536:
-      raise ValueError("Provided slot number is outside valid range")
-    self._slot: int = slot
+  class EmuStatus(IntEnum):
+    RUNNING = 0
+    PAUSED = 1
+    SHUTDOWN = 2
+
+  _READ_COMMAND = {
+    DataSize.INT8: IPCCommand.READ8,
+    DataSize.INT16: IPCCommand.READ16,
+    DataSize.INT32: IPCCommand.READ32,
+    DataSize.INT64: IPCCommand.READ64,
+  }
+
+  _WRITE_COMMAND = {
+    DataSize.INT8: IPCCommand.WRITE8,
+    DataSize.INT16: IPCCommand.WRITE16,
+    DataSize.INT32: IPCCommand.WRITE32,
+    DataSize.INT64: IPCCommand.WRITE64,
+  }
+
+  def __init__(self, slot: int = DEFAULT_SLOT) -> None:
+    self._slot: int = DEFAULT_SLOT
+    self.set_slot(slot)
     self._sock: socket.socket = socket.socket()
     self._sock_state: bool = False
-    # self._init_socket()
 
-  def _init_socket(self) -> None:
-    if system() == "Windows":
-      socket_family = socket.AF_INET
-      socket_name = ("127.0.0.1", self._slot)
-    elif system() == "Linux":
-      socket_family = socket.AF_UNIX
-      socket_name = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
-      socket_name += "/pcsx2.sock"
-    elif system() == "Darwin":
-      socket_family = socket.AF_UNIX
-      socket_name = os.environ.get("TMPDIR", "/tmp")
-      socket_name += "/pcsx2.sock"
-    else:
-      socket_family = socket.AF_UNIX
-      socket_name = "/tmp/pcsx2.sock"
+  def set_slot(self, slot: int) -> None:
+    if not 0 < slot <= 65536:
+      raise ValueError("Provided slot number is outside valid range")
+    self._slot = slot
 
+  @staticmethod
+  def is_wsl() -> bool:
+    if system() != "Linux":
+      return False
     try:
-      self._sock = socket.socket(socket_family, socket.SOCK_STREAM)
+      with open("/proc/sys/kernel/osrelease", "r") as f:
+        return "microsoft" in f.read().lower()
+    except OSError:
+      return False
+
+  def _socket_address(self) -> tuple[int, str | tuple[str, int]]:
+    if self._slot == DEFAULT_SLOT:
+      file_name = "pcsx2.sock"
+    else:
+      file_name = f"pcsx2.sock.{self._slot}"
+
+    if system() == "Windows" or self.is_wsl():
+      return socket.AF_INET, ("127.0.0.1", self._slot)
+    if system() == "Darwin":
+      base = os.environ.get("TMPDIR", "/tmp")
+      return socket.AF_UNIX, os.path.join(base, file_name)
+
+    base = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+    path = os.path.join(base, file_name)
+    # Connecting to a unix socket needs write permission on it; a Flatpak
+    # PCSX2 keeps its socket under its own sandboxed runtime dir instead.
+    if system() == "Linux" and not os.access(path, os.W_OK):
+      path = os.path.join(
+        base, ".flatpak/net.pcsx2.PCSX2/xdg-run", file_name
+      )
+    return socket.AF_UNIX, path
+
+  def _init_socket(self) -> bool:
+    family, address = self._socket_address()
+    try:
+      self._sock = socket.socket(family, socket.SOCK_STREAM)
       self._sock.settimeout(5.0)
-      self._sock.connect(socket_name)
-    except socket.error:
-      self._sock.close()
-      self._sock_state = False
-      return
+      self._sock.connect(address)
+    except OSError:
+      self._close()
+      return False
 
     self._sock_state = True
+    return True
+
+  def _close(self) -> None:
+    self._sock.close()
+    self._sock_state = False
 
   def connect(self) -> None:
-    if not self._sock_state:
-      self._init_socket()
+    if self._sock_state:
+      return
+    if not self._init_socket():
+      raise PineConnectionError("Could not open the PINE socket.")
+    # A socket to a slot held by another client opens fine but never gets
+    # an answer, so probe once before reporting the connection as up.
+    try:
+      self.get_emu_status()
+    except OSError:
+      self._close()
+      raise DuplicateConnectionError(
+        "PCSX2 did not answer; is another PINE client connected on this slot?"
+      )
 
   def disconnect(self) -> None:
     if self._sock_state:
-      self._sock.close()
+      self._close()
 
   def is_connected(self) -> bool:
     return self._sock_state
 
   def read_int8(self, address: int) -> int:
-    request = Pine._create_request(Pine.IPCCommand.READ8, address, 9)
-    return Pine.from_bytes(self._send_request(request)[-1:])
+    return self._read(self.DataSize.INT8, address)
 
   def read_int16(self, address: int) -> int:
-    request = Pine._create_request(Pine.IPCCommand.READ16, address, 9)
-    return Pine.from_bytes(self._send_request(request)[-2:])
+    return self._read(self.DataSize.INT16, address)
 
   def read_int32(self, address: int) -> int:
-    request = Pine._create_request(Pine.IPCCommand.READ32, address, 9)
-    return Pine.from_bytes(self._send_request(request)[-4:])
+    return self._read(self.DataSize.INT32, address)
 
   def read_int64(self, address: int) -> int:
-    request = Pine._create_request(Pine.IPCCommand.READ64, address, 9)
-    return Pine.from_bytes(self._send_request(request)[-8:])
+    return self._read(self.DataSize.INT64, address)
+
+  def _read(self, size: DataSize, address: int) -> int:
+    request = self._create_request(self._READ_COMMAND[size], address, 9)
+    return self.from_bytes(self._send_request(request)[-size:])
 
   def read_bytes(self, address: int, length: int) -> bytes:
     """Careful! This can be quite slow for large reads"""
     data = b''
     while len(data) < length:
-      if length - len(data) >= 8:
-        request = Pine._create_request(
-          Pine.IPCCommand.READ64, address + len(data), 9
-        )
-        data += self._send_request(request)[-8:]
-      elif length - len(data) >= 4:
-        request = Pine._create_request(
-          Pine.IPCCommand.READ32, address + len(data), 9
-        )
-        data += self._send_request(request)[-4:]
-      elif length - len(data) >= 2:
-        request = Pine._create_request(
-          Pine.IPCCommand.READ16, address + len(data), 9
-        )
-        data += self._send_request(request)[-2:]
-      elif length - len(data) >= 1:
-        request = Pine._create_request(
-          Pine.IPCCommand.READ8, address + len(data), 9
-        )
-        data += self._send_request(request)[-1:]
-
+      size = self._largest_size(length - len(data))
+      request = self._create_request(
+        self._READ_COMMAND[size], address + len(data), 9
+      )
+      data += self._send_request(request)[-size:]
     return data
 
+  def read_string(self, address: int, max_length: int) -> str:
+    data = self.read_bytes(address, max_length)
+    return data.split(b'\x00', 1)[0].decode("ascii")
+
   def write_int8(self, address: int, value: int) -> None:
-    request = Pine._create_request(
-      Pine.IPCCommand.WRITE8, address, 9 + Pine.DataSize.INT8
-    )
-    request += value.to_bytes(length=1, byteorder="little")
-    self._send_request(request)
+    self._write(self.DataSize.INT8, address, value.to_bytes(1, "little"))
 
   def write_int16(self, address: int, value: int) -> None:
-    request = Pine._create_request(
-      Pine.IPCCommand.WRITE16, address, 9 + Pine.DataSize.INT16
-    )
-    request += value.to_bytes(length=2, byteorder="little")
-    self._send_request(request)
+    self._write(self.DataSize.INT16, address, value.to_bytes(2, "little"))
 
   def write_int32(self, address: int, value: int) -> None:
-    request = Pine._create_request(
-      Pine.IPCCommand.WRITE32, address, 9 + Pine.DataSize.INT32
-    )
-    request += value.to_bytes(length=4, byteorder="little")
-    self._send_request(request)
+    self._write(self.DataSize.INT32, address, value.to_bytes(4, "little"))
 
   def write_int64(self, address: int, value: int) -> None:
-    request = Pine._create_request(
-      Pine.IPCCommand.WRITE64, address, 9 + Pine.DataSize.INT64
-    )
-    request += value.to_bytes(length=8, byteorder="little")
-    self._send_request(request)
+    self._write(self.DataSize.INT64, address, value.to_bytes(8, "little"))
 
   def write_float(self, address: int, value: float) -> None:
-    request = Pine._create_request(
-      Pine.IPCCommand.WRITE32, address, 9 + Pine.DataSize.INT32
+    self._write(self.DataSize.INT32, address, struct.pack("<f", value))
+
+  def _write(self, size: DataSize, address: int, data: bytes) -> None:
+    request = self._create_request(
+      self._WRITE_COMMAND[size], address, 9 + size
     )
-    request += struct.pack("<f", value)
-    self._send_request(request)
+    self._send_request(request + data)
 
   def write_bytes(self, address: int, data: bytes) -> None:
     """Careful! This can be quite slow for large writes"""
-    bytes_written = 0
-    while bytes_written < len(data):
-      if len(data) - bytes_written >= 8:
-        request = self._create_request(
-          Pine.IPCCommand.WRITE64,
-          address + bytes_written,
-          9 + Pine.DataSize.INT64
-        )
-        request += data[bytes_written:bytes_written + 8]
-        self._send_request(request)
-        bytes_written += 8
-      elif len(data) - bytes_written >= 4:
-        request = self._create_request(
-          Pine.IPCCommand.WRITE32,
-          address + bytes_written,
-          9 + Pine.DataSize.INT32
-        )
-        request += data[bytes_written:bytes_written + 4]
-        self._send_request(request)
-        bytes_written += 4
-      elif len(data) - bytes_written >= 2:
-        request = self._create_request(
-          Pine.IPCCommand.WRITE16,
-          address + bytes_written,
-          9 + Pine.DataSize.INT16
-        )
-        request += data[bytes_written:bytes_written + 2]
-        self._send_request(request)
-        bytes_written += 2
-      elif len(data) - bytes_written >= 1:
-        request = self._create_request(
-          Pine.IPCCommand.WRITE8,
-          address + bytes_written,
-          9 + Pine.DataSize.INT8
-        )
-        request += data[bytes_written:bytes_written + 1]
-        self._send_request(request)
-        bytes_written += 1
+    written = 0
+    while written < len(data):
+      size = self._largest_size(len(data) - written)
+      self._write(size, address + written, data[written:written + size])
+      written += size
 
-  def batch_read_int32(self, addresses: list[int]) -> list[int]:
-    """
-    Read multiple int32 values in a single request. Much faster than
-    individual reads.
-    """
-    if not addresses:
+  def write_string(self, address: int, value: str) -> None:
+    self.write_bytes(address, value.encode("ascii") + b'\x00')
+
+  @classmethod
+  def _largest_size(cls, remaining: int) -> DataSize:
+    for size in reversed(cls.DataSize):
+      if remaining >= size:
+        return size
+    raise ValueError("No data left to transfer")
+
+  def batch_read(self, reads: list[tuple[DataSize, int]]) -> list[int]:
+    """Read several values of mixed sizes in a single request. Much faster
+    than individual reads."""
+    if not reads:
       return []
 
-    # Build batched request
-    request = b''
-    for address in addresses:
-      request += Pine.to_bytes(Pine.IPCCommand.READ32, 1)
-      request += Pine.to_bytes(address, 4)
+    body = b''
+    for size, address in reads:
+      body += self.to_bytes(self._READ_COMMAND[size], 1)
+      body += self.to_bytes(address, 4)
+    response = self._send_request(self.to_bytes(len(body) + 4, 4) + body)
 
-    # Prepend total size
-    total_size = len(request) + 4
-    request = Pine.to_bytes(total_size, 4) + request
-
-    response = self._send_request(request)
-
-    # Parse results - one status byte for the entire batch, then data
     results = []
-    offset = 4  # Skip overall size header
-    offset += 1  # Skip single status byte for entire batch
-    for _ in addresses:
-      value = Pine.from_bytes(response[offset:offset + 4])
-      results.append(value)
-      offset += 4
-
+    offset = 5
+    for size, _ in reads:
+      results.append(self.from_bytes(response[offset:offset + size]))
+      offset += size
     return results
 
-  def batch_read_int16(self, addresses: list[int]) -> list[int]:
-    """Read multiple int16 values in a single request."""
-    if not addresses:
-      return []
+  def batch_write(self, writes: list[tuple[DataSize, int, bytes]]) -> None:
+    """Write several values of mixed sizes in a single request. Each entry
+    is (size, address, little-endian data of that size)."""
+    if not writes:
+      return
 
-    request = b''
-    for address in addresses:
-      request += Pine.to_bytes(Pine.IPCCommand.READ16, 1)
-      request += Pine.to_bytes(address, 4)
-
-    total_size = len(request) + 4
-    request = Pine.to_bytes(total_size, 4) + request
-
-    response = self._send_request(request)
-
-    # Parse results - one status byte for the entire batch, then data
-    results = []
-    offset = 4  # Skip overall size header
-    offset += 1  # Skip single status byte for entire batch
-    for _ in addresses:
-      value = Pine.from_bytes(response[offset:offset + 2])
-      results.append(value)
-      offset += 2
-
-    return results
+    body = b''
+    for size, address, data in writes:
+      body += self.to_bytes(self._WRITE_COMMAND[size], 1)
+      body += self.to_bytes(address, 4)
+      body += data
+    self._send_request(self.to_bytes(len(body) + 4, 4) + body)
 
   def batch_read_int8(self, addresses: list[int]) -> list[int]:
-    """Read multiple int8 values in a single request."""
-    if not addresses:
-      return []
+    return self.batch_read([(self.DataSize.INT8, a) for a in addresses])
 
-    request = b''
-    for address in addresses:
-      request += Pine.to_bytes(Pine.IPCCommand.READ8, 1)
-      request += Pine.to_bytes(address, 4)
+  def batch_read_int16(self, addresses: list[int]) -> list[int]:
+    return self.batch_read([(self.DataSize.INT16, a) for a in addresses])
 
-    total_size = len(request) + 4
-    request = Pine.to_bytes(total_size, 4) + request
-
-    response = self._send_request(request)
-
-    # Parse results - one status byte for the entire batch, then data
-    results = []
-    offset = 4  # Skip overall size header
-    offset += 1  # Skip single status byte for entire batch
-    for _ in addresses:
-      value = Pine.from_bytes(response[offset:offset + 1])
-      results.append(value)
-      offset += 1
-
-    return results
+  def batch_read_int32(self, addresses: list[int]) -> list[int]:
+    return self.batch_read([(self.DataSize.INT32, a) for a in addresses])
 
   def batch_write_int32(self, operations: list[tuple[int, int]]) -> None:
-    """
-    Write multiple int32 values in a single request. Each operation is
-    (address, value).
-    """
-    if not operations:
-      return
-
-    request = b''
-    for address, value in operations:
-      request += Pine.to_bytes(Pine.IPCCommand.WRITE32, 1)
-      request += Pine.to_bytes(address, 4)
-      request += value.to_bytes(length=4, byteorder="little")
-
-    total_size = len(request) + 4
-    request = Pine.to_bytes(total_size, 4) + request
-
-    self._send_request(request)
+    self.batch_write([
+      (self.DataSize.INT32, address, value.to_bytes(4, "little"))
+      for address, value in operations
+    ])
 
   def batch_write_float(self, operations: list[tuple[int, float]]) -> None:
-    """
-    Write multiple float values in a single request. Each operation is
-    (address, value).
-    """
-    if not operations:
-      return
-
-    request = b''
-    for address, value in operations:
-      request += Pine.to_bytes(Pine.IPCCommand.WRITE32, 1)
-      request += Pine.to_bytes(address, 4)
-      request += struct.pack("<f", value)
-
-    total_size = len(request) + 4
-    request = Pine.to_bytes(total_size, 4) + request
-
-    self._send_request(request)
+    self.batch_write([
+      (self.DataSize.INT32, address, struct.pack("<f", value))
+      for address, value in operations
+    ])
 
   def get_game_id(self) -> str:
-    request = Pine.to_bytes(5, 4) + Pine.to_bytes(Pine.IPCCommand.ID, 1)
+    request = self.to_bytes(5, 4) + self.to_bytes(self.IPCCommand.ID, 1)
     try:
       response = self._send_request(request)
     except ConnectionError:
       return ""
     return response[9:-1].decode("ascii")
+
+  def get_emu_status(self) -> EmuStatus:
+    request = self.to_bytes(5, 4) + self.to_bytes(self.IPCCommand.STATUS, 1)
+    response = self._send_request(request)
+    return self.EmuStatus(self.from_bytes(response[-4:]))
 
   def _send_request(self, request: bytes) -> bytes:
     if not self._sock_state:
@@ -374,9 +329,8 @@ class Pine:
 
     try:
       self._sock.sendall(request)
-    except socket.error:
-      self._sock.close()
-      self._sock_state = False
+    except OSError:
+      self._close()
       raise ConnectionError("Lost connection to PCSX2.")
 
     end_length = 4
@@ -398,25 +352,25 @@ class Pine:
       result += response
 
       if end_length == 4 and len(response) >= 4:
-        end_length = Pine.from_bytes(result[0:4])
-        if end_length > Pine.MAX_IPC_SIZE:
+        end_length = self.from_bytes(result[0:4])
+        if end_length > self.MAX_IPC_SIZE:
           result = b''
           break
 
     if len(result) == 0:
       raise ConnectionError("Invalid response from PCSX2.")
-    if result[4] == Pine.IPCResult.IPC_FAIL:
+    if result[4] == self.IPCResult.IPC_FAIL:
       raise ConnectionError("Failure indicated in PCSX2 response.")
 
     return result
 
-  @staticmethod
+  @classmethod
   def _create_request(
-    command: IPCCommand, address: int, size: int = 0
+    cls, command: IPCCommand, address: int, size: int = 0
   ) -> bytes:
-    ipc = Pine.to_bytes(size, 4)
-    ipc += Pine.to_bytes(command, 1)
-    ipc += Pine.to_bytes(address, 4)
+    ipc = cls.to_bytes(size, 4)
+    ipc += cls.to_bytes(command, 1)
+    ipc += cls.to_bytes(address, 4)
     return ipc
 
   @staticmethod

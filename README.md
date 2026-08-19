@@ -47,7 +47,13 @@ The randomizer has full support for [Universal Tracker](https://github.com/Faris
 Each episode is split into chunks by its chalk-talk cutscenes, and each chunk is unlocked by a separate `Progressive <Episode>` item. If you've finished the jobs you have access to and the next job marker is missing, you need another of that episode's items. The episode menu shows how many chunks you've unlocked (e.g. `Unlocked 2/4`).
 
 ### The client won't connect to my PCSX2 instance
-Make sure you have PINE enabled and that you're playing the US version of the game.
+Before asking for help in the Discord channel:
+- Make sure you have PINE enabled. Also check that you've not turned it off in the game-specific settings.
+- Make sure that you're playing the US version of the game (`SCUS-97316`).
+- If you've enabled discord's rich presence for PCSX2, try disabling it.
+- Make sure nothing else (like another Archipelago client) is connected to PCSX2's PINE slot; PCSX2 only answers one client at a time.
+
+If all these fail, please ask for help in the [Discord channel](https://discord.com/channels/731205301247803413/1359447263981600788).
 
 ### There's no "save and quit" option in the pause menu
 You can save the game manually in Options.
