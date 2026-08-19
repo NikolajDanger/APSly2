@@ -616,6 +616,7 @@ DEATH_TYPES = {
 ADDRESSES = {
     "SCUS-97316": {
         "unload mega jump": 0x20ECD4,
+        "title start mask": 0x1DD968,
         "loading": 0x3D3980,
         "world id": 0x3D4A60,
         "savefile last world": 0x3D4A64,

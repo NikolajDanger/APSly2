@@ -889,3 +889,12 @@ class Sly2Interface(GameInterface):
 
     def unlock_episodes(self) -> None:
         self._write8(self.addresses["episode unlocks"], 8)
+
+    def set_title_start_enabled(self, enabled: bool) -> None:
+        # The title screen asks the pad for pressed buttons & 0x800 (Start)
+        # via `addiu $a1, $zero, 0x800`; zeroing the mask makes Start a no-op
+        # there while Select (menu) keeps working.
+        address = self.addresses["title start mask"]
+        value = 0x24050800 if enabled else 0x24050000
+        if self._read32(address) != value:
+            self._write32(address, value)

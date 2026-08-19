@@ -192,6 +192,10 @@ def fix_mega_jump(ctx: 'Sly2Context'):
 
 async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
     """Called when the player connects to the AP server or enters a new episode"""
+    ctx.game_interface.set_title_start_enabled(
+        ctx.current_episode != Sly2Episode.Title_Screen
+    )
+
     if ap_connected and ctx.current_episode:
         if ctx.slot_data is None:
             return
@@ -307,13 +311,15 @@ def replace_text(ctx: 'Sly2Context') -> None:
     if ctx.current_episode != 0:
         return
 
+    # Max 31 chars: the "new game" string slot is only 32 bytes
+    connected_text = "Connected to Archipelago server"
     ctx.game_interface.set_text(
         ctx.game_interface.addresses["text"]["Press START (resume)"],
-        "Press START to resume Archipelago"
+        connected_text
     )
     ctx.game_interface.set_text(
         ctx.game_interface.addresses["text"]["Press START (new)"],
-        "Press START for new Archipelago"
+        connected_text
     )
 
     # Tells you if an episode is unlocked or not
