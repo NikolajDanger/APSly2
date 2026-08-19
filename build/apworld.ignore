@@ -8,3 +8,4 @@ requirements.txt
 Sly 2.yaml
 Sly_Addresses.xlsx
 ruff.toml
+test

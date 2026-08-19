@@ -7,17 +7,19 @@
 # * $1: Can be "clean" to clean the build environment.
 #
 # Environment:
-# * TAG:
-#     A string used to tag the bundle name
-#     eg: "v1.1.1" will name the bundle "sly2_apworld-v1.1.1"
-#     (default: current date and time)
+# * AP_ROOT (required):
+#     Path to an Archipelago checkout whose `worlds/Sly2` links to this
+#     repository. It resolves the Archipelago imports for the type check,
+#     the test suite is run there (a failure aborts the build), and its
+#     apworld container code supplies the manifest's
+#     `version`/`compatible_version`.
 ##
 
 set -eo pipefail
 shopt -s globstar
 
 CWD="$(dirname $(realpath $0))"
-REQS=("zip" "rsync" "pip" "ruff")
+REQS=("zip" "rsync" "pip" "ruff" "pyright")
 SUPPORTED_PLATFORMS=("win_amd64" "manylinux_2_17_x86_64")
 PYTHON_VERSIONS=("3.10" "3.11" "3.12")
 
@@ -34,6 +36,66 @@ function pre_flight() {
     done
 
     [ "${bad}" = "1" ] && exit 1 ||:
+}
+
+##
+# Make sure $AP_ROOT is an Archipelago checkout that links to this project.
+#
+# Arguments:
+# * $1: project root
+##
+function check_ap_root() {
+    local root="$1"
+    if [ -z "${AP_ROOT}" ]; then
+        echo "!=> AP_ROOT is not set. Point it at an Archipelago checkout whose"
+        echo "!=> worlds/Sly2 links to ${root}."
+        exit 1
+    fi
+    if [ "$(realpath "${AP_ROOT}/worlds/Sly2" 2>/dev/null)" != "${root}" ]; then
+        echo "!=> ${AP_ROOT}/worlds/Sly2 does not resolve to ${root}."
+        echo "!=> Link this repository into the Archipelago checkout first."
+        exit 1
+    fi
+}
+
+##
+# Run the test suite inside the Archipelago checkout.
+##
+function run_tests() {
+    echo "=> Testing (in ${AP_ROOT})"
+    pushd "${AP_ROOT}"
+    AP_TEST_WORLDS=Sly2 python -m pytest -q -p no:cacheprovider \
+        worlds/Sly2 test/general
+    popd
+}
+
+##
+# Add the container `version`/`compatible_version` that Archipelago's own
+# packager would write to the bundled manifest.
+#
+# Arguments:
+# * $1: path to the bundled archipelago.json
+##
+function write_manifest() {
+    local manifest="$1"
+    pushd "${AP_ROOT}"
+    python - "${manifest}" <<'PY'
+import json
+import sys
+
+from worlds.Files import APWorldContainer
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as f:
+    manifest = json.load(f)
+container = APWorldContainer("sly2.apworld")
+container.game = manifest["game"]
+manifest.update(container.get_manifest())
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(manifest, f, indent=2)
+    f.write("\n")
+PY
+    popd
 }
 
 ##
@@ -55,7 +117,8 @@ function mk_apworld() {
         --exclude-from="${CWD}/apworld.ignore" \
         "${root}/" "${destdir}/sly2"
 
-    echo "${tag}" > "${destdir}/sly2/version.txt"
+    echo "${stamp}" > "${destdir}/sly2/version.txt"
+    write_manifest "${destdir}/sly2/archipelago.json"
 
     pushd "${destdir}"
     zip -9r "sly2.apworld" "sly2"
@@ -95,13 +158,17 @@ function main() {
 
     # Create the release bundle.
     *)
-        local tag="${TAG:-$(date '+%Y-%m-%d_%H%M')}"
+        local stamp="$(date '+%Y-%m-%d_%H%M')"
         local project="$(realpath ${CWD}/..)"
-        local bundle="${bundle_base}-${tag}"
+        local bundle="${bundle_base}-${stamp}"
         local destdir="${target_path}/${bundle}"
 
+        check_ap_root "${project}"
         echo "=> Linting"
         ruff check "${project}"
+        echo "=> Type checking"
+        PYTHONPATH="${AP_ROOT}" pyright -p "${CWD}/pyright.json"
+        run_tests
 
         mk_apworld "${project}" "${destdir}"
         cp_data "${project}" "${destdir}"

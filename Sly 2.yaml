@@ -42,7 +42,9 @@ requires:
     'false': 100
     'true': 0
 
-  # When you gain or lose coins, ring-linked players gain or lose the same amount, and vice versa.
+  # Whether your coin gain/loss is linked to other players. When you gain or
+  # lose coins, ring-linked players gain or lose the same amount, and vice
+  # versa.
   ring_link:
     'false': 100
     'true': 0

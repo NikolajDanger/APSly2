@@ -58,5 +58,42 @@ If all these fail, please ask for help in the [Discord channel](https://discord.
 ### There's no "save and quit" option in the pause menu
 You can save the game manually in Options.
 
+## Nerd zone
+Want to have a bit of a poke at the code? Go for it! Bug fixes, new options, logic improvements, client tweaks, tests: all welcome. Open a pull request and describe what you changed and why.
+
+### Developing
+Unlike many other apworld repos, this repo isn't a fork of the Archipelago source: every import from the Archipelago source (`BaseClasses`, `worlds.AutoWorld`, `CommonClient`, ...) needs to come from somewhere. The way this repo is developed is to clone [Archipelago](https://github.com/ArchipelagoMW/Archipelago), and then link this repository into its `worlds` folder under the name `Sly2`, so Archipelago loads it like any in-tree world:
+
+- Linux / macOS:
+  ```sh
+  ln -s /path/to/APSly2 /path/to/Archipelago/worlds/Sly2
+  ```
+- Windows (from an administrator `cmd`):
+  ```bat
+  mklink /D C:\path\to\Archipelago\worlds\Sly2 C:\path\to\APSly2
+  ```
+  (I think. Please let me know if it doesn't work like that; I haven't used Windows in years.)
+
+With the link in place, the Archipelago launcher, `Generate.py`, and the "Sly 2 Client" all pick up your working copy directly: no need to rebuild the apworld to test a change. Point your editor at the Archipelago checkout for imports (I do it with `.vscode/settings.json`, through `python.analysis.extraPaths`).
+
+Style is enforced with [ruff](https://docs.astral.sh/ruff/) (`pip install ruff`, then `ruff check .` from the repo root): 2-space indentation, 80-column lines, type hints on every function. Types are checked with [pyright](https://github.com/microsoft/pyright) in "basic" mode (`pip install pyright`, then `PYTHONPATH=/path/to/Archipelago pyright -p build/pyright.json` from the repo root; that's the same engine Pylance uses in VS Code).
+
+### Tests
+The test suite in `test/` runs inside Archipelago's own test runner, so it needs the link above. From the Archipelago checkout:
+```sh
+AP_TEST_WORLDS=Sly2 python -m pytest -q test/general worlds/Sly2
+```
+`worlds/Sly2` is this repo's suite; `test/general` is Archipelago's generic per-world checks.
+
+### Building
+`build/build.sh` lints, type checks, runs the test suite, and zips the repo into `build/target/sly2_apworld-<date_time>/` (the `.apworld` plus `Sly 2.yaml`). It's a bash script, so on Windows use Git Bash or WSL. It needs `zip`, `rsync`, `pip`, `ruff` and `pyright` on the path, and `AP_ROOT` pointing at your Archipelago checkout (the script checks that `$AP_ROOT/worlds/Sly2` really resolves to the repo being built):
+
+```sh
+AP_ROOT=/path/to/Archipelago ./build/build.sh   # build a bundle
+./build/build.sh clean                          # remove old bundles
+```
+
+A failing test aborts the build. The checkout is also where the bundled `archipelago.json` gets its container `version`/`compatible_version` from.
+
 ## Acknowledgment
 This project was heavily inspired by and built upon the structure and PINE code from [Evilwb's Archipelago Ratchet and Clank 2 implementation](https://github.com/evilwb/APRac2).
