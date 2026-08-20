@@ -100,6 +100,7 @@ class Sly2World(World):
   loot_prices: dict[str, int] = {}
   treasure_prices: dict[str, int] = {}
   fuzzing: bool = False
+  option_adjustments: List[str] = []
 
   # this is how we tell the Universal Tracker we want to use re_gen_passthrough
   @staticmethod
@@ -132,13 +133,18 @@ class Sly2World(World):
       return False
     if not opt.permissive_yaml:
       if warn_only is not None:
-        logging.warning(f"{self.player_name}: {error_text} {warn_only}")
+        self._record_adjustment(f"{error_text} {warn_only}")
         return False
       raise OptionError(error_text)
-    logging.warning(f"{self.player_name}: {error_text} {coercion_text}")
+    self._record_adjustment(f"{error_text} {coercion_text}")
     return True
 
+  def _record_adjustment(self, message: str) -> None:
+    self.option_adjustments.append(message)
+    logging.warning(f"{self.player_name}: {message}")
+
   def validate_options(self, opt: Sly2Options) -> None:
+    self.option_adjustments = []
     # This part is in order to get a better, more representative sample
     # from the fuzzer. Any yaml with a bunch of random values _should_ be
     # called with permissive_yaml on.
@@ -318,10 +324,9 @@ class Sly2World(World):
           f"More items than locations ({n_items} items; "
           f"{n_locations} locations)"
         )
-      logging.warning(
-        f"{self.player_name}: " +
+      self._record_adjustment(
         f"More items than locations ({n_items} items; "
-        f"{n_locations} locations)\n" +
+        f"{n_locations} locations)\n"
         "Adjusting Clockwerk part amounts."
       )
       if using_parts:
@@ -341,9 +346,8 @@ class Sly2World(World):
         for bundle in bundle_sizes + [0]:
           new_bottles = ceil(30/bundle)*8 if bundle else 0
           if n_items - bottles + new_bottles <= n_locations:
-            logging.warning(
-              f"{self.player_name}: " +
-              "Still more items than locations. Setting " +
+            self._record_adjustment(
+              "Still more items than locations. Setting "
               f"bottle_item_bundle_size to {bundle}."
             )
             opt.bottle_item_bundle_size.value = bundle
@@ -655,7 +659,12 @@ class Sly2World(World):
     return slot_data
 
   def write_spoiler(self, spoiler_handle: TextIO) -> None:
-    spoiler_text = "\n====== Sly 2 ThiefNet Costs ======"
+    spoiler_text = ""
+    if self.option_adjustments != []:
+      spoiler_text += "\n=== Sly 2 Option Adjustments ==="
+      for message in self.option_adjustments:
+        spoiler_text += "\n- " + message.replace("\n", " ")
+    spoiler_text += "\n====== Sly 2 ThiefNet Costs ======"
     thiefnet_cost_text = "\n".join(
       f"- ThiefNet {i+1:02}: {cost} coins"
       for i, cost in enumerate(self.thiefnet_costs)
