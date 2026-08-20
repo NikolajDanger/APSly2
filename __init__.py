@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Mapping, Any, List, ClassVar, TextIO
+from typing import Dict, Optional, Mapping, Any, List, TextIO
 import logging
 from math import ceil
 import os
@@ -27,7 +27,8 @@ from .data.Constants import (
   LOOT_PRICES,
   TREASURE_PRICES,
   ENEMIES,
-  PICKPOCKET_LOOT_TABLE_CHANCES
+  PICKPOCKET_LOOT_TABLE_CHANCES,
+  BOSS_GOALS
 )
 from .ItemPool import gen_pool
 from .Rules import set_rules
@@ -108,23 +109,11 @@ class Sly2World(World):
   # and this is how we tell Universal Tracker we don't need the yaml
   ut_can_gen_without_yaml = True
 
-  # For setting up the maps for UT
-  tracker_world: ClassVar = {
-    "map_page_folder" : "tracker",
-    "map_page_maps" : "maps.json",
-    "map_page_locations" : [
-      "locations/the_black_chateau.json",
-      "locations/a_starry_eyed_encounter.json",
-      "locations/the_predator_awakes.json",
-      "locations/jailbreak.json",
-      "locations/a_tangled_web.json",
-      "locations/he_who_tames_the_iron_horse.json",
-      "locations/anatomy_for_disaster.json",
-      "locations/menace_from_the_north_eh.json"
-    ],
-    "map_page_setting_key": "Slot:{player}:Episode",
-    "map_page_index": map_page_index
-  }
+  # The UT map is set up per seed in generate_early via _build_tracker_world,
+  # not as a ClassVar: the goal operation loads a variant that splits its goal
+  # marker off the shared square (see _build_tracker_world). Universal Tracker
+  # reads the class attribute first and only falls back to the instance when
+  # the class lacks one, so this must stay off the class.
 
   def _coerce_or_raise(
     self, opt: Sly2Options, conflict: bool, error_text: str,
@@ -471,6 +460,35 @@ class Sly2World(World):
 
     return dict(vanilla)
 
+  def _build_tracker_world(self) -> Dict[str, Any]:
+    # A single-boss goal turns its operation's location into the Victory event,
+    # which UT draws as a diamond on top of that operation's square marker. For
+    # that one operation we load a variant that splits the goal marker onto its
+    # own offset coordinate; every other operation loads its merged variant.
+    goal = self.options.goal.value
+    goal_slug = BOSS_GOALS[goal][1] if goal < 5 else None
+    op_pages = [
+      f"locations/operations/{slug}_"
+      f"{'goal' if slug == goal_slug else 'normal'}.json"
+      for _, slug in BOSS_GOALS
+    ]
+    return {
+      "map_page_folder": "tracker",
+      "map_page_maps": "maps.json",
+      "map_page_locations": [
+        "locations/the_black_chateau.json",
+        "locations/a_starry_eyed_encounter.json",
+        "locations/the_predator_awakes.json",
+        "locations/jailbreak.json",
+        "locations/a_tangled_web.json",
+        "locations/he_who_tames_the_iron_horse.json",
+        "locations/anatomy_for_disaster.json",
+        "locations/menace_from_the_north_eh.json"
+      ] + op_pages,
+      "map_page_setting_key": "Slot:{player}:Episode",
+      "map_page_index": map_page_index
+    }
+
   def generate_early(self) -> None:
     self.fuzzing = generation_is_fuzzed()
 
@@ -523,6 +541,7 @@ class Sly2World(World):
           "ring_link"
         ]:
           getattr(self.options, name).value = slot_data[name]
+        self.tracker_world = self._build_tracker_world()
       return
 
     self.validate_options(self.options)
@@ -551,6 +570,8 @@ class Sly2World(World):
       self.options.treasure_value_minimum.value,
       self.options.treasure_value_maximum.value
     )
+
+    self.tracker_world = self._build_tracker_world()
 
   def get_filler_item_name(self) -> str:
     # Currently just coins

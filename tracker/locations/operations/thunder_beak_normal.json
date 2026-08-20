@@ -1,0 +1,16 @@
+[
+  {
+    "name": "Operation: Thunder Beak",
+    "sections": [
+      {"name": "The Black Chateau - Operation: Thunder Beak"},
+      {"name": "The Black Chateau - Operation: Thunder Beak - Valves"},
+      {"name": "The Black Chateau - Operation: Thunder Beak - Truck Keys"},
+      {"name": "The Black Chateau - Operation: Thunder Beak - Sign Destruction"}
+    ],
+    "map_locations": [{
+      "map": "The Black Chateau",
+      "x": 492,
+      "y": 785
+    }]
+  }
+]

@@ -269,10 +269,10 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
 
       logger.info(goal_text)
 
-  def _cmd_coins(self, amount: str):
-      """Add coins to game."""
-      if isinstance(self.ctx, Sly2Context):
-          self.ctx.game_interface.add_coins(int(amount))
+  # def _cmd_coins(self, amount: str) -> None:
+  #     """Add coins to game."""
+  #     if isinstance(self.ctx, Sly2Context):
+  #         self.ctx.game_interface.add_coins(int(amount))
 
 class Sly2Context(CommonContext): # type: ignore[misc]
   # Client variables

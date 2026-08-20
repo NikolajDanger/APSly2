@@ -120,22 +120,6 @@
         }]
       },
       {
-        "name": "Operation: High Road",
-        "sections": [
-          {"name": "A Tangled Web - Operation: High Road"},
-          {"name": "A Tangled Web - Operation: High Road - Old Terminal"},
-          {"name": "A Tangled Web - Operation: High Road - Catch Neyla"},
-          {"name": "A Tangled Web - Operation: High Road - Shoot Down Planes"},
-          {"name": "A Tangled Web - Operation: High Road - Defeat The Contessa 1"},
-          {"name": "A Tangled Web - Operation: High Road - Stop Carmelita"}
-        ],
-        "map_locations": [{
-          "map":  "A Tangled Web",
-          "x": 631,
-          "y": 658
-        }]
-      },
-      {
         "name": "Royal Tiara Treasure",
         "sections": [{ "name": "A Tangled Web - Royal Tiara" }],
         "map_locations": [{

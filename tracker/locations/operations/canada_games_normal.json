@@ -1,0 +1,19 @@
+[
+  {
+    "name": "Operation: Canada Games",
+    "sections": [
+      {"name": "Menace from the North, Eh! - Operation: Canada Games"},
+      {"name": "Menace from the North, Eh! - Operation: Canada Games - Log Chopping"},
+      {"name": "Menace from the North, Eh! - Operation: Canada Games - Sabotage Log Chopping"},
+      {"name": "Menace from the North, Eh! - Operation: Canada Games - Wall Climbing"},
+      {"name": "Menace from the North, Eh! - Operation: Canada Games - Sabotage Wall Climbing"},
+      {"name": "Menace from the North, Eh! - Operation: Canada Games - Spinning Logs"},
+      {"name": "Menace from the North, Eh! - Operation: Canada Games - Sabotage Spinning Logs"}
+    ],
+    "map_locations": [{
+      "map": "Menace from the North, eh!",
+      "x": 682,
+      "y": 805
+    }]
+  }
+]

@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Operation: Thunder Beak Tasks",
+    "sections": [
+      {"name": "The Black Chateau - Operation: Thunder Beak - Valves"},
+      {"name": "The Black Chateau - Operation: Thunder Beak - Truck Keys"},
+      {"name": "The Black Chateau - Operation: Thunder Beak - Sign Destruction"}
+    ],
+    "map_locations": [{
+      "map": "The Black Chateau",
+      "x": 492,
+      "y": 785
+    }]
+  },
+  {
+    "name": "Operation: Thunder Beak Goal",
+    "sections": [
+      {"name": "The Black Chateau - Operation: Thunder Beak"}
+    ],
+    "map_locations": [{
+      "map": "The Black Chateau",
+      "x": 492,
+      "y": 813
+    }]
+  }
+]

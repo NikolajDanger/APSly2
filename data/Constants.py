@@ -152,6 +152,21 @@ EPISODES = {
 def episode_key(name: str) -> str:
   return name.lower().replace(",", "").replace("!", "").replace(" ", "_")
 
+# Each single-boss Goal (option values 0-4) turns one operation's location into
+# the Victory event, in this order. The slug names the pair of
+# tracker/locations/operations/<slug>_{normal,goal}.json map files, which split
+# that operation's goal marker off the shared square so the two don't overlap.
+BOSS_GOALS = [
+  ("The Black Chateau", "thunder_beak"),
+  ("The Predator Awakens", "wet_tiger"),
+  ("A Tangled Web", "high_road"),
+  ("Menace from the North, Eh!", "canada_games"),
+  ("Anatomy for Disaster", "carmelitas_gunner"),
+]
+
+def boss_victory_location(episode: str) -> str:
+  return f"{episode} - {EPISODES[episode][-1][-1]}"
+
 # TaskSanity per-task checks: {episode: {job: [(dag_node_index, task_name)]}}.
 # Episode/job names key into EPISODES; jobs with no task checks are omitted.
 TASKS = {

@@ -159,6 +159,10 @@ class TestTrackerPassthrough(Sly2TestBase):
     self.assertEqual(tracker.loot_table, self.world.loot_table)
     self.assertEqual(tracker.thiefnet_costs, self.world.thiefnet_costs)
     self.assertEqual(
+      tracker.tracker_world["map_page_locations"],
+      self.world.tracker_world["map_page_locations"],
+    )
+    self.assertEqual(
       {loc.name for loc in multiworld.get_locations(1)},
       {loc.name for loc in self.multiworld.get_locations(self.player)}
     )
@@ -168,3 +172,45 @@ class TestTrackerPassthrough(Sly2TestBase):
         item_dict[item.name].category for item in self.multiworld.itempool
       )
     )
+
+
+OPERATION_SLUGS = [
+  "thunder_beak",
+  "wet_tiger",
+  "high_road",
+  "canada_games",
+  "carmelitas_gunner",
+]
+
+
+class TestTrackerMapDimitriGoal(Sly2TestBase):
+  options = {"goal": "Dimitri", "tasksanity": True}
+
+  def test_only_goal_operation_uses_goal_variant(self) -> None:
+    pages = self.world.tracker_world["map_page_locations"]
+    self.assertIn("locations/operations/thunder_beak_goal.json", pages)
+    self.assertNotIn("locations/operations/thunder_beak_normal.json", pages)
+    for slug in OPERATION_SLUGS[1:]:
+      self.assertIn(f"locations/operations/{slug}_normal.json", pages)
+      self.assertNotIn(f"locations/operations/{slug}_goal.json", pages)
+
+
+class TestTrackerMapClockLaGoal(Sly2TestBase):
+  options = {"goal": "ClockLa"}
+
+  def test_only_anatomy_operation_uses_goal_variant(self) -> None:
+    pages = self.world.tracker_world["map_page_locations"]
+    self.assertIn("locations/operations/carmelitas_gunner_goal.json", pages)
+    for slug in OPERATION_SLUGS[:-1]:
+      self.assertIn(f"locations/operations/{slug}_normal.json", pages)
+      self.assertNotIn(f"locations/operations/{slug}_goal.json", pages)
+
+
+class TestTrackerMapNonBossGoal(Sly2TestBase):
+  options = {"goal": "All_Bosses"}
+
+  def test_all_operations_use_normal_variant(self) -> None:
+    pages = self.world.tracker_world["map_page_locations"]
+    for slug in OPERATION_SLUGS:
+      self.assertIn(f"locations/operations/{slug}_normal.json", pages)
+      self.assertNotIn(f"locations/operations/{slug}_goal.json", pages)

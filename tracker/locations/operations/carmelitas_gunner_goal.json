@@ -1,0 +1,30 @@
+[
+  {
+    "name": "Mega-Jump Job + Carmelita's Gunner Tasks",
+    "sections": [
+      {"name": "Anatomy for Disaster - Mega-Jump Job"},
+      {"name": "Anatomy for Disaster - Mega-Jump Job - Radio transmitter 1"},
+      {"name": "Anatomy for Disaster - Mega-Jump Job - Radio transmitter 2"},
+      {"name": "Anatomy for Disaster - Mega-Jump Job - Radio transmitter 3"},
+      {"name": "Anatomy for Disaster - Mega-Jump Job - Radio transmitter 4"},
+      {"name": "Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la - Shoot Down Clock-La"},
+      {"name": "Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la - Crash Clock-La"}
+    ],
+    "map_locations": [{
+      "map": "Anatomy for Disaster",
+      "x": 1117,
+      "y": 373
+    }]
+  },
+  {
+    "name": "Carmelita's Gunner Goal",
+    "sections": [
+      {"name": "Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la"}
+    ],
+    "map_locations": [{
+      "map": "Anatomy for Disaster",
+      "x": 1117,
+      "y": 401
+    }]
+  }
+]

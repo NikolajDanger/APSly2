@@ -4,7 +4,9 @@ from math import ceil
 from BaseClasses import CollectionState
 
 from worlds.generic.Rules import add_rule
-from .data.Constants import EPISODES, TASKS, episode_key
+from .data.Constants import (
+  EPISODES, TASKS, episode_key, BOSS_GOALS, boss_victory_location
+)
 
 if typing.TYPE_CHECKING:
   from . import Sly2World
@@ -167,13 +169,9 @@ def set_rules(world: "Sly2World") -> None:
 
 
   if world.options.goal.value < 5:
-    victory_condition = [
-      "The Black Chateau - Operation: Thunder Beak",
-      "The Predator Awakens - Operation: Wet Tiger",
-      "A Tangled Web - Operation: High Road",
-      "Menace from the North, Eh! - Operation: Canada Games",
-      "Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la"
-    ][world.options.goal.value]
+    victory_condition = boss_victory_location(
+      BOSS_GOALS[world.options.goal.value][0]
+    )
 
     victory_location = world.multiworld.get_location(
       victory_condition, world.player
@@ -186,11 +184,7 @@ def set_rules(world: "Sly2World") -> None:
   elif world.options.goal.value == 5:
     def access_rule(state: CollectionState) -> bool:
       victory_conditions = [
-        "The Black Chateau - Operation: Thunder Beak",
-        "The Predator Awakens - Operation: Wet Tiger",
-        "A Tangled Web - Operation: High Road",
-        "Menace from the North, Eh! - Operation: Canada Games",
-        "Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la"
+        boss_victory_location(ep) for ep, _ in BOSS_GOALS
       ]
 
       return all(
