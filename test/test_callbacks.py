@@ -1,10 +1,11 @@
 import json
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from NetUtils import ClientStatus, NetworkItem
 
-from .. import Callbacks
+from .. import Callbacks, Sly2Client
 from ..Callbacks import (
   activate_trap,
   check_clockla,
@@ -31,6 +32,7 @@ from ..Callbacks import (
 from ..data.Constants import (
   EPISODES,
   LOOT,
+  LOOT_IDS,
   MEGA_JUMP_GADGET_ID,
   MEGA_JUMP_UNLOAD_CALL,
   PICKPOCKET_LOOT_TABLE_CHANCES,
@@ -39,10 +41,12 @@ from ..data.Constants import (
 )
 from ..data.Items import Trap, item_dict
 from ..data.Locations import location_dict
+from ..Sly2Client import _handle_game_ready
 from ..Sly2Interface import PowerUps, Sly2Episode
 from .client_base import (
   ClientTestBase,
   build_dag,
+  dag_node,
   job_status,
   make_guard_list,
   set_active_character,
@@ -392,11 +396,22 @@ class TestHandleCheckGoal(ClientTestBase):
     for goal, index in enumerate([0, 2, 4, 6, 7]):
       self.slot_data["goal"] = goal
       self.ctx.sent.clear()
+      self.ctx.goal_sent = False
       await handle_check_goal(self.ctx)
       self.assertFalse(self.goaled(), goal)
       self.complete(index)
       await handle_check_goal(self.ctx)
       self.assertTrue(self.goaled(), goal)
+
+  async def test_goal_sent_once(self) -> None:
+    self.slot_data["goal"] = 0
+    self.complete(0)
+    await handle_check_goal(self.ctx)
+    await handle_check_goal(self.ctx)
+    self.assertEqual(len(self.ctx.sent_cmds("StatusUpdate")), 1)
+    self.ctx.reset_world_state()
+    await handle_check_goal(self.ctx)
+    self.assertEqual(len(self.ctx.sent_cmds("StatusUpdate")), 2)
 
   async def test_clockwerk_hunt(self) -> None:
     self.slot_data["goal"] = 6
@@ -780,9 +795,11 @@ class TestTraps(ClientTestBase):
     self.pine.poke_float(self.addr["clock speed"], 0.5)
     self.pine.poke_float(self.addr["friction"], 0.2)
     reset_traps(self.ctx)
-    self.assertEqual(self.ctx.active_traps, {})
+    self.assertEqual(self.ctx.active_traps, {Trap.ICE: 5000.0})
     self.assertEqual(self.pine.peek_float(self.addr["clock speed"]), 1.0)
     self.assertEqual(self.pine.peek_float(self.addr["friction"]), 1.5)
+    self.ctx.reset_world_state()
+    self.assertEqual(self.ctx.active_traps, {})
 
 
 class TestMegaJump(ClientTestBase):
@@ -894,7 +911,7 @@ class TestInit(ClientTestBase):
     self.ctx.prev_coins = 5
     self.pine.poke_float(self.addr["clock speed"], 0.5)
     await init(self.ctx, True)
-    self.assertEqual(self.ctx.active_traps, {})
+    self.assertEqual(self.ctx.active_traps, {Trap.ICE: 5000.0})
     self.assertIsNone(self.ctx.prev_coins)
     self.assertEqual(self.pine.peek_float(self.addr["clock speed"]), 1.0)
     for guard in self.guards:
@@ -937,6 +954,7 @@ class TestUpdate(ClientTestBase):
     self.give("Progressive The Black Chateau")
 
   async def tick(self) -> None:
+    self.interface.clear_cache()
     with (
       patch.object(Callbacks, "sleep") as sleep,
       patch.object(Callbacks, "time", return_value=1000.0)
@@ -1011,3 +1029,232 @@ class TestUpdate(ClientTestBase):
     self.assertTrue(self.ctx.in_safehouse)
     for address in self.addr["thiefnet unlock"]:
       self.assertEqual(self.pine.peek32(address), 1)
+
+  async def test_bottles_text_written_on_change(self) -> None:
+    self.enter(1, 2)
+    buffer = string_buffer(self.pine, self.addr, "right back", 1)
+    await self.tick()
+    self.assertEqual(
+      self.pine.peek_cstring(buffer), b"Bottles Collected: 0"
+    )
+    self.pine.poke_bytes(buffer, b"junk\0")
+    await self.tick()
+    self.assertEqual(self.pine.peek_cstring(buffer), b"junk")
+    self.pine.poke32(self.addr["bottle flags"][0], 0b101)
+    await self.tick()
+    self.assertEqual(
+      self.pine.peek_cstring(buffer), b"Bottles Collected: 2"
+    )
+
+  async def test_title_text_follows_items(self) -> None:
+    self.enter(0, 0)
+    address = self.addr["text"]["Episode 2"]
+    await self.tick()
+    self.assertEqual(self.pine.peek_cstring(address), b"Locked")
+    self.pine.poke_bytes(address, b"junk\0")
+    await self.tick()
+    self.assertEqual(self.pine.peek_cstring(address), b"junk")
+    self.give("Progressive A Starry Eyed Encounter")
+    self.pine.poke32(self.addr["map id"], 1)
+    await self.tick()
+    await self.tick()
+    self.assertEqual(self.pine.peek_cstring(address), b"Unlocked 1/4")
+
+  async def test_jobs_follow_items_and_game_changes(self) -> None:
+    self.enter(1, 2)
+    await self.tick()
+    await self.tick()
+    self.assertEqual(
+      [job_status(self.pine, j) for j in self.addr["jobs"][0][0]], [1, 1]
+    )
+    self.assertFalse(self.ctx.jobs_dirty)
+    # The game activating a job that should be locked is reverted
+    set_job_status(self.pine, self.addr["jobs"][0][1][0], 1)
+    await self.tick()
+    self.assertEqual(job_status(self.pine, self.addr["jobs"][0][1][0]), 0)
+    # ...until its chapter is unlocked by an item
+    self.ctx.jobs_completed[0][0] = [True, True]
+    self.give("Progressive The Black Chateau")
+    await self.tick()
+    await self.tick()
+    self.assertEqual(job_status(self.pine, self.addr["jobs"][0][1][0]), 1)
+
+  async def test_bottles_follow_flags_and_items(self) -> None:
+    self.slot_data["bottle_location_bundle_size"] = 5
+    self.enter(1, 2)
+    await self.tick()
+    self.assertEqual(self.pine.peek32(self.addr["bottle count"]), 0)
+    self.give("5 bottles - The Black Chateau")
+    await self.tick()
+    await self.tick()
+    self.assertEqual(self.pine.peek32(self.addr["bottle count"]), 5)
+    self.pine.poke32(self.addr["bottle count"], 6)
+    await self.tick()
+    self.assertEqual(self.pine.peek32(self.addr["bottle count"]), 6)
+    self.pine.poke32(self.addr["bottle flags"][0], 1)
+    await self.tick()
+    self.assertEqual(self.pine.peek32(self.addr["bottle count"]), 5)
+
+  async def test_loot_odds_follow_pickpocket_checks(self) -> None:
+    self.slot_data["dynamic_loot_tables"] = True
+    self.slot_data["loot_table_distribution"] = 50
+    self.enter(1, 2)
+    await self.tick()
+    odds_address = self.addr["loot table odds"][0][0][0]
+    before = self.pine.peek32(odds_address)
+    self.assertFalse(self.ctx.loot_dirty)
+    loot = episode_loot(self.slot_data["loot_table"], 0, 0)[0]
+    index = LOOT_IDS[loot] - LOOT_IDS[list(LOOT)[0]]
+    self.pine.poke32(self.addr["loot"][index], 1)
+    await self.tick()
+    self.assertIn(
+      self.loc(f"Pickpocket {loot}"),
+      self.ctx.sent_cmds("LocationChecks")[-1]["locations"]
+    )
+    self.assertTrue(self.ctx.loot_dirty)
+    await self.tick()
+    self.assertNotEqual(self.pine.peek32(odds_address), before)
+
+
+class TestInitPerMap(ClientTestBase):
+  async def asyncSetUp(self) -> None:
+    await super().asyncSetUp()
+    build_dag(self.pine, self.addr)
+
+  async def test_resets_bottles_text(self) -> None:
+    self.enter(1, 2)
+    self.ctx.bottles_text = 3
+    await init(self.ctx, False)
+    self.assertIsNone(self.ctx.bottles_text)
+
+  async def test_stuck_in_cairo_boots_to_menu(self) -> None:
+    self.enter(0, 0)
+    self.pine.poke32(self.addr["savefile last world"], 3)
+    await init(self.ctx, False)
+    self.assertEqual(self.pine.peek32(self.addr["reload"]), 0)
+    await init(self.ctx, True)
+    self.assertEqual(self.pine.peek32(self.addr["reload"]), 1)
+
+  async def test_fixes_abandoned_jobs_in_hub(self) -> None:
+    self.enter(1, 2)
+    set_job_status(self.pine, 4, 2)
+    await init(self.ctx, True)
+    self.assertEqual(job_status(self.pine, 4), 1)
+    set_job_status(self.pine, 4, 2)
+    self.enter(1, 3)
+    await init(self.ctx, True)
+    self.assertEqual(job_status(self.pine, 4), 2)
+
+  async def test_episode_set_once_per_episode(self) -> None:
+    self.enter(1, 2)
+    await init(self.ctx, True)
+    self.enter(1, 3)
+    await init(self.ctx, True)
+    self.assertEqual(len(self.ctx.sent_cmds("Set")), 1)
+    self.enter(2, 8)
+    await init(self.ctx, True)
+    self.assertEqual(
+      [m["operations"][0]["value"] for m in self.ctx.sent_cmds("Set")],
+      ["The Black Chateau", "A Starry Eyed Encounter"]
+    )
+    self.ctx.reset_world_state()
+    await init(self.ctx, True)
+    self.assertEqual(len(self.ctx.sent_cmds("Set")), 3)
+
+
+class TestTick(ClientTestBase):
+  """Whole ticks through _handle_game_ready, including the prefetch"""
+  options = {"tasksanity": True, "include_vaults": True}
+
+  async def asyncSetUp(self) -> None:
+    await super().asyncSetUp()
+    build_dag(self.pine, self.addr)
+    set_string_table(self.pine, self.addr, 1)
+    set_infobox_pointers(self.pine, self.addr)
+    self.give("Progressive The Black Chateau")
+    self.ctx.server = SimpleNamespace()
+
+  def place(self, episode: int, map_id: int) -> None:
+    self.enter(episode, map_id)
+    self.ctx.current_episode = None
+
+  async def tick(self) -> None:
+    with (
+      patch.object(Sly2Client.asyncio, "sleep"),
+      patch.object(Callbacks, "sleep"),
+      patch.object(Callbacks, "time", return_value=1000.0)
+    ):
+      await _handle_game_ready(self.ctx)
+
+  async def settle(self) -> None:
+    await self.tick()
+    await self.tick()
+    self.pine.clear_counts()
+    self.ctx.sent.clear()
+
+  def assert_cost(self, reads: int, batches: int) -> None:
+    self.assertEqual(
+      (self.pine.reads, self.pine.batches, self.pine.writes),
+      (reads, batches, [])
+    )
+    self.assertEqual(self.ctx.sent, [])
+
+  async def test_hub_steady_state(self) -> None:
+    self.place(1, 2)
+    await self.settle()
+    await self.tick()
+    self.assert_cost(0, 2)
+    self.assertEqual(self.ctx.current_map, 2)
+    self.assertEqual(
+      [job_status(self.pine, j) for j in self.addr["jobs"][0][0]], [1, 1]
+    )
+
+  async def test_title_screen_steady_state(self) -> None:
+    self.place(0, 0)
+    await self.settle()
+    await self.tick()
+    self.assert_cost(0, 2)
+    self.assertEqual(self.pine.peek8(self.addr["episode unlocks"]), 8)
+
+  async def test_first_tick_walks_dag_once(self) -> None:
+    self.place(1, 2)
+    await self.tick()
+    self.assertLess(self.pine.reads, 128)
+    self.pine.clear_counts()
+    await self.tick()
+    self.assertLess(self.pine.reads, 10)
+
+  async def test_map_change_runs_init(self) -> None:
+    self.place(1, 2)
+    await self.settle()
+    self.ctx.bottles_text = 5
+    self.ctx.prev_coins = 7
+    self.pine.poke32(self.addr["map id"], 3)
+    await self.tick()
+    self.assertEqual(self.ctx.current_map, 3)
+    self.assertIsNone(self.ctx.bottles_text)
+    self.assertIsNone(self.ctx.prev_coins)
+    self.assertEqual(self.ctx.current_episode, Sly2Episode.The_Black_Chateau)
+    self.assertEqual(self.ctx.sent_cmds("Set"), [])
+
+  async def test_dag_relinked_on_map_change(self) -> None:
+    self.place(1, 2)
+    await self.settle()
+    self.pine.poke32(dag_node(3) + 0x20, dag_node(50))
+    self.pine.poke32(self.addr["map id"], 3)
+    await self.tick()
+    self.assertEqual(self.interface._get_job_address(4), dag_node(50))
+
+  async def test_loading_defers_everything(self) -> None:
+    self.place(1, 2)
+    self.pine.poke32(self.addr["loading"], 2)
+    await self.tick()
+    self.assertTrue(self.ctx.is_loading)
+    self.assertIsNone(self.ctx.current_episode)
+    self.assertEqual(self.pine.writes, [])
+    self.pine.poke32(self.addr["loading"], 0)
+    await self.tick()
+    self.assertFalse(self.ctx.is_loading)
+    self.assertIsNone(self.ctx.current_episode)
+    await self.tick()
+    self.assertEqual(self.ctx.current_episode, Sly2Episode.The_Black_Chateau)

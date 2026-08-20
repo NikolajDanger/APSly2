@@ -5,13 +5,16 @@ from ..pcsx2_interface.pine import Pine
 
 class FakePine(Pine):
   """In-memory stand-in for PINE. Untouched memory reads as zero; every write
-  is also appended to `writes` as (kind, address, bytes)."""
+  is also appended to `writes` as (kind, address, bytes). `reads` counts
+  single-value reads and `batches` batch requests (each one round trip)."""
 
   def __init__(self, game_id: str = "SCUS-97316") -> None:
     self.game_id = game_id
     self.connected = True
     self.memory: dict[int, int] = {}
     self.writes: list[tuple[str, int, bytes]] = []
+    self.reads = 0
+    self.batches = 0
 
   def connect(self) -> None:
     self.connected = True
@@ -68,30 +71,37 @@ class FakePine(Pine):
   def clear_writes(self) -> None:
     self.writes.clear()
 
+  def clear_counts(self) -> None:
+    self.reads = 0
+    self.batches = 0
+    self.clear_writes()
+
   def _record(self, kind: str, address: int, data: bytes) -> None:
     self.writes.append((kind, address, data))
     self.poke_bytes(address, data)
 
   def read_int8(self, address: int) -> int:
+    self.reads += 1
     return self.peek8(address)
 
   def read_int16(self, address: int) -> int:
+    self.reads += 1
     return self.peek16(address)
 
   def read_int32(self, address: int) -> int:
+    self.reads += 1
     return self.peek32(address)
 
   def read_bytes(self, address: int, length: int) -> bytes:
+    self.reads += 1
     return self.peek_bytes(address, length)
 
-  def batch_read_int8(self, addresses: list[int]) -> list[int]:
-    return [self.peek8(a) for a in addresses]
-
-  def batch_read_int16(self, addresses: list[int]) -> list[int]:
-    return [self.peek16(a) for a in addresses]
-
-  def batch_read_int32(self, addresses: list[int]) -> list[int]:
-    return [self.peek32(a) for a in addresses]
+  def batch_read(self, reads: list[tuple[Pine.DataSize, int]]) -> list[int]:
+    self.batches += 1
+    return [
+      int.from_bytes(self.peek_bytes(address, size), "little")
+      for size, address in reads
+    ]
 
   def write_int8(self, address: int, value: int) -> None:
     self._record("w8", address, value.to_bytes(1, "little"))
@@ -115,3 +125,9 @@ class FakePine(Pine):
   def batch_write_float(self, operations: list[tuple[int, float]]) -> None:
     for address, value in operations:
       self._record("bwfloat", address, struct.pack("<f", value))
+
+  def batch_write(
+    self, writes: list[tuple[Pine.DataSize, int, bytes]]
+  ) -> None:
+    for size, address, data in writes:
+      self._record(f"bw{size*8}", address, data)

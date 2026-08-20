@@ -17,6 +17,7 @@ from .Sly2Interface import Sly2Interface, Sly2Episode, PowerUps
 from .Callbacks import (
   init,
   update,
+  mark_dirty,
   compute_available_episodes,
   episode_loot,
   loot_odds_row
@@ -268,10 +269,10 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
 
       logger.info(goal_text)
 
-  # def _cmd_coins(self, amount: str):
-  #     """Add coins to game."""
-  #     if isinstance(self.ctx, Sly2Context):
-  #         self.ctx.game_interface.add_coins(int(amount))
+  def _cmd_coins(self, amount: str):
+      """Add coins to game."""
+      if isinstance(self.ctx, Sly2Context):
+          self.ctx.game_interface.add_coins(int(amount))
 
 class Sly2Context(CommonContext): # type: ignore[misc]
   # Client variables
@@ -300,6 +301,16 @@ class Sly2Context(CommonContext): # type: ignore[misc]
   in_safehouse: bool = False
   in_hub: bool = False
   current_episode: Optional[Sly2Episode] = None
+  current_map: Optional[int] = None
+  episode_sent: Optional[Sly2Episode] = None
+  bottles_text: Optional[int] = None
+  bottle_flags: list[int]
+  job_statuses: list[int]
+  # Game state the client owns that must be (re)applied by update
+  jobs_dirty: bool = True
+  loot_dirty: bool = True
+  bottles_dirty: bool = True
+  text_dirty: bool = True
 
   # Items and checks
   inventory: Dict[int,int]
@@ -318,6 +329,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
   trap_cursor: int = 0  # High-water of items eligible for trap activation
   trap_baseline_pending: bool = False  # Re-baseline trap_cursor after connect
   last_checked_locations: set[int]  # Track what was already sent
+  goal_sent: bool = False
   active_traps: dict[Items.Trap, float]  # Active trap -> time it expires
 
   def __init__(
@@ -358,6 +370,13 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     self.clockwerk_parts_count = 0
     self.locations_checked = set()
     self.last_checked_locations = set()
+    self.goal_sent = False
+    self.current_map = None
+    self.episode_sent = None
+    self.active_traps.clear()
+    self.bottle_flags = []
+    self.job_statuses = []
+    mark_dirty(self)
 
   def reset_server_state(self) -> None:
     # Wipe per-slot caches the moment the connection drops. The base client
@@ -512,6 +531,9 @@ class Sly2Context(CommonContext): # type: ignore[misc]
 
   def on_package(self, cmd: str, args: dict) -> None:
     super().on_package(cmd, args)
+    if cmd == "RoomUpdate" and "checked_locations" in args:
+      # Dynamic loot odds follow the server's view of checked pickpockets
+      self.loot_dirty = True
     if cmd == "Bounced":
       if "RingLink" in args.get("tags", []) and self.ring_link_enabled:
         data = args["data"]
@@ -596,7 +618,10 @@ async def pcsx2_sync_task(ctx: Sly2Context) -> None:
       continue
 
 async def _handle_game_ready(ctx: Sly2Context) -> None:
+  ctx.game_interface.clear_cache()
+  ctx.game_interface.prefetch_tick_state()
   current_episode = ctx.game_interface.get_current_episode()
+  current_map = ctx.game_interface.get_current_map()
 
   ctx.game_interface.skip_cutscene()
   # ctx.game_interface.skip_dialogue()
@@ -610,6 +635,7 @@ async def _handle_game_ready(ctx: Sly2Context) -> None:
 
   if ctx.game_interface.is_loading():
     ctx.is_loading = True
+    await asyncio.sleep(0.1)
     return
 
   connected_to_server = (ctx.server is not None) and (ctx.slot is not None)
@@ -617,8 +643,12 @@ async def _handle_game_ready(ctx: Sly2Context) -> None:
   new_connection = ctx.is_connected_to_server != connected_to_server
   if new_connection and connected_to_server:
     ctx.trap_baseline_pending = True
-  if ctx.current_episode != current_episode or new_connection:
+  map_changed = (
+    (ctx.current_episode, ctx.current_map) != (current_episode, current_map)
+  )
+  if map_changed or new_connection:
     ctx.current_episode = current_episode
+    ctx.current_map = current_map
     ctx.is_connected_to_server = connected_to_server
     await init(ctx, connected_to_server)
 

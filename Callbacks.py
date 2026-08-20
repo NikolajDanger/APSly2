@@ -24,32 +24,19 @@ if TYPE_CHECKING:
   from .Sly2Client import Sly2Context
 
 async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
-  """Called continuously"""
+  """Called every tick"""
   if ctx.current_episode is None:
     return
 
-  # Quite a lot of stuff ended up in this function, even though it might
-  # have fit better in init(). It just didn't work when I put it there,
-  # probably because of when the game loads stuff.
-
-  # Makes sure all episodes are available
+  # A menu reload clobbers this, so it is re-asserted (a no-op write when it
+  # already holds) rather than set once per map.
   if ctx.current_episode == Sly2Episode.Title_Screen:
     ctx.game_interface.unlock_episodes()
 
   if ap_connected and ctx.slot_data is not None:
-    fix_mega_jump(ctx)
-
     in_safehouse = ctx.game_interface.in_safehouse()
     in_hub = ctx.game_interface.in_hub()
     current_map = ctx.game_interface.get_current_map()
-
-    replace_text(ctx)
-
-    if ctx.game_interface.stuck_in_cairo():
-      ctx.game_interface.to_episode_menu()
-
-    if ctx.slot_data["bottle_location_bundle_size"] != 0:
-      set_bottles(ctx)
 
     # If the player is in a safehouse, set the thiefnet items
     if in_safehouse and not ctx.in_safehouse:
@@ -64,27 +51,42 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
       ctx.episode_hint_shown = False
       unset_thiefnet(ctx)
 
-    entered_hub = in_hub and not ctx.in_hub
-    if entered_hub:
+    if in_hub:
       ctx.in_hub = True
 
-    set_pickpocketing(ctx)
+    if ctx.current_episode == Sly2Episode.Title_Screen:
+      if ctx.text_dirty:
+        replace_text(ctx)
+        ctx.text_dirty = False
+    else:
+      if ctx.current_episode == Sly2Episode.Anatomy_for_Disaster:
+        check_clockla(ctx)
 
-    if ctx.slot_data["randomize_loot"]:
-      set_loot_table(ctx)
-
-    # The DAG unloads before the client can see that the clock-la mission
-    # is finished. That's why we need to check it directly.
-    check_clockla(ctx)
-
-    if ctx.current_episode != Sly2Episode.Title_Screen:
-      current_job = ctx.game_interface.get_current_job()
-      in_hub = ctx.game_interface.in_hub()
-      if in_hub and current_job == 0xffffffff:
-        set_jobs(ctx)
-
-      check_jobs(ctx)
+      if check_jobs(ctx):
+        ctx.jobs_dirty = True
       check_tasks(ctx)
+
+      if ctx.jobs_dirty and in_hub:
+        if ctx.game_interface.get_current_job() == 0xffffffff:
+          set_jobs(ctx)
+          ctx.jobs_dirty = False
+
+      if ctx.loot_dirty:
+        set_pickpocketing(ctx)
+        if ctx.slot_data["randomize_loot"]:
+          set_loot_table(ctx)
+        ctx.loot_dirty = False
+
+      bottle_flags = ctx.game_interface.get_bottle_flags()
+      if bottle_flags != ctx.bottle_flags:
+        ctx.bottle_flags = bottle_flags
+        ctx.bottles_dirty = True
+      if ctx.bottles_dirty:
+        if ctx.slot_data["bottle_location_bundle_size"] != 0:
+          set_bottles(ctx)
+        if in_hub:
+          set_bottles_collected(ctx)
+        ctx.bottles_dirty = False
 
       if not in_safehouse:
         if ctx.slot_data["include_vaults"]:
@@ -94,8 +96,6 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
         await handle_notifications(ctx)
         await handle_deathlink(ctx)
         await handle_ring_link(ctx)
-        if in_hub:
-          set_bottles_collected(ctx)
 
     # If not in the tutorial or a cutscene, do Archipelago stuff.
     # This part is separate from the other "handle_*" functions because
@@ -108,6 +108,13 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
       await handle_check_goal(ctx)
 
   boot_from_invalid_episode(ctx, ap_connected)
+
+def mark_dirty(ctx: 'Sly2Context') -> None:
+  """Have update re-apply every piece of game state the client owns"""
+  ctx.jobs_dirty = True
+  ctx.loot_dirty = True
+  ctx.bottles_dirty = True
+  ctx.text_dirty = True
 
 def episode_loot(loot_table: dict[str, list], i: int, j: int) -> list[str]:
   loot = []
@@ -226,15 +233,23 @@ def fix_mega_jump(ctx: 'Sly2Context') -> None:
       ctx.game_interface.set_sly_binding(empty[0])
 
 async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
-  """Called when the player connects to the AP server or enters a new episode"""
+  """Called when the player connects to the AP server or a new map has
+  finished loading"""
   ctx.game_interface.set_title_start_enabled(
     ctx.current_episode != Sly2Episode.Title_Screen
   )
+  ctx.bottles_text = None
 
-  if ap_connected and ctx.current_episode:
-    if ctx.slot_data is None:
-      return
+  if not ap_connected or ctx.slot_data is None:
+    return
 
+  mark_dirty(ctx)
+  fix_mega_jump(ctx)
+
+  if ctx.current_episode == Sly2Episode.Title_Screen:
+    if ctx.game_interface.stuck_in_cairo():
+      ctx.game_interface.to_episode_menu()
+  elif ctx.current_episode:
     # In case the client stopped mid-trap (e.g. a crash), revert any
     # lingering trap edits to their defaults.
     reset_traps(ctx)
@@ -246,6 +261,7 @@ async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
 
     if ctx.slot_data["randomize_loot"]:
       set_loot_table(ctx)
+    ctx.loot_dirty = False
 
     set_prices(ctx)
 
@@ -254,9 +270,12 @@ async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
     if ctx.slot_data["include_pickpocketing"]:
       ctx.game_interface.despawn_guards()
 
-    if ctx.current_episode != 0:
-      fix_jobs(ctx)
+    fix_jobs(ctx)
+    if not ctx.game_interface.in_safehouse():
+      set_powerups(ctx)
 
+    if ctx.current_episode != ctx.episode_sent:
+      ctx.episode_sent = ctx.current_episode
       await ctx.send_msgs([{
         "cmd": "Set",
         "key": f"Slot:{ctx.slot}:Episode",
@@ -274,7 +293,10 @@ def set_bottles_collected(ctx: 'Sly2Context') -> None:
   """Sets the "Bottles Collected" text in the pause menu"""
   ep = ctx.game_interface.get_current_episode()
   bottles = ctx.game_interface.get_bottles(ep)
+  if bottles == ctx.bottles_text:
+    return
   ctx.game_interface.set_text("right back",f"Bottles Collected: {bottles}")
+  ctx.bottles_text = bottles
 
 
 def set_bottles(ctx: 'Sly2Context') -> None:
@@ -350,14 +372,11 @@ def replace_text(ctx: 'Sly2Context') -> None:
 
   # Max 31 chars: the "new game" string slot is only 32 bytes
   connected_text = "Connected to Archipelago server"
-  ctx.game_interface.set_text(
-    ctx.game_interface.addresses["text"]["Press START (resume)"],
-    connected_text
-  )
-  ctx.game_interface.set_text(
-    ctx.game_interface.addresses["text"]["Press START (new)"],
-    connected_text
-  )
+  addresses = ctx.game_interface.addresses["text"]
+  texts = [
+    (addresses["Press START (resume)"], connected_text),
+    (addresses["Press START (new)"], connected_text)
+  ]
 
   # Tells you if an episode is unlocked or not
   # and how many Clockwerk parts you have
@@ -374,10 +393,8 @@ def replace_text(ctx: 'Sly2Context') -> None:
         )
       else:
         rep_text = "Locked"
-    ctx.game_interface.set_text(
-      ctx.game_interface.addresses["text"][f"Episode {i}"],
-      rep_text
-    )
+    texts.append((addresses[f"Episode {i}"], rep_text))
+  ctx.game_interface.set_texts(texts)
 
 def boot_from_invalid_episode(ctx: 'Sly2Context', ap_connected: bool) -> None:
   """Sends the player to the episode menu if they are in an invalid episode"""
@@ -400,42 +417,34 @@ def boot_from_invalid_episode(ctx: 'Sly2Context', ap_connected: bool) -> None:
     sleep(1)
 
 def check_clockla(ctx: 'Sly2Context') -> None:
+  if ctx.jobs_completed[7][3][0]:
+    return
   address = ctx.game_interface.addresses["clock-la defeated"]
-  ctx.jobs_completed[7][3][0] = (
-    ctx.jobs_completed[7][3][0] or
-    (ctx.game_interface._read32(address) == 3)
-  )
+  ctx.jobs_completed[7][3][0] = ctx.game_interface._read32(address) == 3
 
-def check_jobs(ctx: 'Sly2Context') -> None:
-  """Checks if the jobs are completed"""
+def check_jobs(ctx: 'Sly2Context') -> bool:
+  """Checks if the jobs are completed; True when any job node's status
+  changed since the last call (the game activating or finishing one)"""
   episode = ctx.current_episode
   if episode is None:
-    return
+    return False
 
   chapters = ctx.game_interface.addresses["jobs"][episode-1]
+  jobs = [
+    (j, k, job if isinstance(job, tuple) else (job, job))
+    for j, chapter in enumerate(chapters)
+    for k, job in enumerate(chapter)
+  ]
+  statuses = ctx.game_interface.job_statuses(
+    [index for _, _, pair in jobs for index in pair]
+  )
+  completed = ctx.jobs_completed[episode-1]
+  for (j, k, _), done in zip(jobs, statuses[1::2]):
+    completed[j][k] = completed[j][k] or done == 3
 
-  # Collect all job addresses to check
-  jobs_to_check = []
-  job_positions = []  # Track (chapter_idx, job_idx) for each job
-
-  for j, chapter in enumerate(chapters):
-    for k, job in enumerate(chapter):
-      # Skip if already marked as completed
-      if ctx.jobs_completed[episode-1][j][k]:
-        continue
-
-      if isinstance(job, tuple):
-        job = job[1]
-
-      jobs_to_check.append(job)
-      job_positions.append((j, k))
-
-  if jobs_to_check:
-    statuses = ctx.game_interface.jobs_completed(jobs_to_check)
-
-    # Update completion status
-    for (j, k), status in zip(job_positions, statuses):
-      ctx.jobs_completed[episode-1][j][k] = status
+  changed = statuses != ctx.job_statuses
+  ctx.job_statuses = statuses
+  return changed
 
 def check_tasks(ctx: 'Sly2Context') -> None:
   """Checks if the current episode's individual tasks are completed"""
@@ -602,6 +611,15 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
     return
 
   items_n = ctx.game_interface.read_items_received()
+  network_items = ctx.items_received
+
+  nothing_new = (
+    len(network_items) == ctx.notified_items == items_n and
+    not ctx.trap_baseline_pending and
+    (in_safehouse or ctx.trap_cursor == len(network_items))
+  )
+  if nothing_new:
+    return
 
   notify_from = max(items_n, ctx.notified_items)
 
@@ -615,7 +633,7 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
 
   available_episodes = compute_available_episodes(ctx)
   bottles = {e: 0 for e in Sly2Episode}
-  network_items = ctx.items_received
+  rebind = False
 
   if len(network_items) != ctx.notified_items:
     ctx.clockwerk_parts_count = sum(
@@ -630,6 +648,7 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
     if i >= notify_from:
       ctx.inventory[network_item.item] += 1
       ctx.notification(f"Received {item.name} from {player}")
+      rebind = rebind or item.name == "Mega Jump"
 
     if item.category == "Power-Up":
       # I have strong opinions about this. It should be paraglider
@@ -668,6 +687,14 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
 
   if ctx.current_episode != 0 and not ctx.in_safehouse:
     set_powerups(ctx)
+  if rebind:
+    fix_mega_jump(ctx)
+
+  if available_episodes != ctx.available_episodes:
+    ctx.jobs_dirty = True
+    ctx.text_dirty = True
+  if bottles != ctx.all_bottles:
+    ctx.bottles_dirty = True
 
   ctx.all_bottles = bottles
   ctx.game_interface.set_items_received(len(network_items))
@@ -725,12 +752,12 @@ def reset_traps(ctx: 'Sly2Context') -> None:
 
   Timed traps continuously overwrite game memory, so if the client stops
   while one is active the edited value would persist until the next map
-  reload. Resetting to the defaults on connect cleans up any such leftovers.
+  reload. Resetting to the defaults on connect cleans up any such leftovers;
+  a trap still running is re-applied by handle_traps on the next tick.
   """
   ctx.game_interface.set_clock_speed(1.0)
   ctx.game_interface.set_friction(1.5)
   ctx.game_interface.release_guards()
-  ctx.active_traps.clear()
 
 async def handle_checks(ctx: 'Sly2Context') -> None:
   """Send checks to the multiworld"""
@@ -833,6 +860,11 @@ async def handle_checks(ctx: 'Sly2Context') -> None:
   # Only send location checks if there are new locations
   new_locations = ctx.locations_checked - ctx.last_checked_locations
   if new_locations:
+    if any(
+      Locations.location_dict[f"Pickpocket {loot}"].code in new_locations
+      for loot in LOOT
+    ):
+      ctx.loot_dirty = True
     await ctx.send_msgs([
       {"cmd": "LocationChecks", "locations": ctx.locations_checked}
     ])
@@ -885,7 +917,7 @@ async def handle_ring_link(ctx: 'Sly2Context') -> None:
 
 async def handle_check_goal(ctx: 'Sly2Context') -> None:
   """Checks if the goal is completed"""
-  if ctx.slot_data is None:
+  if ctx.slot_data is None or ctx.goal_sent:
     return
 
   goal = ctx.slot_data["goal"]
@@ -915,6 +947,7 @@ async def handle_check_goal(ctx: 'Sly2Context') -> None:
 
 
   if goaled:
+    ctx.goal_sent = True
     await ctx.send_msgs([
       {"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}
     ])

@@ -51,13 +51,31 @@ class TestPineRequests(unittest.TestCase):
       header(self.cmd.WRITE32, 0x200000, 13) + b"\x44\x33\x22\x11",
     ])
 
-  def test_write_bytes_splits_by_largest_size(self) -> None:
+  def test_write_bytes_batches_largest_sizes(self) -> None:
     self.pine.write_bytes(0x200000, bytes(range(11)))
-    self.assertEqual(self.pine.requests, [
-      header(self.cmd.WRITE64, 0x200000, 17) + bytes(range(8)),
-      header(self.cmd.WRITE16, 0x200008, 11) + bytes([8, 9]),
-      header(self.cmd.WRITE8, 0x20000A, 10) + bytes([10]),
-    ])
+    body = (
+      bytes([self.cmd.WRITE64]) + (0x200000).to_bytes(4, "little") +
+      bytes(range(8)) +
+      bytes([self.cmd.WRITE16]) + (0x200008).to_bytes(4, "little") +
+      bytes([8, 9]) +
+      bytes([self.cmd.WRITE8]) + (0x20000A).to_bytes(4, "little") +
+      bytes([10])
+    )
+    self.assertEqual(
+      self.pine.requests, [(len(body) + 4).to_bytes(4, "little") + body]
+    )
+
+  def test_read_bytes_batches_largest_sizes(self) -> None:
+    self.pine.replies = [bytes(range(11))]
+    self.assertEqual(self.pine.read_bytes(0x200000, 11), bytes(range(11)))
+    body = (
+      bytes([self.cmd.READ64]) + (0x200000).to_bytes(4, "little") +
+      bytes([self.cmd.READ16]) + (0x200008).to_bytes(4, "little") +
+      bytes([self.cmd.READ8]) + (0x20000A).to_bytes(4, "little")
+    )
+    self.assertEqual(
+      self.pine.requests, [(len(body) + 4).to_bytes(4, "little") + body]
+    )
 
   def test_reads_decode_little_endian(self) -> None:
     self.pine.replies = [b"\x44\x33\x22\x11", b"\xff"]

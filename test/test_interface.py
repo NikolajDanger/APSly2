@@ -23,10 +23,13 @@ from .client_base import (
   GAME_ID,
   HEAP,
   InterfaceTestBase,
+  build_dag,
+  dag_node,
   guard,
   make_guard_list,
   set_active_character,
   set_location,
+  set_parents,
   set_string_table,
   string_buffer
 )
@@ -591,3 +594,162 @@ class TestStateChecks(InterfaceTestBase):
       self.assertFalse(self.interface.in_safehouse(), hex(address))
       self.pine.poke32(address, old)
     self.assertTrue(self.interface.in_safehouse())
+
+
+class TestTickCache(InterfaceTestBase):
+  def test_prefetch_serves_reads(self) -> None:
+    a = self.addr
+    self.pine.poke32(a["coins"], 42)
+    self.pine.poke16(a["frame counter"], 7)
+    self.pine.poke_bytes(a["gadgets"], bytes(range(1, 7)))
+    self.interface.prefetch(
+      [(4, a["coins"]), (2, a["frame counter"]), (6, a["gadgets"])]
+    )
+    self.assertEqual(self.pine.batches, 1)
+    self.pine.clear_counts()
+    self.assertEqual(self.interface._read32(a["coins"]), 42)
+    self.assertEqual(self.interface._read16(a["frame counter"]), 7)
+    self.assertEqual(
+      self.interface._read_bytes(a["gadgets"], 6), bytes(range(1, 7))
+    )
+    self.assertEqual(self.interface._read32(a["gadgets"]), 0x04030201)
+    self.assertEqual((self.pine.reads, self.pine.batches), (0, 0))
+
+    # Not prefetched, and a byte range split differently from its chunks
+    self.interface._read32(a["map id"])
+    self.interface._read_bytes(a["gadgets"], 5)
+    self.assertEqual((self.pine.reads, self.pine.batches), (2, 0))
+
+  def test_cache_is_a_snapshot_until_cleared(self) -> None:
+    address = self.addr["coins"]
+    self.interface.prefetch([(4, address)])
+    self.pine.poke32(address, 9)
+    self.assertEqual(self.interface._read32(address), 0)
+    self.interface.clear_cache()
+    self.assertEqual(self.interface._read32(address), 9)
+
+  def test_batch_read_merges_hits_and_misses(self) -> None:
+    a, b, c = 0x200000, 0x200004, 0x200008
+    for address, value in [(a, 1), (b, 2), (c, 3)]:
+      self.pine.poke32(address, value)
+    self.interface.prefetch([(4, a), (4, c)])
+    self.pine.clear_counts()
+    self.assertEqual(self.interface._batch_read32([c, b, a]), [3, 2, 1])
+    self.assertEqual((self.pine.reads, self.pine.batches), (0, 1))
+    self.pine.clear_counts()
+    self.assertEqual(self.interface._batch_read32([a, c]), [1, 3])
+    self.assertEqual((self.pine.reads, self.pine.batches), (0, 0))
+
+  def test_writes_update_cache_and_skip_when_unchanged(self) -> None:
+    address = 0x200000
+    self.pine.poke32(address, 5)
+    self.interface.prefetch([(4, address)])
+    self.interface._write32(address, 5)
+    self.assertEqual(self.pine.writes, [])
+    self.interface._write32(address, 6)
+    self.assertEqual(len(self.pine.writes), 1)
+    self.assertEqual(self.interface._read32(address), 6)
+    self.interface._write32(address, 6)
+    self.interface._batch_write32([(address, 6)])
+    self.assertEqual(len(self.pine.writes), 1)
+    self.interface._batch_write32([(address, 6), (address + 4, 1)])
+    self.assertEqual(
+      self.pine.writes[1:], [("bw32", address + 4, (1).to_bytes(4, "little"))]
+    )
+
+  def test_overlapping_write_invalidates_chunks(self) -> None:
+    address = self.addr["gadgets"]
+    self.interface.prefetch([(6, address)])
+    self.interface._write_bytes(address + 2, bytes([0xAA, 0xBB]))
+    self.pine.clear_counts()
+    self.assertEqual(
+      self.interface._read_bytes(address, 6), bytes([0, 0, 0xAA, 0xBB, 0, 0])
+    )
+    self.assertEqual(self.pine.reads, 1)
+
+  def test_write_outside_cache_is_not_skipped(self) -> None:
+    address = 0x200000
+    self.pine.poke32(address, 5)
+    self.interface._write32(address, 5)
+    self.assertEqual(len(self.pine.writes), 1)
+
+  def test_float_round_trip(self) -> None:
+    address = self.addr["clock speed"]
+    self.interface._write_float(address, 0.5)
+    self.assertEqual(self.interface._read_float(address), 0.5)
+    self.interface._write_float(address, 0.5)
+    self.assertEqual(len(self.pine.writes), 1)
+
+  def test_tick_state_is_two_batches(self) -> None:
+    set_location(self.pine, self.addr, 1, 2)
+    build_dag(self.pine, self.addr)
+    self.interface.clear_cache()
+    self.interface.prefetch_tick_state()
+    self.assertEqual(self.pine.batches, 2)
+    self.pine.clear_counts()
+    self.interface.in_safehouse()
+    self.interface.in_cutscene()
+    self.interface.is_infobox()
+    self.interface.alive()
+    self.interface.all_treasures_stolen()
+    self.interface.all_loot_stolen()
+    self.interface.all_vault_statuses()
+    self.interface.get_operation_completion()
+    self.interface.read_powerups()
+    self.interface.get_sly_bindings()
+    self.interface.get_bottles(Sly2Episode.Jailbreak)
+    self.interface.jobs_completed([4, 10, 36])
+    self.interface.tasks_completed([5, 6])
+    self.assertEqual((self.pine.reads, self.pine.batches), (0, 0))
+
+  def test_tick_state_skips_dag_while_loading(self) -> None:
+    set_location(self.pine, self.addr, 1, 2)
+    self.pine.poke32(self.addr["loading"], 2)
+    self.interface.prefetch_tick_state()
+    self.assertEqual(self.pine.reads, 0)
+
+
+class TestDagCache(InterfaceTestBase):
+  def setUp(self) -> None:
+    super().setUp()
+    set_location(self.pine, self.addr, 1, 2)
+    build_dag(self.pine, self.addr)
+    self.pine.clear_counts()
+
+  def test_walk_once(self) -> None:
+    # Every lookup reads the root and map id to validate the cache; those
+    # are hits within a tick, single reads here.
+    self.assertEqual(self.interface._get_job_address(10), dag_node(10))
+    self.assertEqual(self.pine.reads, 2 + 10)
+    self.pine.clear_counts()
+    self.assertEqual(self.interface._get_job_address(10), dag_node(10))
+    self.assertEqual(self.interface._get_job_address(3), dag_node(3))
+    self.assertEqual(self.pine.reads, 2 + 2)
+    self.pine.clear_counts()
+    self.assertEqual(self.interface._get_job_address(20), dag_node(20))
+    self.assertEqual(self.pine.reads, 2 + 10)
+
+  def test_invalidated_by_root_or_map(self) -> None:
+    self.interface._get_job_address(5)
+    self.pine.poke32(dag_node(1) + 0x20, dag_node(7))
+    self.assertEqual(self.interface._get_job_address(2), dag_node(2))
+    self.pine.poke32(self.addr["map id"], 3)
+    self.assertEqual(self.interface._get_job_address(2), dag_node(7))
+    self.pine.poke32(self.addr["map id"], 2)
+    self.pine.poke32(self.addr["DAG root"], dag_node(1))
+    self.assertEqual(self.interface._get_job_address(1), dag_node(7))
+    self.interface.invalidate_dag()
+    self.pine.poke32(dag_node(1) + 0x20, dag_node(2))
+    self.assertEqual(self.interface._get_job_address(1), dag_node(2))
+
+  def test_parents_cached(self) -> None:
+    set_parents(self.pine, 3, [1, 2])
+    self.assertEqual(
+      self.interface._get_task_parents(3), [dag_node(1), dag_node(2)]
+    )
+    set_parents(self.pine, 3, [1])
+    self.assertEqual(
+      self.interface._get_task_parents(3), [dag_node(1), dag_node(2)]
+    )
+    self.interface.invalidate_dag()
+    self.assertEqual(self.interface._get_task_parents(3), [dag_node(1)])

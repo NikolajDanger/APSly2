@@ -204,15 +204,12 @@ class Pine:
     return self.from_bytes(self._send_request(request)[-size:])
 
   def read_bytes(self, address: int, length: int) -> bytes:
-    """Careful! This can be quite slow for large reads"""
-    data = b''
-    while len(data) < length:
-      size = self._largest_size(length - len(data))
-      request = self._create_request(
-        self._READ_COMMAND[size], address + len(data), 9
-      )
-      data += self._send_request(request)[-size:]
-    return data
+    chunks = self._chunks(address, length)
+    values = self.batch_read(chunks)
+    return b''.join(
+      value.to_bytes(size, "little")
+      for (size, _), value in zip(chunks, values)
+    )
 
   def read_string(self, address: int, max_length: int) -> str:
     data = self.read_bytes(address, max_length)
@@ -240,12 +237,10 @@ class Pine:
     self._send_request(request + data)
 
   def write_bytes(self, address: int, data: bytes) -> None:
-    """Careful! This can be quite slow for large writes"""
-    written = 0
-    while written < len(data):
-      size = self._largest_size(len(data) - written)
-      self._write(size, address + written, data[written:written + size])
-      written += size
+    self.batch_write([
+      (size, chunk, data[chunk-address:chunk-address+size])
+      for size, chunk in self._chunks(address, len(data))
+    ])
 
   def write_string(self, address: int, value: str) -> None:
     self.write_bytes(address, value.encode("ascii") + b'\x00')
@@ -256,6 +251,16 @@ class Pine:
       if remaining >= size:
         return size
     raise ValueError("No data left to transfer")
+
+  @classmethod
+  def _chunks(cls, address: int, length: int) -> list[tuple[DataSize, int]]:
+    chunks = []
+    offset = 0
+    while offset < length:
+      size = cls._largest_size(length - offset)
+      chunks.append((size, address + offset))
+      offset += size
+    return chunks
 
   def batch_read(self, reads: list[tuple[DataSize, int]]) -> list[int]:
     """Read several values of mixed sizes in a single request. Much faster

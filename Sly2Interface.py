@@ -13,6 +13,8 @@ from .pcsx2_interface.pine import (
 from .data.Constants import (
   MENU_RETURN_DATA,
   ADDRESSES,
+  EPISODES,
+  TASKS,
   POWERUP_TEXT,
   HUB_MAPS,
   LOOT_IDS,
@@ -110,6 +112,74 @@ class GameInterface():
     # INFO. Muted by default to keep it out of normal play logs.
     self.write_logger = getLogger("Sly2Writes")
     self.write_logger.setLevel(CRITICAL)
+    # Values fetched for the current tick, keyed by (address, size) in the
+    # 8/4/2/1-byte chunks PINE transfers. Reads are served from here when
+    # present, so one batch read at the top of a tick replaces the scattered
+    # single reads that would otherwise each cost a round trip.
+    self._cache: dict[tuple[int, int], bytes] = {}
+
+  def clear_cache(self) -> None:
+    self._cache.clear()
+
+  def prefetch(self, reads: list[tuple[int, int]]) -> None:
+    """Batch read (size, address) ranges into the tick cache"""
+    chunks = [
+      (size, chunk)
+      for length, address in reads if in_ee_ram(address, length)
+      for size, chunk in Pine._chunks(address, length)
+      if (chunk, size) not in self._cache
+    ]
+    if not chunks:
+      return
+    values = self.pcsx2_interface.batch_read(chunks)
+    for (size, address), value in zip(chunks, values):
+      self._cache[(address, size)] = value.to_bytes(size, "little")
+
+  def _cache_store(self, address: int, data: bytes) -> None:
+    end = address + len(data)
+    for key in [
+      k for k in self._cache if k[0] < end and address < k[0] + k[1]
+    ]:
+      del self._cache[key]
+    for size, chunk in Pine._chunks(address, len(data)):
+      self._cache[(chunk, size)] = data[chunk-address:chunk-address+size]
+
+  def _cached_bytes(self, address: int, n: int) -> Optional[bytes]:
+    data = b''
+    for size, chunk in Pine._chunks(address, n):
+      value = self._cache.get((chunk, size))
+      if value is None:
+        return None
+      data += value
+    return data
+
+  def _read_int(self, address: int, size: int) -> int:
+    if not in_ee_ram(address, size):
+      return 0
+    data = self._cache.get((address, size))
+    if data is None:
+      read = {
+        1: self.pcsx2_interface.read_int8,
+        2: self.pcsx2_interface.read_int16,
+        4: self.pcsx2_interface.read_int32
+      }[size]
+      return read(address)
+    return int.from_bytes(data, "little")
+
+  def _batch_read(self, size: int, addresses: list[int]) -> list[int]:
+    values = {
+      a: int.from_bytes(self._cache[(a, size)], "little")
+      for a in addresses if (a, size) in self._cache
+    }
+    missing = [a for a in addresses if a not in values]
+    if missing:
+      read = {
+        1: self.pcsx2_interface.batch_read_int8,
+        2: self.pcsx2_interface.batch_read_int16,
+        4: self.pcsx2_interface.batch_read_int32
+      }[size]
+      values.update(zip(missing, read(missing)))
+    return [values[a] for a in addresses]
 
   def set_write_trace(self, enabled: bool) -> None:
     self.write_logger.setLevel(DEBUG if enabled else CRITICAL)
@@ -142,59 +212,71 @@ class GameInterface():
     return False
 
   def _read8(self, address: int) -> int:
-    if not in_ee_ram(address, 1):
-      return 0
-    return self.pcsx2_interface.read_int8(address)
+    return self._read_int(address, 1)
 
   def _read16(self, address: int) -> int:
-    if not in_ee_ram(address, 2):
-      return 0
-    return self.pcsx2_interface.read_int16(address)
+    return self._read_int(address, 2)
 
   def _read32(self, address: int) -> int:
-    if not in_ee_ram(address):
-      return 0
-    return self.pcsx2_interface.read_int32(address)
+    return self._read_int(address, 4)
 
   def _read_bytes(self, address: int, n: int) -> bytes:
     if not in_ee_ram(address, n):
       return bytes(n)
-    return self.pcsx2_interface.read_bytes(address, n)
+    data = self._cached_bytes(address, n)
+    if data is None:
+      return self.pcsx2_interface.read_bytes(address, n)
+    return data
 
   def _read_float(self, address: int) -> float:
     return struct.unpack("f", self._read_bytes(address, 4))[0]
 
   def _batch_read8(self, addresses: list[int]) -> list[int]:
-    return self.pcsx2_interface.batch_read_int8(addresses)
+    return self._batch_read(1, addresses)
 
   def _batch_read16(self, addresses: list[int]) -> list[int]:
-    return self.pcsx2_interface.batch_read_int16(addresses)
+    return self._batch_read(2, addresses)
 
   def _batch_read32(self, addresses: list[int]) -> list[int]:
-    return self.pcsx2_interface.batch_read_int32(addresses)
+    return self._batch_read(4, addresses)
+
+  def _needs_write(self, address: int, data: bytes) -> bool:
+    """Records the write in the tick cache; False when the cache already
+    held exactly these bytes, so the write would be a no-op"""
+    if self._cached_bytes(address, len(data)) == data:
+      return False
+    self._cache_store(address, data)
+    return True
 
   def _write8(self, address: int, value: int) -> None:
-    if self._writable(address, 1):
+    data = (value & 0xFF).to_bytes(1, "little")
+    if self._writable(address, 1) and self._needs_write(address, data):
       self._log_write("w8", address, value)
       self.pcsx2_interface.write_int8(address, value)
 
   def _write16(self, address: int, value: int) -> None:
-    if self._writable(address, 2):
+    data = (value & 0xFFFF).to_bytes(2, "little")
+    if self._writable(address, 2) and self._needs_write(address, data):
       self._log_write("w16", address, value)
       self.pcsx2_interface.write_int16(address, value)
 
   def _write32(self, address: int, value: int) -> None:
-    if self._writable(address):
+    data = (value & 0xFFFF_FFFF).to_bytes(4, "little")
+    if self._writable(address) and self._needs_write(address, data):
       self._log_write("w32", address, value)
       self.pcsx2_interface.write_int32(address, value)
 
   def _write_bytes(self, address: int, value: bytes) -> None:
-    if self._writable(address, len(value)):
+    if (
+      self._writable(address, len(value)) and
+      self._needs_write(address, value)
+    ):
       self._log_write("wbytes", address, value.hex())
       self.pcsx2_interface.write_bytes(address, value)
 
   def _write_float(self, address: int, value: float) -> None:
-    if self._writable(address):
+    data = struct.pack("<f", value)
+    if self._writable(address) and self._needs_write(address, data):
       self._log_write("wfloat", address, value)
       self.pcsx2_interface.write_float(address, value)
 
@@ -217,7 +299,8 @@ class GameInterface():
   def _batch_write32(self, operations: list[tuple[int, int]]) -> None:
     valid = []
     for address, value in operations:
-      if self._writable(address):
+      data = (value & 0xFFFF_FFFF).to_bytes(4, "little")
+      if self._writable(address) and self._needs_write(address, data):
         valid.append((address, value))
     if valid:
       self._log_write("bw32", [a for a, _ in valid],
@@ -227,7 +310,10 @@ class GameInterface():
   def _batch_write_float(self, operations: list[tuple[int, float]]) -> None:
     valid = []
     for address, value in operations:
-      if self._writable(address):
+      if (
+        self._writable(address) and
+        self._needs_write(address, struct.pack("<f", value))
+      ):
         valid.append((address, value))
     if valid:
       self._log_write("bwfloat", [a for a, _ in valid],
@@ -295,17 +381,90 @@ class Sly2Interface(GameInterface):
   def __init__(self, logger: Logger) -> None:
     super().__init__(logger)
     self.last_skip = time()
+    self._dag_key: Optional[tuple[int, int]] = None
+    self._dag_nodes: list[int] = []
+    self._dag_parents: dict[int, list[int]] = {}
 
   # =====================================================
   # Private Helper Methods - Job/Task Management
   # =====================================================
 
-  def _get_job_address(self, task: int) -> int:
-    pointer = self._read32(self.addresses["DAG root"])
-    for _ in range(task):
-      pointer = self._read32(pointer+0x20)
+  def invalidate_dag(self) -> None:
+    self._dag_key = None
+    self._dag_nodes = []
+    self._dag_parents = {}
 
-    return pointer
+  def _get_job_address(self, task: int) -> int:
+    # The DAG is a linked list walked from the root, one read per node, so
+    # the node addresses are cached until the root moves or the map changes.
+    root = self._read32(self.addresses["DAG root"])
+    key = (root, self.get_current_map())
+    if key != self._dag_key:
+      self.invalidate_dag()
+      self._dag_key = key
+      self._dag_nodes = [root]
+    while len(self._dag_nodes) <= task:
+      self._dag_nodes.append(self._read32(self._dag_nodes[-1]+0x20))
+
+    return self._dag_nodes[task]
+
+  def _episode_nodes(self, episode: int) -> list[int]:
+    """DAG indices of every job and task of an episode"""
+    jobs = [
+      index
+      for chapter in self.addresses["jobs"][episode-1]
+      for job in chapter
+      for index in (job if isinstance(job, tuple) else (job,))
+    ]
+    episode_name = list(EPISODES.keys())[episode-1]
+    tasks = [
+      index
+      for job_tasks in TASKS.get(episode_name, {}).values()
+      for index, _ in job_tasks
+    ]
+    return jobs + tasks
+
+  def prefetch_tick_state(self) -> None:
+    """Fetch everything a tick reads in two batches: the fixed addresses,
+    then the values behind pointers found in the first batch"""
+    a = self.addresses
+    words = [
+      "world id", "map id", "job id", "loading", "active character",
+      "active character pointer", "camera focus", "infobox",
+      "infobox string", "coins", "items received", "bottle count",
+      "savefile last world", "unload mega jump", "DAG root",
+      "clock-la defeated", "hackpack", "sly pointer", "clock speed",
+      "friction", "string table", "skip cutscene"
+    ]
+    reads = [(4, a[name]) for name in words]
+    reads += [(2, a["frame counter"]), (1, a["input"])]
+    reads += [(1, a["episode unlocks"]), (6, a["gadgets"])]
+    reads += [(4, a["sly bindings"] + 4*i) for i in range(3)]
+    reads += [
+      (4, address)
+      for table in ("bottle flags", "vaults", "loot", "operation completion")
+      for address in a[table]
+    ]
+    reads += [(4, address) for ep in a["treasures"] for address in ep]
+    reads += [(4, address) for address in a["health"].values()]
+    self.prefetch(reads)
+
+    episode = self._read32(a["world id"])
+    reads = [(4, self._read32(a["infobox"]) + 0x64)]
+    if 1 <= episode <= 8:
+      reads += [(4, address) for address in a["loot chance"][episode-1]]
+      reads += [
+        (4, address)
+        for table in ("loot table odds", "loot table")
+        for guard in a[table][episode-1]
+        for address in guard
+      ]
+      if not self.is_loading():
+        reads += [
+          (4, self._get_job_address(index) + 0x54)
+          for index in self._episode_nodes(episode)
+        ]
+    self.prefetch(reads)
 
   def _read_job_status(self, address: int) -> int:
     return self._read32(self._get_job_address(address)+0x54)
@@ -318,9 +477,13 @@ class Sly2Interface(GameInterface):
 
   def _get_task_parents(self, task: int) -> List[int]:
     address = self._get_job_address(task)
-    parents_n = self._read32(address+0x94)
-    parents_list = self._read32(address+0x98)
-    return [self._read32(parents_list+4*i) for i in range(parents_n)]
+    if task not in self._dag_parents:
+      parents_n = self._read32(address+0x94)
+      parents_list = self._read32(address+0x98)
+      self._dag_parents[task] = [
+        self._read32(parents_list+4*i) for i in range(parents_n)
+      ]
+    return self._dag_parents[task]
 
   def _task_parents_finished(self, task: int) -> bool:
     parents = self._get_task_parents(task)
@@ -516,6 +679,9 @@ class Sly2Interface(GameInterface):
   def job_completed(self, task: int) -> bool:
     return self._read_job_status(task) == 3
 
+  def job_statuses(self, tasks: list[int]) -> list[int]:
+    return self._batch_read32([self._get_job_address(t) + 0x54 for t in tasks])
+
   def jobs_completed(self, tasks: list[int]) -> list[bool]:
     # Get job addresses
     job_status_addresses = []
@@ -578,6 +744,9 @@ class Sly2Interface(GameInterface):
 
   def set_bottles(self, amount: int) -> None:
     self._write32(self.addresses["bottle count"], amount)
+
+  def get_bottle_flags(self) -> list[int]:
+    return self._batch_read32(self.addresses["bottle flags"])
 
   def get_bottles(self, episode: Sly2Episode) -> int:
     address = self.addresses["bottle flags"][episode.value-1]
@@ -747,6 +916,10 @@ class Sly2Interface(GameInterface):
   # Text & Infobox
   # =====================================================
 
+  @staticmethod
+  def _encode_text(text: str) -> bytes:
+    return text.replace("&","&&").encode()+bytes([0])
+
   def set_text(self, text: str|int, replacement: str) -> None:
     if isinstance(text,str):
       text_offset = self.addresses["text"][text][self.get_current_episode()-1]
@@ -759,9 +932,16 @@ class Sly2Interface(GameInterface):
     else:
       text_pointer = text
 
+    self._write_bytes(text_pointer, self._encode_text(replacement))
 
-    replacement_string = replacement.replace("&","&&").encode()+bytes([0])
-    self._write_bytes(text_pointer,replacement_string)
+  def set_texts(self, texts: list[tuple[int, str]]) -> None:
+    """Write several strings in one read and as few writes as needed, so
+    re-asserting them every tick only costs a round trip when one has been
+    reloaded by the game"""
+    encoded = [(address, self._encode_text(text)) for address, text in texts]
+    self.prefetch([(len(data), address) for address, data in encoded])
+    for address, data in encoded:
+      self._write_bytes(address, data)
 
   def current_infobox(self) -> int:
     return self._read32(self.addresses["infobox string"])
