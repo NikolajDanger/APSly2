@@ -202,10 +202,22 @@ class TestBottles(InterfaceTestBase):
 
   def test_list(self) -> None:
     address = self.addr["bottle flags"][0]
+    episode = Sly2Episode.The_Black_Chateau
+
     self.pine.poke32(address, 1 << 29)
-    bottles = self.interface.get_bottle_list(Sly2Episode.The_Black_Chateau)
+    bottles = self.interface.get_bottle_list(episode)
     self.assertEqual(len(bottles), 30)
+    self.assertTrue(bottles[0])
     self.assertEqual(sum(bottles), 1)
+
+    self.pine.poke32(address, 1)
+    self.assertTrue(self.interface.get_bottle_list(episode)[29])
+
+    self.pine.poke32(address, 0x3FFFFFFF)
+    self.assertEqual(sum(self.interface.get_bottle_list(episode)), 30)
+
+    self.pine.poke32(address, 0xC0000000)
+    self.assertEqual(sum(self.interface.get_bottle_list(episode)), 0)
 
   def test_set(self) -> None:
     self.interface.set_bottles(12)
