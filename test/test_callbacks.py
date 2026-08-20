@@ -13,6 +13,7 @@ from ..Callbacks import (
   compute_available_episodes,
   dynamic_loot_odds,
   episode_loot,
+  fix_jobs,
   fix_mega_jump,
   handle_check_goal,
   handle_checks,
@@ -1114,6 +1115,121 @@ class TestUpdate(ClientTestBase):
     self.assertTrue(self.ctx.loot_dirty)
     await self.tick()
     self.assertNotEqual(self.pine.peek32(odds_address), before)
+
+  async def test_cutscene_skips_ap_block(self) -> None:
+    self.enter(1, 2)
+    self.ctx.jobs_completed[0][0][0] = True
+    self.pine.poke16(self.addr["frame counter"], 50)
+    await self.tick()
+    self.assertEqual(self.ctx.sent_cmds("LocationChecks"), [])
+    self.assertEqual(self.interface.read_items_received(), 0)
+    self.pine.poke16(self.addr["frame counter"], 0)
+    await self.tick()
+    self.assertTrue(self.ctx.sent_cmds("LocationChecks"))
+    self.assertEqual(self.interface.read_items_received(), 1)
+
+
+class TestFixJobs(ClientTestBase):
+  async def asyncSetUp(self) -> None:
+    await super().asyncSetUp()
+    build_dag(self.pine, self.addr)
+
+  async def test_fixes_when_in_hub_and_no_job(self) -> None:
+    self.enter(1, 2)
+    set_job_status(self.pine, 4, 2)
+    fix_jobs(self.ctx)
+    self.assertEqual(job_status(self.pine, 4), 1)
+
+  async def test_skips_outside_hub(self) -> None:
+    self.enter(1, 3)
+    set_job_status(self.pine, 4, 2)
+    fix_jobs(self.ctx)
+    self.assertEqual(job_status(self.pine, 4), 2)
+
+  async def test_skips_when_job_active(self) -> None:
+    self.enter(1, 2, job=4)
+    set_job_status(self.pine, 4, 2)
+    fix_jobs(self.ctx)
+    self.assertEqual(job_status(self.pine, 4), 2)
+
+
+class TestOnPackage(ClientTestBase):
+  def run_package(self, cmd: str, args: dict) -> list:
+    scheduled: list = []
+    with (
+      patch.object(Sly2Client.CommonContext, "on_package"),
+      patch.object(
+        Sly2Client.Utils, "async_start",
+        side_effect=lambda coro, *_a, **_k: scheduled.append(coro)
+      )
+    ):
+      self.ctx.on_package(cmd, args)
+    return scheduled
+
+  async def drain(self, scheduled: list) -> None:
+    for coro in scheduled:
+      await coro
+
+  async def test_room_update_marks_loot_dirty(self) -> None:
+    self.ctx.loot_dirty = False
+    self.run_package("RoomUpdate", {"checked_locations": [1, 2]})
+    self.assertTrue(self.ctx.loot_dirty)
+
+  async def test_room_update_without_locations_ignored(self) -> None:
+    self.ctx.loot_dirty = False
+    self.run_package("RoomUpdate", {})
+    self.assertFalse(self.ctx.loot_dirty)
+
+  async def test_ring_link_bounce_accumulates(self) -> None:
+    self.ctx.ring_link_enabled = True
+    self.run_package("Bounced", {
+      "tags": ["RingLink"],
+      "data": {"source": self.ctx.ring_link_source + 1, "amount": 7}
+    })
+    self.assertEqual(self.ctx.pending_ring_link, 7)
+
+  async def test_ring_link_ignores_own_source(self) -> None:
+    self.ctx.ring_link_enabled = True
+    self.run_package("Bounced", {
+      "tags": ["RingLink"],
+      "data": {"source": self.ctx.ring_link_source, "amount": 7}
+    })
+    self.assertEqual(self.ctx.pending_ring_link, 0)
+
+  async def test_ring_link_ignored_when_disabled(self) -> None:
+    self.ctx.ring_link_enabled = False
+    self.run_package("Bounced", {
+      "tags": ["RingLink"],
+      "data": {"source": self.ctx.ring_link_source + 1, "amount": 7}
+    })
+    self.assertEqual(self.ctx.pending_ring_link, 0)
+
+  async def test_ring_link_ignores_other_tags(self) -> None:
+    self.ctx.ring_link_enabled = True
+    self.run_package("Bounced", {
+      "tags": ["DeathLink"], "data": {"source": 0, "amount": 7}
+    })
+    self.assertEqual(self.ctx.pending_ring_link, 0)
+
+  async def test_connected_populates_state(self) -> None:
+    self.ctx.checked_locations = {
+      self.loc("ThiefNet 01"),
+      self.loc("The Black Chateau - Vault")
+    }
+    scheduled = self.run_package("Connected", {"slot_data": self.slot_data})
+    await self.drain(scheduled)
+    self.assertIs(self.ctx.slot_data, self.slot_data)
+    self.assertTrue(self.ctx.thiefnet_purchases[0])
+    self.assertEqual(sum(self.ctx.thiefnet_purchases), 1)
+    self.assertTrue(self.ctx.vaults[0])
+    self.assertEqual(sum(self.ctx.vaults), 1)
+    self.assertTrue(self.ctx.sent_cmds("LocationScouts"))
+
+  async def test_connected_version_mismatch_raises(self) -> None:
+    bad = dict(self.slot_data)
+    bad["world_version"] = [9, 9, 0]
+    with self.assertRaises(Exception):
+      self.run_package("Connected", {"slot_data": bad})
 
 
 class TestInitPerMap(ClientTestBase):

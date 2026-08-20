@@ -26,8 +26,12 @@ from .client_base import (
   build_dag,
   dag_node,
   guard,
+  job_status,
   make_guard_list,
   set_active_character,
+  set_infobox_pointers,
+  set_job_mission,
+  set_job_status,
   set_location,
   set_parents,
   set_string_table,
@@ -753,3 +757,89 @@ class TestDagCache(InterfaceTestBase):
     )
     self.interface.invalidate_dag()
     self.assertEqual(self.interface._get_task_parents(3), [dag_node(1)])
+
+
+class TestFixJobs(InterfaceTestBase):
+  def setUp(self) -> None:
+    super().setUp()
+    build_dag(self.pine, self.addr)
+    set_location(self.pine, self.addr, 1, 2)
+
+  def test_no_op_when_job_active(self) -> None:
+    set_location(self.pine, self.addr, 1, 2, job=4)
+    set_job_status(self.pine, 4, 2)
+    self.interface.fix_jobs()
+    self.assertEqual(self.pine.writes, [])
+    self.assertEqual(job_status(self.pine, 4), 2)
+
+  def test_repairs_status_two_job(self) -> None:
+    set_job_status(self.pine, 4, 2)
+    self.interface.fix_jobs()
+    self.assertEqual(job_status(self.pine, 4), 1)
+
+  def test_zeros_same_mission_successors(self) -> None:
+    set_job_status(self.pine, 4, 2)
+    set_job_mission(self.pine, 4, 5)
+    for i in (5, 6):
+      set_job_mission(self.pine, i, 5)
+      set_job_status(self.pine, i, 1)
+    set_job_mission(self.pine, 7, 9)
+    set_job_status(self.pine, 7, 3)
+    self.interface.fix_jobs()
+    self.assertEqual(job_status(self.pine, 4), 1)
+    self.assertEqual(job_status(self.pine, 5), 0)
+    self.assertEqual(job_status(self.pine, 6), 0)
+    self.assertEqual(job_status(self.pine, 7), 3)
+
+
+class TestInfobox(InterfaceTestBase):
+  def setUp(self) -> None:
+    super().setUp()
+    set_infobox_pointers(self.pine, self.addr)
+    set_string_table(self.pine, self.addr, 1)
+    set_location(self.pine, self.addr, 1, 5, job=4)
+
+  def infobox_ptr(self) -> int:
+    return self.pine.peek32(self.addr["infobox"])
+
+  def test_is_infobox(self) -> None:
+    self.pine.poke32(self.infobox_ptr() + 0x64, 2)
+    self.assertTrue(self.interface.is_infobox())
+    self.pine.poke32(self.infobox_ptr() + 0x64, 1)
+    self.assertFalse(self.interface.is_infobox())
+
+  def test_current_infobox(self) -> None:
+    self.pine.poke32(self.addr["infobox string"], 42)
+    self.assertEqual(self.interface.current_infobox(), 42)
+
+  def test_set_infobox_writes_text_and_state(self) -> None:
+    self.interface.set_infobox("hello")
+    buffer = string_buffer(self.pine, self.addr, "infobox", 1)
+    self.assertEqual(self.pine.peek_cstring(buffer), b" "*10 + b"hello")
+    self.assertEqual(self.pine.peek32(self.addr["infobox string"]), 1)
+    self.assertEqual(self.pine.peek32(self.infobox_ptr() + 0x64), 2)
+    self.assertEqual(
+      self.pine.peek32(self.addr["infobox duration"]), 0xffffffff
+    )
+    self.assertEqual(self.pine.peek32(self.addr["infobox scrolling"]), 1)
+
+  def test_set_infobox_skips_title_screen(self) -> None:
+    set_location(self.pine, self.addr, 0, 0)
+    self.interface.set_infobox("hello")
+    self.assertEqual(self.pine.writes, [])
+
+  def test_set_infobox_skips_safehouse(self) -> None:
+    set_location(self.pine, self.addr, 1, 2)
+    self.pine.poke32(self.addr["infobox string"], 305)
+    self.interface.set_infobox("hello")
+    self.assertEqual(self.pine.writes, [])
+
+  def test_disable_infobox_when_showing(self) -> None:
+    self.pine.poke32(self.infobox_ptr() + 0x64, 2)
+    self.interface.disable_infobox()
+    self.assertEqual(self.pine.peek32(self.infobox_ptr() + 0x64), 1)
+
+  def test_disable_infobox_noop_when_already_off(self) -> None:
+    self.pine.poke32(self.infobox_ptr() + 0x64, 1)
+    self.interface.disable_infobox()
+    self.assertEqual(self.pine.writes, [])
