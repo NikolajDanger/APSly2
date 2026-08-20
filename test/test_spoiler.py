@@ -17,7 +17,7 @@ class TestOptionAdjustmentsSpoiler(Sly2TestBase):
     handle = io.StringIO()
     self.world.write_spoiler(handle)
     spoiler = handle.getvalue()
-    self.assertIn("Sly 2 Option Adjustments", spoiler)
+    self.assertIn("Sly 2 (Tester) Option Adjustments", spoiler)
     self.assertIn("Turning on include_vaults.", spoiler)
 
 
@@ -30,4 +30,4 @@ class TestNoOptionAdjustmentsSpoiler(Sly2TestBase):
   def test_no_section_in_spoiler(self) -> None:
     handle = io.StringIO()
     self.world.write_spoiler(handle)
-    self.assertNotIn("Sly 2 Option Adjustments", handle.getvalue())
+    self.assertNotIn("Option Adjustments", handle.getvalue())

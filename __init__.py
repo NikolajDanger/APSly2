@@ -659,18 +659,19 @@ class Sly2World(World):
     return slot_data
 
   def write_spoiler(self, spoiler_handle: TextIO) -> None:
+    name = self.player_name
     spoiler_text = ""
     if self.option_adjustments != []:
-      spoiler_text += "\n=== Sly 2 Option Adjustments ==="
+      spoiler_text += f"\n=== Sly 2 ({name}) Option Adjustments ==="
       for message in self.option_adjustments:
         spoiler_text += "\n- " + message.replace("\n", " ")
-    spoiler_text += "\n====== Sly 2 ThiefNet Costs ======"
+    spoiler_text += f"\n====== Sly 2 ({name}) ThiefNet Costs ======"
     thiefnet_cost_text = "\n".join(
       f"- ThiefNet {i+1:02}: {cost} coins"
       for i, cost in enumerate(self.thiefnet_costs)
     )
     spoiler_text += "\n"+thiefnet_cost_text
-    spoiler_text += "\n======== Sly 2 Loot Table ========"
+    spoiler_text += f"\n======== Sly 2 ({name}) Loot Table ========"
     for i in range(8):
       spoiler_text += f"\n== Episode {i+1} =="
       for j in range(2):
@@ -688,7 +689,7 @@ class Sly2World(World):
         )
         spoiler_text += f"\n- {enemy}: {loot_text}"
 
-    spoiler_text += "\n======= Sly 2 Sell Values ========"
+    spoiler_text += f"\n======= Sly 2 ({name}) Sell Values ========"
     spoiler_text += "\n== Loot =="
     spoiler_text += "\n"+"\n".join(
       f"- {loot}: {price} coins"
