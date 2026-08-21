@@ -245,6 +245,8 @@ async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
 
   mark_dirty(ctx)
   fix_mega_jump(ctx)
+  if ctx.death_link_enabled:
+    ctx.game_interface.install_death_cave()
 
   if ctx.current_episode == Sly2Episode.Title_Screen:
     if ctx.game_interface.stuck_in_cairo():

@@ -31,6 +31,8 @@ from ..Callbacks import (
   update
 )
 from ..data.Constants import (
+  DEATH_HOOK_JAL,
+  DEATH_HOOK_ORIG0,
   EPISODES,
   LOOT,
   LOOT_IDS,
@@ -465,6 +467,8 @@ class TestHandleDeathlink(ClientTestBase):
     self.enter(1, 2)
     self.ctx.death_link_enabled = True
     self.active = set_active_character(self.pine, self.addr)
+    # Pretend the cave is installed so kill_player takes the animated path.
+    self.pine.poke32(self.addr["death hook"], DEATH_HOOK_JAL)
 
   async def run_at(self, now: float) -> None:
     with patch.object(Callbacks, "time", return_value=now):
@@ -474,17 +478,29 @@ class TestHandleDeathlink(ClientTestBase):
     self.ctx.death_link_enabled = False
     self.ctx.queued_deaths = 1
     await self.run_at(1000.0)
-    self.assertFalse(self.pine.written(self.active + 0xdf4))
+    self.assertFalse(self.pine.written(self.addr["death flag"]))
 
   async def test_queued_death_kills(self) -> None:
     self.ctx.queued_deaths = 2
     self.ctx.deathlink_timestamp = 990.0
     await self.run_at(1000.0)
-    self.assertFalse(self.pine.written(self.active + 0xdf4))
+    self.assertFalse(self.pine.written(self.addr["death flag"]))
     await self.run_at(1011.0)
-    self.assertEqual(self.pine.peek32(self.active + 0xdf4), 8)
+    self.assertEqual(self.pine.peek32(self.addr["death flag"]), 1)
+    struct_addr = self.addr["death struct"]
+    self.assertEqual(self.pine.peek32(struct_addr + 0x08), self.active)
+    self.assertEqual(self.pine.peek32(struct_addr + 0x0c), 0x200)
     self.assertEqual(self.ctx.queued_deaths, 0)
     self.assertEqual(self.ctx.deathlink_timestamp, 1011.0)
+
+  async def test_fallback_without_cave(self) -> None:
+    # Cave not installed -> blunt kill so the death is not lost.
+    self.pine.poke32(self.addr["death hook"], DEATH_HOOK_ORIG0)
+    self.ctx.queued_deaths = 1
+    self.ctx.deathlink_timestamp = 990.0
+    await self.run_at(1011.0)
+    self.assertEqual(self.pine.peek32(self.active + 0xdf4), 8)
+    self.assertFalse(self.pine.written(self.addr["death flag"]))
 
   async def test_death_sent_with_cause(self) -> None:
     self.pine.poke32(self.addr["health"]["Sly"], 0)

@@ -19,7 +19,12 @@ from .data.Constants import (
   HUB_MAPS,
   LOOT_IDS,
   MEGA_JUMP_GADGET_ID,
-  MEGA_JUMP_UNLOAD_CALL
+  MEGA_JUMP_UNLOAD_CALL,
+  DEATH_CAVE_BLOB,
+  DEATH_INFO_TEMPLATE,
+  DEATH_HOOK_JAL,
+  DEATH_HOOK_ORIG0,
+  DEATH_HOOK_ORIG1
 )
 
 class Sly2Episode(IntEnum):
@@ -434,7 +439,7 @@ class Sly2Interface(GameInterface):
       "infobox string", "coins", "items received", "bottle count",
       "savefile last world", "unload mega jump", "DAG root",
       "clock-la defeated", "hackpack", "sly pointer", "clock speed",
-      "friction", "string table", "skip cutscene"
+      "friction", "string table", "skip cutscene", "death hook"
     ]
     reads = [(4, a[name]) for name in words]
     reads += [(2, a["frame counter"]), (1, a["input"])]
@@ -996,6 +1001,17 @@ class Sly2Interface(GameInterface):
 
     return self._read32(active_character + 0xe2c)
 
+  def install_death_cave(self) -> None:
+    """Install the deathlink code cave and its per-frame trampoline hook, so a
+    death can call the game's damage function."""
+    self._write_bytes(
+      self.addresses["death cave"], bytes.fromhex(DEATH_CAVE_BLOB)
+    )
+    self._write32(self.addresses["death flag"], 0)
+    hook = self.addresses["death hook"]
+    self.safe_patch(hook, DEATH_HOOK_JAL, DEATH_HOOK_ORIG0)
+    self.safe_patch(hook + 4, 0, DEATH_HOOK_ORIG1)
+
   def kill_player(self) -> None:
     if self.in_safehouse() or self.get_current_episode() == 0:
       return
@@ -1004,7 +1020,17 @@ class Sly2Interface(GameInterface):
     if active_character == 0:
       return
 
-    self._write32(active_character+0xdf4,8)
+    # Without the cave hooked in, fall back to the blunt kill so the death is
+    # not lost, just unanimated.
+    if self._read32(self.addresses["death hook"]) != DEATH_HOOK_JAL:
+      self._write32(active_character+0xdf4, 8)
+      return
+
+    skeleton = self._read32(active_character + 0x9f0)
+    info = bytearray.fromhex(DEATH_INFO_TEMPLATE)
+    struct.pack_into("<III", info, 0, skeleton, skeleton, active_character)
+    self._write_bytes(self.addresses["death struct"], bytes(info))
+    self._write32(self.addresses["death flag"], 1)
 
   # =====================================================
   # Guard Management

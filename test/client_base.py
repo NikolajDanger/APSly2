@@ -104,6 +104,7 @@ def set_active_character(
   pine.poke32(addr["active character pointer"], CHARACTER)
   pine.poke32(CHARACTER + 0xe00, CHARACTER + 0x2000)
   pine.poke32(CHARACTER + 0x2000, health)
+  pine.poke32(CHARACTER + 0x9f0, CHARACTER + 0x3000)
   pine.poke32(CHARACTER + 0x12fc, CHARACTER + 0x2010)
   pine.poke32(CHARACTER + 0x2010, 100)
   name = {7: "Sly", 8: "Bentley", 9: "Murray"}[kind]

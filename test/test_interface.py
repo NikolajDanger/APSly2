@@ -4,6 +4,10 @@ from logging import getLogger
 
 from ..data.Constants import (
   ADDRESSES,
+  DEATH_CAVE_BLOB,
+  DEATH_HOOK_JAL,
+  DEATH_HOOK_ORIG0,
+  DEATH_HOOK_ORIG1,
   LOOT,
   LOOT_IDS,
   LOOT_PRICES,
@@ -163,6 +167,39 @@ class TestMemoryGuards(InterfaceTestBase):
     self.assertEqual(self.pine.peek32(address), 0xCC)
     with self.assertNoLogs("Sly2Test", "WARNING"):
       self.interface.safe_patch(address, 0xBB, 0xAA)
+
+
+class TestDeathCave(InterfaceTestBase):
+  def _prime_hook(self) -> None:
+    hook = self.addr["death hook"]
+    self.pine.poke32(hook, DEATH_HOOK_ORIG0)
+    self.pine.poke32(hook + 4, DEATH_HOOK_ORIG1)
+
+  def test_install_writes_cave_and_hook(self) -> None:
+    self._prime_hook()
+    self.interface.install_death_cave()
+    blob = bytes.fromhex(DEATH_CAVE_BLOB)
+    self.assertEqual(
+      self.pine.peek_bytes(self.addr["death cave"], len(blob)), blob
+    )
+    hook = self.addr["death hook"]
+    self.assertEqual(self.pine.peek32(hook), DEATH_HOOK_JAL)
+    self.assertEqual(self.pine.peek32(hook + 4), 0)
+
+  def test_install_is_idempotent(self) -> None:
+    self._prime_hook()
+    self.interface.install_death_cave()
+    self.pine.clear_writes()
+    self.interface.install_death_cave()
+    self.assertEqual(self.pine.writes, [])
+
+  def test_install_refuses_wrong_hook(self) -> None:
+    hook = self.addr["death hook"]
+    self.pine.poke32(hook, 0x12345678)
+    self.pine.poke32(hook + 4, 0x12345678)
+    with self.assertLogs("Sly2Test", "WARNING"):
+      self.interface.install_death_cave()
+    self.assertEqual(self.pine.peek32(hook), 0x12345678)
 
 
 class TestPowerUps(InterfaceTestBase):
