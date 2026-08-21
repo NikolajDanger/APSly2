@@ -1236,6 +1236,12 @@ MEGA_JUMP_GADGET_ID = 0x1F
 # `jal 0x14C258` at ADDRESSES["unload mega jump"]
 MEGA_JUMP_UNLOAD_CALL = 0x0C053096
 
+# (job node, checkpoint node) per episode: dead-end task nodes the job never
+# completes, so they stay "available" and can start the finished job again.
+STALE_JOB_TRIGGERS: dict[int, list[tuple[int, int]]] = {
+  7: [(40, 42)],
+}
+
 # Function-call framework. PINE can't call functions, so a small MIPS code
 # cave is written into free EE RAM and the per-frame loop is trampoline-hooked
 # to run it; the client writes a request and the cave makes the game call next

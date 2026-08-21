@@ -20,6 +20,7 @@ from .data.Constants import (
   LOOT_IDS,
   MEGA_JUMP_GADGET_ID,
   MEGA_JUMP_UNLOAD_CALL,
+  STALE_JOB_TRIGGERS,
   CAVE_BLOB,
   CAVE_HOOK_JUMP,
   CAVE_HOOK_ORIG0,
@@ -672,6 +673,20 @@ class Sly2Interface(GameInterface):
             break
 
           self._write_job_status(job+i,0)
+
+  def disarm_stale_triggers(self) -> None:
+    """Marks leftover job checkpoints done once their job is. Touching one
+    of them (e.g. the Jean Bison radio spot in the Laser Redirection
+    building) restarts the finished job, and quitting that rolls the episode
+    back to it. The DAG is rebuilt from the save on every map load, so this
+    has to run per map."""
+    episode = self.get_current_episode()
+    for job, trigger in STALE_JOB_TRIGGERS.get(episode, []):
+      if (
+        self._read_job_status(job) == 3 and
+        self._read_job_status(trigger) == 1
+      ):
+        self._write_job_status(trigger, 3)
 
   def activate_job(self, task: int) -> None:
     status = self._read_job_status(task)

@@ -867,6 +867,38 @@ class TestFixJobs(InterfaceTestBase):
     self.assertEqual(job_status(self.pine, 7), 3)
 
 
+class TestStaleTriggers(InterfaceTestBase):
+  def setUp(self) -> None:
+    super().setUp()
+    build_dag(self.pine, self.addr)
+    set_location(self.pine, self.addr, 7, 34)
+
+  def test_completes_trigger_of_finished_job(self) -> None:
+    set_job_status(self.pine, 40, 3)
+    set_job_status(self.pine, 42, 1)
+    self.interface.disarm_stale_triggers()
+    self.assertEqual(job_status(self.pine, 42), 3)
+
+  def test_leaves_unfinished_job(self) -> None:
+    set_job_status(self.pine, 40, 1)
+    set_job_status(self.pine, 42, 0)
+    self.interface.disarm_stale_triggers()
+    self.assertEqual(self.pine.writes, [])
+
+  def test_leaves_started_trigger(self) -> None:
+    set_job_status(self.pine, 40, 3)
+    set_job_status(self.pine, 42, 2)
+    self.interface.disarm_stale_triggers()
+    self.assertEqual(job_status(self.pine, 42), 2)
+
+  def test_other_episode(self) -> None:
+    set_location(self.pine, self.addr, 1, 2)
+    set_job_status(self.pine, 40, 3)
+    set_job_status(self.pine, 42, 1)
+    self.interface.disarm_stale_triggers()
+    self.assertEqual(job_status(self.pine, 42), 1)
+
+
 class TestInfobox(InterfaceTestBase):
   def setUp(self) -> None:
     super().setUp()

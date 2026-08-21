@@ -275,6 +275,7 @@ async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
       ctx.game_interface.despawn_guards()
 
     fix_jobs(ctx)
+    ctx.game_interface.disarm_stale_triggers()
     if not ctx.game_interface.in_safehouse():
       set_powerups(ctx)
 
