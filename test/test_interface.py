@@ -4,10 +4,11 @@ from logging import getLogger
 
 from ..data.Constants import (
   ADDRESSES,
-  DEATH_CAVE_BLOB,
-  DEATH_HOOK_JAL,
-  DEATH_HOOK_ORIG0,
-  DEATH_HOOK_ORIG1,
+  CAVE_BLOB,
+  CAVE_HOOK_JUMP,
+  CAVE_HOOK_ORIG0,
+  CAVE_HOOK_ORIG1,
+  COIN_POP_INTERVAL,
   LOOT,
   LOOT_IDS,
   LOOT_PRICES,
@@ -169,37 +170,62 @@ class TestMemoryGuards(InterfaceTestBase):
       self.interface.safe_patch(address, 0xBB, 0xAA)
 
 
-class TestDeathCave(InterfaceTestBase):
+class TestCave(InterfaceTestBase):
   def _prime_hook(self) -> None:
-    hook = self.addr["death hook"]
-    self.pine.poke32(hook, DEATH_HOOK_ORIG0)
-    self.pine.poke32(hook + 4, DEATH_HOOK_ORIG1)
+    hook = self.addr["cave hook"]
+    self.pine.poke32(hook, CAVE_HOOK_ORIG0)
+    self.pine.poke32(hook + 4, CAVE_HOOK_ORIG1)
 
   def test_install_writes_cave_and_hook(self) -> None:
     self._prime_hook()
-    self.interface.install_death_cave()
-    blob = bytes.fromhex(DEATH_CAVE_BLOB)
-    self.assertEqual(
-      self.pine.peek_bytes(self.addr["death cave"], len(blob)), blob
-    )
-    hook = self.addr["death hook"]
-    self.assertEqual(self.pine.peek32(hook), DEATH_HOOK_JAL)
+    self.pine.poke32(self.addr["coin pops"], 3)
+    self.interface.install_cave()
+    blob = bytes.fromhex(CAVE_BLOB)
+    self.assertEqual(self.pine.peek_bytes(self.addr["cave"], len(blob)), blob)
+    hook = self.addr["cave hook"]
+    self.assertEqual(self.pine.peek32(hook), CAVE_HOOK_JUMP)
     self.assertEqual(self.pine.peek32(hook + 4), 0)
+    self.assertEqual(self.pine.peek32(self.addr["coin pops"]), 0)
+    self.assertEqual(
+      self.pine.peek32(self.addr["coin interval"]), COIN_POP_INTERVAL
+    )
+    self.assertTrue(self.interface.cave_live())
 
   def test_install_is_idempotent(self) -> None:
     self._prime_hook()
-    self.interface.install_death_cave()
+    self.interface.install_cave()
     self.pine.clear_writes()
-    self.interface.install_death_cave()
+    self.interface.install_cave()
     self.assertEqual(self.pine.writes, [])
 
   def test_install_refuses_wrong_hook(self) -> None:
-    hook = self.addr["death hook"]
+    hook = self.addr["cave hook"]
     self.pine.poke32(hook, 0x12345678)
     self.pine.poke32(hook + 4, 0x12345678)
     with self.assertLogs("Sly2Test", "WARNING"):
-      self.interface.install_death_cave()
+      self.interface.install_cave()
     self.assertEqual(self.pine.peek32(hook), 0x12345678)
+    self.assertFalse(self.interface.cave_live())
+
+  def test_queue_coins(self) -> None:
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_JUMP)
+    self.assertTrue(self.interface.queue_coins(50, 5))
+    self.assertEqual(self.pine.peek32(self.addr["coin amount"]), 50)
+    self.assertEqual(self.pine.peek32(self.addr["coin pops"]), 5)
+    self.assertTrue(self.interface.coins_paying_out())
+
+  def test_queue_coins_waits_for_payout(self) -> None:
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_JUMP)
+    self.pine.poke32(self.addr["coin pops"], 2)
+    self.pine.clear_writes()
+    self.assertFalse(self.interface.queue_coins(50, 5))
+    self.assertEqual(self.pine.writes, [])
+
+  def test_queue_coins_without_cave(self) -> None:
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG0)
+    self.pine.clear_writes()
+    self.assertFalse(self.interface.queue_coins(50, 5))
+    self.assertEqual(self.pine.writes, [])
 
 
 class TestPowerUps(InterfaceTestBase):

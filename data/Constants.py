@@ -690,10 +690,14 @@ ADDRESSES = {
     "gadgets": 0x3D4AF8,
     "active character": 0x3D4A6C,
     "active character pointer": 0x2DE2F0,
-    "death cave": 0x42B000,
+    "cave": 0x42B000,
+    "cave hook": 0x226674,
     "death struct": 0x42BE00,
     "death flag": 0x42BF00,
-    "death hook": 0x226674,
+    "coin pops": 0x42BF10,
+    "coin amount": 0x42BF14,
+    "coin timer": 0x42BF18,
+    "coin interval": 0x42BF1C,
     "clock speed": 0x2DDED8,
     "friction": 0x2C3C90,
     "string table": 0x3e1ad4,
@@ -1232,18 +1236,23 @@ MEGA_JUMP_GADGET_ID = 0x1F
 # `jal 0x14C258` at ADDRESSES["unload mega jump"]
 MEGA_JUMP_UNLOAD_CALL = 0x0C053096
 
-# Deathlink death animation. PINE can't call functions, so a small MIPS code
+# Function-call framework. PINE can't call functions, so a small MIPS code
 # cave is written into free EE RAM and the per-frame loop is trampoline-hooked
-# to run it; on the death flag it calls the game's damage function to play a
-# real animated death. Assembled from build/death_cave.s; the blob bakes in
-# SCUS-97316 addresses (cave 0x42B000, fn 0x1A19A0, active char ptr 0x2DE2F0,
-# struct 0x42BE00, hook return 0x22667C), so reassemble if implementing for a
-# different version.
-DEATH_CAVE_BLOB = (
-  "42001a3c08bf5a3700005b8f01007b2700005baf42001a3c00bf5a3700005b8f"+
-  "1200601300000000000040af2d001a3cf0e25a370000448f0c00801000000000"+
-  "f00d84244200053c00bea53442001a3c04bf5a3700005faf6886060c00000000"+
-  "42001a3c04bf5a3700005f8ffcd2628e0800848e9f99080800000000"
+# to run it; the client writes a request and the cave makes the game call next
+# frame (an animated deathlink death, coin payouts with the pickup sound).
+# Assembled from build/cave.s; the blob bakes in SCUS-97316 addresses (cave
+# data 0x42BExx/0x42BFxx, the game functions, hook return 0x22667C), so
+# reassemble if implementing for a different version.
+CAVE_BLOB = (
+  "42001a3c08bf5a3700005b8f01007b2700005baf42001a3c04bf5a3700005faf"+
+  "42001a3c00bf5a3700005b8f0b00601300000000000040af2d001a3cf0e25a37"+
+  "0000448f0500801000000000f00d84244200053c6886060c00bea53442001a3c"+
+  "10bf5a3700005b8f200060130000000008005b8f03006013ffff7b271b000010"+
+  "08005baf0c005b8f0400458f08005baf00005b8f1b00bb00123000002328a600"+
+  "040045afffff7b2700005baf100046af2d00043ce685050c30eb843442001a3c"+
+  "20bf5a370000458f2d00043c30eb8434f885050c2128a200e4ee070c29000424"+
+  "25204000beec070c2528000042001a3c04bf5a3700005f8ffcd2628e0800848e"+
+  "9f99080800000000"
 )
 # damage_info struct; +0x00/+0x04 skeleton and +0x08 entity are patched from
 # the live character at kill time. +0x0C = 0x200 (generic death), +0x10 = -2000
@@ -1253,11 +1262,16 @@ DEATH_INFO_TEMPLATE = (
   "f8e84246621436c5ed130ac50000803f00000000000000000000000000000000"+
   "0000000008000000"
 )
-# Hook at ADDRESSES["death hook"] (0x226674) in the per-frame loop 0x226550:
+# Hook at ADDRESSES["cave hook"] (0x226674) in the per-frame loop 0x226550:
 # `j 0x42B000` then a nop, relocating the two originals into the cave.
-DEATH_HOOK_JAL = 0x0810AC00          # j 0x42B000
-DEATH_HOOK_ORIG0 = 0x8E62D2FC        # lw $2, -11524($19)
-DEATH_HOOK_ORIG1 = 0x8E840008        # lw $4, 8($20)
+CAVE_HOOK_JUMP = 0x0810AC00          # j 0x42B000
+CAVE_HOOK_ORIG0 = 0x8E62D2FC         # lw $2, -11524($19)
+CAVE_HOOK_ORIG1 = 0x8E840008         # lw $4, 8($20)
+# Frames between the pops of one coin payout, and the range the random number
+# of pops per payout is drawn from.
+COIN_POP_INTERVAL = 4
+COIN_POPS_MIN = 3
+COIN_POPS_MAX = 5
 
 MENU_RETURN_DATA = (
   "8F1B8DAE"+

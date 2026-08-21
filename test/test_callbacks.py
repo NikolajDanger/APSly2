@@ -25,14 +25,17 @@ from ..Callbacks import (
   handle_traps,
   init,
   loot_odds_row,
+  pay_out_coins,
   reset_traps,
   set_jobs,
   set_thiefnet,
   update
 )
 from ..data.Constants import (
-  DEATH_HOOK_JAL,
-  DEATH_HOOK_ORIG0,
+  CAVE_HOOK_JUMP,
+  CAVE_HOOK_ORIG0,
+  COIN_POPS_MAX,
+  COIN_POPS_MIN,
   EPISODES,
   LOOT,
   LOOT_IDS,
@@ -267,7 +270,8 @@ class TestHandleReceived(ClientTestBase):
     randint.assert_called_once_with(
       self.slot_data["coins_minimum"], self.slot_data["coins_maximum"]
     )
-    self.assertEqual(self.interface.get_coins(), 50)
+    self.assertEqual(self.ctx.pending_coins, 40)
+    self.assertEqual(self.interface.get_coins(), 10)
 
   async def test_trap_baseline_skips_backlog(self) -> None:
     self.give("Slow-mo Trap")
@@ -468,7 +472,7 @@ class TestHandleDeathlink(ClientTestBase):
     self.ctx.death_link_enabled = True
     self.active = set_active_character(self.pine, self.addr)
     # Pretend the cave is installed so kill_player takes the animated path.
-    self.pine.poke32(self.addr["death hook"], DEATH_HOOK_JAL)
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_JUMP)
 
   async def run_at(self, now: float) -> None:
     with patch.object(Callbacks, "time", return_value=now):
@@ -495,7 +499,7 @@ class TestHandleDeathlink(ClientTestBase):
 
   async def test_fallback_without_cave(self) -> None:
     # Cave not installed -> blunt kill so the death is not lost.
-    self.pine.poke32(self.addr["death hook"], DEATH_HOOK_ORIG0)
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG0)
     self.ctx.queued_deaths = 1
     self.ctx.deathlink_timestamp = 990.0
     await self.run_at(1011.0)
@@ -515,6 +519,62 @@ class TestHandleDeathlink(ClientTestBase):
     self.pine.poke32(self.addr["health"]["Sly"], 0)
     await self.run_at(1000.0)
     self.assertEqual(self.ctx.deaths, ["Tester died"])
+
+
+class TestPayOutCoins(ClientTestBase):
+  async def asyncSetUp(self) -> None:
+    await super().asyncSetUp()
+    self.pine.poke32(self.addr["coins"], 100)
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_JUMP)
+
+  def test_nothing_pending(self) -> None:
+    self.pine.clear_writes()
+    pay_out_coins(self.ctx)
+    self.assertEqual(self.pine.writes, [])
+
+  def test_queues_pops(self) -> None:
+    self.ctx.pending_coins = 40
+    self.ctx.prev_coins = 100
+    with patch.object(Callbacks, "randint", return_value=4) as randint:
+      pay_out_coins(self.ctx)
+    randint.assert_called_once_with(COIN_POPS_MIN, COIN_POPS_MAX)
+    self.assertEqual(self.pine.peek32(self.addr["coin amount"]), 40)
+    self.assertEqual(self.pine.peek32(self.addr["coin pops"]), 4)
+    self.assertEqual(self.ctx.pending_coins, 0)
+    self.assertEqual(self.ctx.prev_coins, 100)
+    self.assertEqual(self.interface.get_coins(), 100)
+
+  def test_waits_while_paying_out(self) -> None:
+    self.pine.poke32(self.addr["coin pops"], 2)
+    self.ctx.pending_coins = 40
+    pay_out_coins(self.ctx)
+    self.assertEqual(self.ctx.pending_coins, 40)
+    self.assertFalse(self.pine.written(self.addr["coin amount"]))
+    self.pine.poke32(self.addr["coin pops"], 0)
+    self.interface.clear_cache()
+    pay_out_coins(self.ctx)
+    self.assertEqual(self.ctx.pending_coins, 0)
+    self.assertEqual(self.pine.peek32(self.addr["coin amount"]), 40)
+
+  def test_fallback_without_cave(self) -> None:
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG0)
+    self.ctx.pending_coins = 40
+    self.ctx.prev_coins = 100
+    pay_out_coins(self.ctx)
+    self.assertEqual(self.interface.get_coins(), 140)
+    self.assertEqual(self.ctx.pending_coins, 0)
+    self.assertEqual(self.ctx.prev_coins, 100)
+    self.assertFalse(self.pine.written(self.addr["coin pops"]))
+
+  async def test_update_pays_out_received_coins(self) -> None:
+    self.enter(1, 2)
+    self.give("Coins")
+    self.pine.poke32(self.addr["items received"], 0)
+    with patch.object(Callbacks, "randint", side_effect=[40, 4]):
+      await update(self.ctx, True)
+    self.assertEqual(self.ctx.pending_coins, 0)
+    self.assertEqual(self.pine.peek32(self.addr["coin amount"]), 40)
+    self.assertEqual(self.pine.peek32(self.addr["coin pops"]), 4)
 
 
 class TestHandleRingLink(ClientTestBase):
@@ -539,6 +599,16 @@ class TestHandleRingLink(ClientTestBase):
     await handle_ring_link(self.ctx)
     self.assertEqual(self.bounces(), [30])
     self.assertEqual(self.ctx.prev_coins, 130)
+    await handle_ring_link(self.ctx)
+    self.assertEqual(self.bounces(), [30])
+
+  async def test_skipped_while_paying_out(self) -> None:
+    await handle_ring_link(self.ctx)
+    self.pine.poke32(self.addr["coins"], 130)
+    self.pine.poke32(self.addr["coin pops"], 1)
+    await handle_ring_link(self.ctx)
+    self.assertEqual(self.bounces(), [])
+    self.pine.poke32(self.addr["coin pops"], 0)
     await handle_ring_link(self.ctx)
     self.assertEqual(self.bounces(), [30])
 

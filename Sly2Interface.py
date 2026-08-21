@@ -20,11 +20,12 @@ from .data.Constants import (
   LOOT_IDS,
   MEGA_JUMP_GADGET_ID,
   MEGA_JUMP_UNLOAD_CALL,
-  DEATH_CAVE_BLOB,
-  DEATH_INFO_TEMPLATE,
-  DEATH_HOOK_JAL,
-  DEATH_HOOK_ORIG0,
-  DEATH_HOOK_ORIG1
+  CAVE_BLOB,
+  CAVE_HOOK_JUMP,
+  CAVE_HOOK_ORIG0,
+  CAVE_HOOK_ORIG1,
+  COIN_POP_INTERVAL,
+  DEATH_INFO_TEMPLATE
 )
 
 class Sly2Episode(IntEnum):
@@ -439,7 +440,8 @@ class Sly2Interface(GameInterface):
       "infobox string", "coins", "items received", "bottle count",
       "savefile last world", "unload mega jump", "DAG root",
       "clock-la defeated", "hackpack", "sly pointer", "clock speed",
-      "friction", "string table", "skip cutscene", "death hook"
+      "friction", "string table", "skip cutscene", "cave hook",
+      "coin pops"
     ]
     reads = [(4, a[name]) for name in words]
     reads += [(2, a["frame counter"]), (1, a["input"])]
@@ -981,6 +983,20 @@ class Sly2Interface(GameInterface):
     new_amount = max(current_amount + to_add,0)
     self._write32(self.addresses["coins"],new_amount)
 
+  def coins_paying_out(self) -> bool:
+    """Whether the cave is still in the middle of a coin payout"""
+    return self._read32(self.addresses["coin pops"]) != 0
+
+  def queue_coins(self, amount: int, pops: int) -> bool:
+    """Have the cave pay out `amount` coins in `pops` pops with the pickup
+    sound. Returns False when the cave isn't live or is still busy, so the
+    caller keeps the coins pending."""
+    if not self.cave_live() or self.coins_paying_out():
+      return False
+    self._write32(self.addresses["coin amount"], amount)
+    self._write32(self.addresses["coin pops"], pops)
+    return True
+
   def get_coins(self) -> int:
     return self._read32(self.addresses["coins"])
 
@@ -1001,16 +1017,19 @@ class Sly2Interface(GameInterface):
 
     return self._read32(active_character + 0xe2c)
 
-  def install_death_cave(self) -> None:
-    """Install the deathlink code cave and its per-frame trampoline hook, so a
-    death can call the game's damage function."""
-    self._write_bytes(
-      self.addresses["death cave"], bytes.fromhex(DEATH_CAVE_BLOB)
-    )
-    self._write32(self.addresses["death flag"], 0)
-    hook = self.addresses["death hook"]
-    self.safe_patch(hook, DEATH_HOOK_JAL, DEATH_HOOK_ORIG0)
-    self.safe_patch(hook + 4, 0, DEATH_HOOK_ORIG1)
+  def install_cave(self) -> None:
+    """Install the code cave and its per-frame trampoline hook, so the client
+    can have the game call its own functions."""
+    self._write_bytes(self.addresses["cave"], bytes.fromhex(CAVE_BLOB))
+    for name in ("death flag", "coin pops", "coin amount", "coin timer"):
+      self._write32(self.addresses[name], 0)
+    self._write32(self.addresses["coin interval"], COIN_POP_INTERVAL)
+    hook = self.addresses["cave hook"]
+    self.safe_patch(hook, CAVE_HOOK_JUMP, CAVE_HOOK_ORIG0)
+    self.safe_patch(hook + 4, 0, CAVE_HOOK_ORIG1)
+
+  def cave_live(self) -> bool:
+    return self._read32(self.addresses["cave hook"]) == CAVE_HOOK_JUMP
 
   def kill_player(self) -> None:
     if self.in_safehouse() or self.get_current_episode() == 0:
@@ -1022,7 +1041,7 @@ class Sly2Interface(GameInterface):
 
     # Without the cave hooked in, fall back to the blunt kill so the death is
     # not lost, just unanimated.
-    if self._read32(self.addresses["death hook"]) != DEATH_HOOK_JAL:
+    if not self.cave_live():
       self._write32(active_character+0xdf4, 8)
       return
 

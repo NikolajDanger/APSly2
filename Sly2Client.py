@@ -89,7 +89,7 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
       self.ctx.notification(message)
 
   def _cmd_kill(self) -> None:
-    """Kill the game."""
+    """Kill the current character."""
     if isinstance(self.ctx, Sly2Context):
       self.ctx.game_interface.kill_player()
 
@@ -270,9 +270,9 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
       logger.info(goal_text)
 
   # def _cmd_coins(self, amount: str) -> None:
-  #     """Add coins to game."""
-  #     if isinstance(self.ctx, Sly2Context):
-  #         self.ctx.game_interface.add_coins(int(amount))
+  #   """Add coins to the game, as if a Coins item had been received."""
+  #   if isinstance(self.ctx, Sly2Context):
+  #     self.ctx.pending_coins += int(amount)
 
 class Sly2Context(CommonContext): # type: ignore[misc]
   # Client variables
@@ -295,6 +295,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
   ring_link_source: int = 0
   pending_ring_link: int = 0
   prev_coins: Optional[int] = None
+  pending_coins: int = 0
 
   # Game state
   is_loading: bool = False

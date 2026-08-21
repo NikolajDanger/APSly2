@@ -7,6 +7,8 @@ from NetUtils import ClientStatus
 
 from .data import Items, Locations
 from .data.Constants import (
+  COIN_POPS_MAX,
+  COIN_POPS_MIN,
   EPISODES,
   TASKS,
   POWERUP_TEXT,
@@ -103,6 +105,7 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
     # to be sent while in the episode menu
     if current_map != 0 and not ctx.game_interface.in_cutscene():
       await handle_received(ctx, in_safehouse)
+      pay_out_coins(ctx)
       handle_traps(ctx)
       await handle_checks(ctx)
       await handle_check_goal(ctx)
@@ -245,8 +248,7 @@ async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
 
   mark_dirty(ctx)
   fix_mega_jump(ctx)
-  if ctx.death_link_enabled:
-    ctx.game_interface.install_death_cave()
+  ctx.game_interface.install_cave()
 
   if ctx.current_episode == Sly2Episode.Title_Screen:
     if ctx.game_interface.stuck_in_cairo():
@@ -679,11 +681,10 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
 
       bottles[episode] += count
     elif item.name == "Coins" and i >= notify_from:
-      amount = randint(
+      ctx.pending_coins += randint(
         ctx.slot_data["coins_minimum"],
         ctx.slot_data["coins_maximum"]
       )
-      ctx.game_interface.add_coins(amount)
     elif item.category == "Trap" and i >= ctx.trap_cursor and not in_safehouse:
       activate_trap(ctx, Items.Trap.from_item_name(item.name))
 
@@ -893,9 +894,28 @@ async def handle_deathlink(ctx: 'Sly2Context') -> None:
       await ctx.send_death(death_message)
       ctx.deathlink_timestamp = time()
 
+def pay_out_coins(ctx: 'Sly2Context') -> None:
+  """Hand pending coins to the cave, which pays them out in pops with the
+  pickup sound; without the cave they're written directly"""
+  amount = ctx.pending_coins
+  if amount <= 0:
+    return
+
+  pops = randint(COIN_POPS_MIN, COIN_POPS_MAX)
+  if ctx.game_interface.queue_coins(amount, pops):
+    ctx.pending_coins = 0
+  elif not ctx.game_interface.cave_live():
+    ctx.game_interface.add_coins(amount)
+    ctx.pending_coins = 0
+
 async def handle_ring_link(ctx: 'Sly2Context') -> None:
   """Broadcast coin changes and apply received ring link deltas"""
   if not ctx.ring_link_enabled:
+    return
+
+  # A cave payout lands over several frames; wait for it so the whole amount
+  # goes out as one diff.
+  if ctx.game_interface.coins_paying_out():
     return
 
   current = ctx.game_interface.get_coins()
