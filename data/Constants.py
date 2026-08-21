@@ -664,7 +664,7 @@ DEATH_TYPES = {
   0x800: "{player} was electrocuted",
   0x1000: "{player} was burned to death",
   0x2000: "{player} drowned",
-  # 0x1000: "{player} fell to their death",
+  0x4000: "{player} fell to their death",
 }
 
 ADDRESSES = {
