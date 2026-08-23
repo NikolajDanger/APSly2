@@ -109,6 +109,11 @@ MAX_GUARDS = 512
 MAX_INTERACTABLES = 64
 MAX_ENTITY_CHILDREN = 64
 
+INFOBOX_SECONDS = 10.0
+# The string id set_infobox writes; the game uses -1 for none and its own
+# ids for the boxes it shows.
+INFOBOX_CLIENT_STRING = 1
+
 def in_ee_ram(address: int, size: int = 4) -> bool:
   return EE_RAM_START <= address and address + size <= EE_RAM_END
 
@@ -1066,26 +1071,33 @@ class Sly2Interface(GameInterface):
   def current_infobox(self) -> int:
     return self._read32(self.addresses["infobox string"])
 
-  def set_infobox(self, text: str) -> None:
+  def set_infobox(self, text: str) -> bool:
+    """Shows text in the infobox; returns False when the game can't show
+    it right now so the caller can keep it queued"""
     ep = self.get_current_episode()
     if ep == 0 or self.in_safehouse():
-      return
+      return False
 
     infobox_pointer = self._read32(self.addresses["infobox"])
     self._write32(self.addresses["infobox scrolling"],2)
     self.set_text("infobox"," "*10+text)
-    self._write32(self.addresses["infobox string"],1)
+    self._write32(self.addresses["infobox string"],INFOBOX_CLIENT_STRING)
     self._write32(infobox_pointer+0x64,2)
-    self._write32(self.addresses["infobox duration"],0xffffffff)
+    # Seconds; the game closes the bar itself when they run out, so a bar
+    # survives even if the client never gets to hide it.
+    self._write_float(self.addresses["infobox duration"],INFOBOX_SECONDS)
 
     # For some reason this has to be done sometimes?
     self._write32(self.addresses["infobox scrolling"],1)
+    return True
 
   def disable_infobox(self) -> None:
+    # Scrolling 3 is the game's own scroll-out; it resets the string id
+    # and scrolling when it finishes, which a bare state write never did.
     infobox_pointer = self._read32(self.addresses["infobox"])
     if self._read32(infobox_pointer+0x64) != 1:
-      self._write32(infobox_pointer+0x64,2)
       self._write32(infobox_pointer+0x64,1)
+      self._write32(self.addresses["infobox scrolling"],3)
 
   # =====================================================
   # Coins/Items Methods

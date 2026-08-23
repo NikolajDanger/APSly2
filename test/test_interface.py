@@ -1106,9 +1106,7 @@ class TestInfobox(InterfaceTestBase):
     self.assertEqual(self.pine.peek_cstring(buffer), b" "*10 + b"hello")
     self.assertEqual(self.pine.peek32(self.addr["infobox string"]), 1)
     self.assertEqual(self.pine.peek32(self.infobox_ptr() + 0x64), 2)
-    self.assertEqual(
-      self.pine.peek32(self.addr["infobox duration"]), 0xffffffff
-    )
+    self.assertEqual(self.pine.peek_float(self.addr["infobox duration"]), 10.0)
     self.assertEqual(self.pine.peek32(self.addr["infobox scrolling"]), 1)
 
   def test_set_infobox_skips_title_screen(self) -> None:
@@ -1124,8 +1122,10 @@ class TestInfobox(InterfaceTestBase):
 
   def test_disable_infobox_when_showing(self) -> None:
     self.pine.poke32(self.infobox_ptr() + 0x64, 2)
+    self.pine.poke32(self.addr["infobox scrolling"], 2)
     self.interface.disable_infobox()
     self.assertEqual(self.pine.peek32(self.infobox_ptr() + 0x64), 1)
+    self.assertEqual(self.pine.peek32(self.addr["infobox scrolling"]), 3)
 
   def test_disable_infobox_noop_when_already_off(self) -> None:
     self.pine.poke32(self.infobox_ptr() + 0x64, 1)

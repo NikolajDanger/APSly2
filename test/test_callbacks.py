@@ -676,6 +676,22 @@ class TestHandleNotifications(ClientTestBase):
     self.assertEqual(len(self.ctx.notification_queue), 1)
     self.assertEqual(self.pine.peek32(self.infobox + 0x64), 1)
 
+  async def test_closes_hung_bar_with_client_string(self) -> None:
+    self.ctx.notification_queue.clear()
+    self.pine.poke32(self.infobox + 0x64, 2)
+    self.pine.poke32(self.addr["infobox string"], 1)
+    with self.assertLogs(self.ctx.game_interface.logger, "WARNING") as logs:
+      await self.run_at(1000.0)
+    self.assertIn("[INFOBOX]", logs.output[0])
+    self.assertEqual(self.pine.peek32(self.infobox + 0x64), 1)
+    self.assertEqual(self.pine.peek32(self.addr["infobox scrolling"]), 3)
+
+  async def test_keeps_notification_when_game_refuses(self) -> None:
+    self.pine.poke32(self.addr["world id"], 0)
+    await self.run_at(1000.0)
+    self.assertFalse(self.ctx.showing_notification)
+    self.assertEqual(len(self.ctx.notification_queue), 1)
+
 
 class TestSetJobs(ClientTestBase):
   async def asyncSetUp(self) -> None:

@@ -20,7 +20,7 @@ from .data.Constants import (
   MEGA_JUMP_GADGET_ID,
   episode_key
 )
-from .Sly2Interface import Sly2Episode, PowerUps
+from .Sly2Interface import Sly2Episode, PowerUps, INFOBOX_CLIENT_STRING
 
 if TYPE_CHECKING:
   from .Sly2Client import Sly2Context
@@ -546,25 +546,27 @@ def fix_jobs(ctx: 'Sly2Context') -> None:
 
 async def handle_notifications(ctx: 'Sly2Context') -> None:
   """Displays notifications in an infobox"""
+  game = ctx.game_interface
+  showing = game.is_infobox()
+  ours = game.current_infobox() in (INFOBOX_CLIENT_STRING, 0xffffffff)
   if (
     (ctx.showing_notification and time() - ctx.notification_timestamp < 10) or
-    (
-      (not ctx.showing_notification) and
-      ctx.game_interface.is_infobox() and
-      ctx.game_interface.current_infobox() != 0xffffffff
-    ) or
-    ctx.game_interface.in_cutscene()
+    ((not ctx.showing_notification) and showing and not ours) or
+    game.in_cutscene()
   ):
     return
 
-  ctx.game_interface.disable_infobox()
+  if showing and ours and not ctx.showing_notification:
+    game.logger.warning("[INFOBOX] closing a bar the client was not showing")
+  game.disable_infobox()
   ctx.showing_notification = False
-  if len(ctx.notification_queue) > 0 and ctx.game_interface.in_hub():
-    new_notification = ctx.notification_queue.popleft()
+  if (
+    len(ctx.notification_queue) > 0 and game.in_hub() and
+    game.set_infobox(ctx.notification_queue[0])
+  ):
+    ctx.notification_queue.popleft()
     ctx.notification_timestamp = time()
     ctx.showing_notification = True
-    ctx.game_interface.set_infobox(new_notification)
-
 
 def compute_available_episodes(ctx: 'Sly2Context') -> dict:
   """Which episodes the player can access"""
