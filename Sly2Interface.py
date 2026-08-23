@@ -1156,7 +1156,7 @@ class Sly2Interface(GameInterface):
   def cave_live(self) -> bool:
     return self._read32(self.addresses["cave hook"]) == CAVE_HOOK_JUMP
 
-  def kill_player(self) -> None:
+  def kill_player(self, damage_type: int = 0x200) -> None:
     if self.in_safehouse() or self.get_current_episode() == 0:
       return
 
@@ -1172,7 +1172,9 @@ class Sly2Interface(GameInterface):
 
     skeleton = self._read32(active_character + 0x9f0)
     info = bytearray.fromhex(DEATH_INFO_TEMPLATE)
-    struct.pack_into("<III", info, 0, skeleton, skeleton, active_character)
+    struct.pack_into(
+      "<IIII", info, 0, skeleton, skeleton, active_character, damage_type
+    )
     self._write_bytes(self.addresses["death struct"], bytes(info))
     self._write32(self.addresses["death flag"], 1)
 

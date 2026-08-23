@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 from time import sleep, time
-from random import randint
+from random import choice, randint
 from math import ceil
 
 from NetUtils import ClientStatus
@@ -15,6 +15,7 @@ from .data.Constants import (
   OTHER_POWERUPS,
   TREASURES,
   DEATH_TYPES,
+  DEATHLINK_DAMAGE_TYPES,
   LOOT,
   PICKPOCKET_LOOT_TABLE_CHANCES,
   MEGA_JUMP_GADGET_ID,
@@ -887,7 +888,7 @@ async def handle_deathlink(ctx: 'Sly2Context') -> None:
   if time()-ctx.deathlink_timestamp > 20:
     if ctx.game_interface.alive():
       if ctx.queued_deaths > 0:
-        ctx.game_interface.kill_player()
+        ctx.game_interface.kill_player(choice(DEATHLINK_DAMAGE_TYPES))
         ctx.queued_deaths = 0
         ctx.deathlink_timestamp = time()
     else:

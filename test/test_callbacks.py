@@ -36,6 +36,7 @@ from ..data.Constants import (
   CAVE_HOOK_ORIG0,
   COIN_POPS_MAX,
   COIN_POPS_MIN,
+  DEATHLINK_DAMAGE_TYPES,
   EPISODES,
   LOOT,
   LOOT_IDS,
@@ -489,13 +490,25 @@ class TestHandleDeathlink(ClientTestBase):
     self.ctx.deathlink_timestamp = 990.0
     await self.run_at(1000.0)
     self.assertFalse(self.pine.written(self.addr["death flag"]))
-    await self.run_at(1011.0)
+    with patch.object(Callbacks, "choice", return_value=0x2000):
+      await self.run_at(1011.0)
     self.assertEqual(self.pine.peek32(self.addr["death flag"]), 1)
     struct_addr = self.addr["death struct"]
     self.assertEqual(self.pine.peek32(struct_addr + 0x08), self.active)
-    self.assertEqual(self.pine.peek32(struct_addr + 0x0c), 0x200)
+    self.assertEqual(self.pine.peek32(struct_addr + 0x0c), 0x2000)
     self.assertEqual(self.ctx.queued_deaths, 0)
     self.assertEqual(self.ctx.deathlink_timestamp, 1011.0)
+
+  async def test_damage_type_rolled_from_pool(self) -> None:
+    # Fell is excluded: its death reaction glitches over solid ground.
+    self.assertNotIn(0x4000, DEATHLINK_DAMAGE_TYPES)
+    self.ctx.queued_deaths = 1
+    self.ctx.deathlink_timestamp = 990.0
+    await self.run_at(1011.0)
+    self.assertIn(
+      self.pine.peek32(self.addr["death struct"] + 0x0c),
+      DEATHLINK_DAMAGE_TYPES
+    )
 
   async def test_fallback_without_cave(self) -> None:
     # Cave not installed -> blunt kill so the death is not lost.

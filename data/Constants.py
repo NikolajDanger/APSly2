@@ -665,7 +665,11 @@ DEATH_TYPES = {
   0x1000: "{player} was burned to death",
   0x2000: "{player} drowned",
   0x4000: "{player} fell to their death",
+  0x8000: "{player} was bitten by a snake",
 }
+# The fall reaction glitches when it plays over solid ground, so a received
+# deathlink never rolls it.
+DEATHLINK_DAMAGE_TYPES = [t for t in DEATH_TYPES if t != 0x4000]
 
 ADDRESSES = {
   "SCUS-97316": {
@@ -1287,8 +1291,8 @@ CAVE_BLOB = (
   "25204000beec070c2528000042001a3c04bf5a3700005f8ffcd2628e0800848e"+
   "9f99080800000000"
 )
-# damage_info struct; +0x00/+0x04 skeleton and +0x08 entity are patched from
-# the live character at kill time. +0x0C = 0x200 (generic death), +0x10 = -2000
+# damage_info struct; +0x00/+0x04 skeleton, +0x08 entity and +0x0C damage
+# type are patched from the live character at kill time. +0x10 = -2000
 # (lethal), +0x20.. a location/dir, +0x44 = 8.
 DEATH_INFO_TEMPLATE = (
   "0000000000000000000000000002000030f8ffff000000000000000000000000"+
