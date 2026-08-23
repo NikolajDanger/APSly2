@@ -63,6 +63,8 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
     else:
       if ctx.current_episode == Sly2Episode.Anatomy_for_Disaster:
         check_clockla(ctx)
+        ctx.game_interface.allow_sly_treasure_pickup()
+        ctx.game_interface.hide_mega_jump_pack()
 
       if check_jobs(ctx):
         ctx.jobs_dirty = True

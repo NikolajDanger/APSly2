@@ -734,6 +734,8 @@ ADDRESSES = {
       "TurretIndia2": 0x525600,
       "ChopperCarmelita": 0x50EE50
     },
+    "interactables": 0x3E1414,
+    "entity manager": 0x3DD490,
     "guard structs": [
       0x3E0774,  # swarmer 1
       0x3E0778,  # swarmer 2
@@ -1235,6 +1237,31 @@ OTHER_POWERUPS = [
 MEGA_JUMP_GADGET_ID = 0x1F
 # `jal 0x14C258` at ADDRESSES["unload mega jump"]
 MEGA_JUMP_UNLOAD_CALL = 0x0C053096
+
+# Each pedestal carries a bitmask of the characters allowed to use it
+# (1 Sly, 2 Bentley, 4 Murray). The episode 8 level script clears Sly's bit
+# once the Mega-Jump Job becomes available, to go with the jump pack he then
+# wears, and nothing restores it while the job is unfinished.
+PEDESTAL_VTABLE = 0x2CB9F8
+INTERACTABLE_NEXT = 0x104
+PEDESTAL_USERS = 0xE0 + 0x1C
+SLY_USER_BIT = 1
+
+# An entity is drawn while it holds a slot in the entity manager's array
+# (entity+0x40 points at its {flags, entity} slot). The section 3 level
+# script hangs the jump pack as a child entity under Sly's back attachment
+# node; putting a treasure back unregisters that subtree and picking one up
+# registers the node's children again, so the pack is both unregistered and
+# unlinked from the node's child list.
+ENTITY_MANAGER_FREE = 0x3F18
+ENTITY_SLOT = 0x40
+ENTITY_NEXT = 0x24
+ENTITY_PREV = 0x28
+ENTITY_FIRST_CHILD = 0x64
+ENTITY_LAST_CHILD = 0x68
+ENTITY_CHILD_LINK = 0x6C
+SLY_BACK_NODE = 0x11A4
+TREASURE_VTABLE = 0x2CBBA0
 
 # (job node, checkpoint node) per episode: dead-end task nodes the job never
 # completes, so they stay "available" and can start the finished job again.

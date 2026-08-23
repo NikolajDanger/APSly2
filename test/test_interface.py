@@ -14,6 +14,18 @@ from ..data.Constants import (
   LOOT_PRICES,
   MEGA_JUMP_GADGET_ID,
   MEGA_JUMP_UNLOAD_CALL,
+  PEDESTAL_VTABLE,
+  INTERACTABLE_NEXT,
+  PEDESTAL_USERS,
+  ENTITY_MANAGER_FREE,
+  ENTITY_SLOT,
+  ENTITY_NEXT,
+  ENTITY_PREV,
+  ENTITY_FIRST_CHILD,
+  ENTITY_LAST_CHILD,
+  ENTITY_CHILD_LINK,
+  SLY_BACK_NODE,
+  TREASURE_VTABLE,
   POWERUP_TEXT,
   TREASURE_PRICES
 )
@@ -897,6 +909,175 @@ class TestStaleTriggers(InterfaceTestBase):
     set_job_status(self.pine, 42, 1)
     self.interface.disarm_stale_triggers()
     self.assertEqual(job_status(self.pine, 42), 1)
+
+
+def make_interactables(
+  pine: FakePine, addr: dict, vtables: list[int], users: int = 6
+) -> list[int]:
+  entities = [0x900000 + 0x400*i for i in range(len(vtables))]
+  pine.poke32(addr["interactables"], entities[0] if entities else 0)
+  for entity, vtable, following in zip(
+    entities, vtables, entities[1:] + [0]
+  ):
+    pine.poke32(entity + 0xC, vtable)
+    pine.poke32(entity + PEDESTAL_USERS, users)
+    pine.poke32(entity + INTERACTABLE_NEXT, following)
+  return entities
+
+
+class TestTreasurePickup(InterfaceTestBase):
+  def test_opens_pedestals_to_sly(self) -> None:
+    entities = make_interactables(
+      self.pine, self.addr, [0x123456, PEDESTAL_VTABLE, PEDESTAL_VTABLE]
+    )
+    self.interface.allow_sly_treasure_pickup()
+    self.assertEqual(self.pine.peek32(entities[0] + PEDESTAL_USERS), 6)
+    self.assertEqual(self.pine.peek32(entities[1] + PEDESTAL_USERS), 7)
+    self.assertEqual(self.pine.peek32(entities[2] + PEDESTAL_USERS), 7)
+
+  def test_leaves_open_pedestals(self) -> None:
+    make_interactables(self.pine, self.addr, [PEDESTAL_VTABLE], users=7)
+    self.interface.allow_sly_treasure_pickup()
+    self.assertEqual(self.pine.writes, [])
+
+  def test_empty_list(self) -> None:
+    make_interactables(self.pine, self.addr, [])
+    self.interface.allow_sly_treasure_pickup()
+    self.assertEqual(self.pine.writes, [])
+
+  def test_stops_on_cycle(self) -> None:
+    entities = make_interactables(
+      self.pine, self.addr, [PEDESTAL_VTABLE, PEDESTAL_VTABLE]
+    )
+    self.pine.poke32(entities[1] + INTERACTABLE_NEXT, entities[0])
+    self.assertEqual(list(self.interface._walk_interactables()), entities)
+
+
+def make_entity(
+  pine: FakePine, address: int, children: list[int], registered: bool
+) -> None:
+  if children:
+    pine.poke32(address + ENTITY_CHILD_LINK, ENTITY_NEXT)
+    pine.poke32(address + ENTITY_FIRST_CHILD, children[0])
+    pine.poke32(address + ENTITY_LAST_CHILD, children[-1])
+    for previous, child, following in zip(
+      [0] + children, children, children[1:] + [0]
+    ):
+      pine.poke32(child + 0x10, address)
+      pine.poke32(child + ENTITY_NEXT, following)
+      pine.poke32(child + ENTITY_PREV, previous)
+  if registered:
+    slot = 0x47F000 + (address >> 8) * 8
+    pine.poke32(slot, 0x25)
+    pine.poke32(slot + 4, address)
+    pine.poke32(address + ENTITY_SLOT, slot)
+  else:
+    pine.poke32(address + ENTITY_SLOT, 0x25)
+
+
+class TestMegaJumpPack(InterfaceTestBase):
+  SLY = 0xB3C000
+  NODE = 0xB9E000
+  CHILD = 0x13EE000
+  GROUP = 0x13F2000
+  LIGHTS = [0x13F2400, 0x13F2600, 0x13F2800]
+
+  def setUp(self) -> None:
+    super().setUp()
+    self.pine.poke32(self.addr["sly pointer"], self.SLY)
+    self.pine.poke32(self.SLY + SLY_BACK_NODE, self.NODE)
+    self.free = self.addr["entity manager"] + ENTITY_MANAGER_FREE
+    self.pine.poke32(self.free, 5)
+    self.pine.clear_writes()
+
+  def build_pack(self, registered: bool = True) -> None:
+    make_entity(self.pine, self.NODE, [self.CHILD], True)
+    make_entity(self.pine, self.CHILD, [self.GROUP] + self.LIGHTS, registered)
+    for entity in [self.GROUP] + self.LIGHTS:
+      make_entity(self.pine, entity, [], registered)
+
+  def slot(self, entity: int) -> int:
+    return self.pine.peek32(entity + ENTITY_SLOT)
+
+  def test_unregisters_pack_subtree(self) -> None:
+    self.build_pack()
+    slots = {e: self.slot(e) for e in [self.CHILD, self.GROUP] + self.LIGHTS}
+    self.interface.hide_mega_jump_pack()
+    for entity, slot in slots.items():
+      self.assertEqual(self.pine.peek32(slot), 0)
+      self.assertEqual(self.pine.peek32(slot + 4), 0)
+      self.assertEqual(self.slot(entity), 0x25)
+    self.assertEqual(self.pine.peek32(self.free), 10)
+
+  def test_unlinks_pack_from_node(self) -> None:
+    self.build_pack()
+    self.interface.hide_mega_jump_pack()
+    self.assertEqual(self.pine.peek32(self.NODE + ENTITY_FIRST_CHILD), 0)
+    self.assertEqual(self.pine.peek32(self.NODE + ENTITY_LAST_CHILD), 0)
+    self.assertEqual(self.pine.peek32(self.CHILD + ENTITY_NEXT), 0)
+    self.assertEqual(self.pine.peek32(self.CHILD + ENTITY_PREV), 0)
+    self.assertEqual(
+      self.pine.peek32(self.CHILD + ENTITY_FIRST_CHILD), self.GROUP
+    )
+    self.pine.clear_writes()
+    self.interface.hide_mega_jump_pack()
+    self.assertEqual(self.pine.writes, [])
+
+  def test_keeps_treasure_linked(self) -> None:
+    treasure = 0xE86000
+    self.build_pack()
+    make_entity(self.pine, self.NODE, [self.CHILD, treasure], True)
+    self.pine.poke32(treasure + 0xC, TREASURE_VTABLE)
+    self.interface.hide_mega_jump_pack()
+    self.assertEqual(self.pine.peek32(self.NODE + ENTITY_FIRST_CHILD), treasure)
+    self.assertEqual(self.pine.peek32(self.NODE + ENTITY_LAST_CHILD), treasure)
+    self.assertEqual(self.pine.peek32(treasure + ENTITY_PREV), 0)
+    self.assertEqual(self.pine.peek32(treasure + ENTITY_NEXT), 0)
+
+  def test_leaves_held_treasure(self) -> None:
+    treasure, part = 0xE86000, 0xE89000
+    self.build_pack()
+    make_entity(self.pine, self.NODE, [self.CHILD, treasure], True)
+    make_entity(self.pine, treasure, [part], True)
+    make_entity(self.pine, part, [], True)
+    self.pine.poke32(treasure + 0xC, TREASURE_VTABLE)
+    slots = {e: self.slot(e) for e in (treasure, part)}
+    self.interface.hide_mega_jump_pack()
+    for entity, slot in slots.items():
+      self.assertEqual(self.pine.peek32(slot + 4), entity)
+      self.assertEqual(self.slot(entity), slot)
+    self.assertEqual(self.slot(self.CHILD), 0x25)
+
+  def test_leaves_node_registered(self) -> None:
+    self.build_pack()
+    slot = self.slot(self.NODE)
+    self.interface.hide_mega_jump_pack()
+    self.assertEqual(self.pine.peek32(slot + 4), self.NODE)
+    self.assertEqual(self.slot(self.NODE), slot)
+
+  def test_only_unlinks_when_unregistered(self) -> None:
+    self.build_pack(registered=False)
+    self.interface.hide_mega_jump_pack()
+    self.assertEqual(self.pine.peek32(self.NODE + ENTITY_FIRST_CHILD), 0)
+    self.assertEqual(self.pine.peek32(self.free), 5)
+    self.assertEqual(self.slot(self.CHILD), 0x25)
+
+  def test_no_writes_without_pack(self) -> None:
+    make_entity(self.pine, self.NODE, [], True)
+    self.interface.hide_mega_jump_pack()
+    self.assertEqual(self.pine.writes, [])
+
+  def test_no_writes_without_sly(self) -> None:
+    self.pine.poke32(self.addr["sly pointer"], 0)
+    self.interface.hide_mega_jump_pack()
+    self.assertEqual(self.pine.writes, [])
+
+  def test_stops_on_cycle(self) -> None:
+    self.build_pack()
+    self.pine.poke32(self.LIGHTS[-1] + ENTITY_NEXT, self.GROUP)
+    self.pine.poke32(self.CHILD + ENTITY_LAST_CHILD, 0)
+    descendants = list(self.interface._walk_entity_descendants(self.NODE))
+    self.assertEqual(descendants, [self.CHILD, self.GROUP] + self.LIGHTS)
 
 
 class TestInfobox(InterfaceTestBase):

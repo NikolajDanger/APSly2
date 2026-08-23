@@ -21,6 +21,19 @@ from .data.Constants import (
   MEGA_JUMP_GADGET_ID,
   MEGA_JUMP_UNLOAD_CALL,
   STALE_JOB_TRIGGERS,
+  PEDESTAL_VTABLE,
+  INTERACTABLE_NEXT,
+  PEDESTAL_USERS,
+  SLY_USER_BIT,
+  ENTITY_MANAGER_FREE,
+  ENTITY_SLOT,
+  ENTITY_NEXT,
+  ENTITY_PREV,
+  ENTITY_FIRST_CHILD,
+  ENTITY_LAST_CHILD,
+  ENTITY_CHILD_LINK,
+  SLY_BACK_NODE,
+  TREASURE_VTABLE,
   CAVE_BLOB,
   CAVE_HOOK_JUMP,
   CAVE_HOOK_ORIG0,
@@ -93,6 +106,8 @@ EE_RAM_END = 0x0200_0000
 # No map holds anywhere near this many guards at once; a list longer than this
 # is a walk that wandered into freed memory.
 MAX_GUARDS = 512
+MAX_INTERACTABLES = 64
+MAX_ENTITY_CHILDREN = 64
 
 def in_ee_ram(address: int, size: int = 4) -> bool:
   return EE_RAM_START <= address and address + size <= EE_RAM_END
@@ -687,6 +702,89 @@ class Sly2Interface(GameInterface):
         self._read_job_status(trigger) == 1
       ):
         self._write_job_status(trigger, 3)
+
+  def _walk_interactables(self) -> Iterator[int]:
+    """Yields the interactable objects currently near the player"""
+    seen = set()
+    pointer = self._read32(self.addresses["interactables"])
+    while (
+      in_ee_ram(pointer, INTERACTABLE_NEXT + 4) and
+      pointer not in seen and
+      len(seen) < MAX_INTERACTABLES
+    ):
+      seen.add(pointer)
+      yield pointer
+      pointer = self._read32(pointer + INTERACTABLE_NEXT)
+
+  def allow_sly_treasure_pickup(self) -> None:
+    """Lets Sly use treasure pedestals the level script has closed to him.
+    The list is rebuilt as objects come into range, so this runs per tick."""
+    for entity in self._walk_interactables():
+      if self._read32(entity + 0xC) != PEDESTAL_VTABLE:
+        continue
+      users = self._read32(entity + PEDESTAL_USERS)
+      if not users & SLY_USER_BIT:
+        self._write32(entity + PEDESTAL_USERS, users | SLY_USER_BIT)
+
+  def _walk_entity_descendants(
+    self, entity: int, skip_vtable: Optional[int] = None
+  ) -> Iterator[int]:
+    if self._read32(entity + ENTITY_CHILD_LINK) != ENTITY_NEXT:
+      return
+    child = self._read32(entity + ENTITY_FIRST_CHILD)
+    last = self._read32(entity + ENTITY_LAST_CHILD)
+    seen = set()
+    while in_ee_ram(child, ENTITY_CHILD_LINK + 4) and child not in seen:
+      seen.add(child)
+      if skip_vtable is None or self._read32(child + 0xC) != skip_vtable:
+        yield child
+        yield from self._walk_entity_descendants(child, skip_vtable)
+      if child == last or len(seen) >= MAX_ENTITY_CHILDREN:
+        return
+      child = self._read32(child + ENTITY_NEXT)
+
+  def _unlink_child(self, parent: int, child: int) -> None:
+    previous = self._read32(child + ENTITY_PREV)
+    following = self._read32(child + ENTITY_NEXT)
+    operations = [(child + ENTITY_PREV, 0), (child + ENTITY_NEXT, 0)]
+    if previous:
+      operations.append((previous + ENTITY_NEXT, following))
+    else:
+      operations.append((parent + ENTITY_FIRST_CHILD, following))
+    if following:
+      operations.append((following + ENTITY_PREV, previous))
+    else:
+      operations.append((parent + ENTITY_LAST_CHILD, previous))
+    self._batch_write32(operations)
+
+  def hide_mega_jump_pack(self) -> None:
+    """Unregisters the jump pack entities hanging under Sly's back node the
+    same way the game does when a treasure is put back, so they stop being
+    drawn, and unlinks them from the node so picking a treasure up does not
+    register them again. A picked-up treasure hangs under the same node
+    from the start of the grab animation, so treasures are told apart by
+    class."""
+    sly = self._read32(self.addresses["sly pointer"])
+    if not in_ee_ram(sly, SLY_BACK_NODE + 4):
+      return
+    node = self._read32(sly + SLY_BACK_NODE)
+    if not in_ee_ram(node, ENTITY_CHILD_LINK + 4):
+      return
+    free_count = self.addresses["entity manager"] + ENTITY_MANAGER_FREE
+    for entity in self._walk_entity_descendants(node, TREASURE_VTABLE):
+      slot = self._read32(entity + ENTITY_SLOT)
+      if not in_ee_ram(slot, 8) or self._read32(slot + 4) != entity:
+        continue
+      self._batch_write32([
+        (entity + ENTITY_SLOT, self._read32(slot)),
+        (slot, 0),
+        (slot + 4, 0),
+        (free_count, self._read32(free_count) + 1)
+      ])
+    children = list(self._walk_entity_descendants(node, TREASURE_VTABLE))
+    for child in children:
+      if self._read32(child + 0x10) == node:
+        self._unlink_child(node, child)
 
   def activate_job(self, task: int) -> None:
     status = self._read_job_status(task)
