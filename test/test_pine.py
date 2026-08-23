@@ -120,3 +120,13 @@ class TestPineRequests(unittest.TestCase):
     self.assertEqual(
       self.pine.requests, [(5).to_bytes(4, "little") + bytes([self.cmd.ID])]
     )
+
+  def test_state_commands(self) -> None:
+    self.pine.save_state(9)
+    self.pine.load_state(9)
+    self.assertEqual(self.pine.requests, [
+      (6).to_bytes(4, "little") + bytes([self.cmd.SAVE_STATE, 9]),
+      (6).to_bytes(4, "little") + bytes([self.cmd.LOAD_STATE, 9]),
+    ])
+    with self.assertRaises(ValueError):
+      self.pine.load_state(256)

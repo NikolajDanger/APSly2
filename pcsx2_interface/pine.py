@@ -323,6 +323,18 @@ class Pine:
       return ""
     return response[9:-1].decode("ascii")
 
+  def save_state(self, slot: int) -> None:
+    self._send_request(self._state_request(self.IPCCommand.SAVE_STATE, slot))
+
+  def load_state(self, slot: int) -> None:
+    self._send_request(self._state_request(self.IPCCommand.LOAD_STATE, slot))
+
+  @classmethod
+  def _state_request(cls, command: IPCCommand, slot: int) -> bytes:
+    if not 0 <= slot <= 255:
+      raise ValueError("Savestate slot must be in 0..255")
+    return cls.to_bytes(6, 4) + cls.to_bytes(command, 1) + cls.to_bytes(slot, 1)
+
   def get_emu_status(self) -> EmuStatus:
     request = self.to_bytes(5, 4) + self.to_bytes(self.IPCCommand.STATUS, 1)
     response = self._send_request(request)

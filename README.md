@@ -85,6 +85,13 @@ AP_TEST_WORLDS=Sly2 python -m pytest -q test/general worlds/Sly2
 ```
 `worlds/Sly2` is this repo's suite; `test/general` is Archipelago's generic per-world checks.
 
+There is also an end-to-end suite in `e2e/` that runs against a real PCSX2 with the game loaded, over PINE. It is never picked up by the command above (or by any Archipelago-wide test run): it only runs when asked for explicitly. From the Archipelago checkout:
+```
+SLY2_E2E=1 SLY2_E2E_ISO="/path/to/Sly 2.iso" python -m worlds.Sly2.e2e
+```
+With `SLY2_E2E_ISO` set the suite starts `pcsx2-qt` itself (`SLY2_E2E_PCSX2` picks another binary) when nothing answers on PINE, and shuts it down afterwards; PINE must be enabled in PCSX2's settings (slot 28011). Without it, the suite connects to a PCSX2 you already have running with the game loaded and no other PINE client attached, and skips when none answers.
+The suite loads the savestates checked in under `e2e/states/` through PCSX2 savestate slot 99 and never touches your own slots. `e2e/states/README.md` lists what each state contains and how to recapture one with `python -m worlds.Sly2.e2e.capture_state <name>`.
+
 ### Building
 `build/build.sh` lints, type checks, runs the test suite, and zips the repo into `build/target/sly2_apworld-<date_time>/` (the `.apworld` plus `Sly 2.yaml`). It's a bash script, so on Windows use Git Bash or WSL. It needs `zip`, `rsync`, `pip`, `ruff` and `pyright` on the path, and `AP_ROOT` pointing at your Archipelago checkout (the script checks that `$AP_ROOT/worlds/Sly2` really resolves to the repo being built):
 
@@ -93,7 +100,7 @@ AP_ROOT=/path/to/Archipelago ./build/build.sh   # build a bundle
 ./build/build.sh clean                          # remove old bundles
 ```
 
-A failing test aborts the build. The checkout is also where the bundled `archipelago.json` gets its container `version`/`compatible_version` from.
+A failing test aborts the build. When `SLY2_E2E_ISO` is set the end-to-end suite runs as well (starting PCSX2 itself); otherwise it is skipped. The checkout is also where the bundled `archipelago.json` gets its container `version`/`compatible_version` from.
 
 ## Acknowledgment
 This project was heavily inspired by and built upon the structure and PINE code from [Evilwb's Archipelago Ratchet and Clank 2 implementation](https://github.com/evilwb/APRac2).

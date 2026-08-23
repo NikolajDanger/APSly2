@@ -70,6 +70,22 @@ function run_tests() {
 }
 
 ##
+# Run the end-to-end suite against PCSX2 when SLY2_E2E_ISO points at the
+# disc image; the harness starts and stops the emulator itself.
+##
+function run_e2e_tests() {
+    if [[ -z "${SLY2_E2E_ISO:-}" ]]; then
+        echo "=> Skipping e2e tests (SLY2_E2E_ISO not set)"
+        return
+    fi
+    echo "=> Testing end-to-end against PCSX2 (in ${AP_ROOT})"
+    pushd "${AP_ROOT}"
+    SLY2_E2E=1 python -m pytest -q -p no:cacheprovider \
+        -o python_files='e2e_*.py' worlds/Sly2/e2e
+    popd
+}
+
+##
 # Add the container `version`/`compatible_version` that Archipelago's own
 # packager would write to the bundled manifest.
 #
@@ -169,6 +185,7 @@ function main() {
         echo "=> Type checking"
         PYTHONPATH="${AP_ROOT}" pyright -p "${CWD}/pyright.json"
         run_tests
+        run_e2e_tests
 
         mk_apworld "${project}" "${destdir}"
         cp_data "${project}" "${destdir}"

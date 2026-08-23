@@ -13,3 +13,4 @@ ban-relative-imports = "parents"
 
 [lint.per-file-ignores]
 "test/*" = ["TID252"]
+"e2e/*" = ["TID252"]
