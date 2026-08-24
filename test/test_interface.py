@@ -302,6 +302,42 @@ class TestCave(InterfaceTestBase):
     self.assertFalse(self.interface.queue_coins(50, 5))
     self.assertEqual(self.pine.writes, [])
 
+  def test_install_clears_sound_slots(self) -> None:
+    self._prime_hook()
+    for name in ("sound id", "sound interval", "sound timer"):
+      self.pine.poke32(self.addr[name], 7)
+    self.interface.install_cave()
+    for name in ("sound id", "sound interval", "sound timer"):
+      self.assertEqual(self.pine.peek32(self.addr[name]), 0)
+
+  def test_play_sound_once(self) -> None:
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ENTRY)
+    self.pine.poke32(self.addr["sound timer"], 9)
+    self.assertTrue(self.interface.play_sound(0x158))
+    self.assertEqual(self.pine.peek32(self.addr["sound id"]), 0x158)
+    self.assertEqual(self.pine.peek32(self.addr["sound interval"]), 0)
+    self.assertEqual(self.pine.peek32(self.addr["sound timer"]), 0)
+    self.assertTrue(self.interface.sound_playing())
+
+  def test_play_sound_repeat(self) -> None:
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ENTRY)
+    self.assertTrue(self.interface.play_sound(0x158, 60))
+    self.assertEqual(self.pine.peek32(self.addr["sound interval"]), 60)
+
+  def test_stop_sound(self) -> None:
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ENTRY)
+    self.interface.play_sound(0x158, 60)
+    self.interface.stop_sound()
+    self.assertEqual(self.pine.peek32(self.addr["sound id"]), 0)
+    self.assertEqual(self.pine.peek32(self.addr["sound interval"]), 0)
+    self.assertFalse(self.interface.sound_playing())
+
+  def test_play_sound_without_cave(self) -> None:
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG)
+    self.pine.clear_writes()
+    self.assertFalse(self.interface.play_sound(0x158))
+    self.assertEqual(self.pine.writes, [])
+
 
 class TestPowerUps(InterfaceTestBase):
   def test_round_trip_each_field(self) -> None:

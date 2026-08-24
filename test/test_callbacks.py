@@ -32,6 +32,8 @@ from ..Callbacks import (
   update
 )
 from ..data.Constants import (
+  ALARM_INTERVAL,
+  ALARM_SOUND_ID,
   CAVE_HOOK_ENTRY,
   CAVE_HOOK_ORIG,
   COIN_POPS_MAX,
@@ -923,17 +925,36 @@ class TestTraps(ClientTestBase):
   async def test_noise(self) -> None:
     with (
       patch.object(self.interface, "alert_guards") as alert,
-      patch.object(self.interface, "release_guards") as release,
+      patch.object(self.interface, "play_sound") as play,
       patch.object(Callbacks, "time", return_value=1000.0)
     ):
       activate_trap(self.ctx, Trap.NOISE)
     alert.assert_called_once()
+    play.assert_called_once_with(ALARM_SOUND_ID, ALARM_INTERVAL)
+    # A map reload clears the cave, so the alarm is re-armed while active.
+    with (
+      patch.object(self.interface, "sound_playing", return_value=False),
+      patch.object(self.interface, "play_sound") as replay,
+      patch.object(Callbacks, "time", return_value=1005.0)
+    ):
+      handle_traps(self.ctx)
+    replay.assert_called_once_with(ALARM_SOUND_ID, ALARM_INTERVAL)
+    # A still-running alarm is left alone so its rhythm is not reset.
+    with (
+      patch.object(self.interface, "sound_playing", return_value=True),
+      patch.object(self.interface, "play_sound") as steady,
+      patch.object(Callbacks, "time", return_value=1006.0)
+    ):
+      handle_traps(self.ctx)
+    steady.assert_not_called()
     with (
       patch.object(self.interface, "release_guards") as release,
+      patch.object(self.interface, "stop_sound") as stop,
       patch.object(Callbacks, "time", return_value=1010.0)
     ):
       handle_traps(self.ctx)
     release.assert_called_once()
+    stop.assert_called_once()
 
   async def test_reset(self) -> None:
     self.ctx.active_traps[Trap.ICE] = 5000.0

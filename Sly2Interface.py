@@ -1200,6 +1200,21 @@ class Sly2Interface(GameInterface):
   def get_coins(self) -> int:
     return self._read32(self.addresses["coins"])
 
+  def play_sound(self, sound_id: int, interval: int = 0) -> bool:
+    if not self.cave_live():
+      return False
+    self._write32(self.addresses["sound timer"], 0)
+    self._write32(self.addresses["sound interval"], interval)
+    self._write32(self.addresses["sound id"], sound_id)
+    return True
+
+  def stop_sound(self) -> None:
+    self._write32(self.addresses["sound id"], 0)
+    self._write32(self.addresses["sound interval"], 0)
+
+  def sound_playing(self) -> bool:
+    return self._read32(self.addresses["sound id"]) != 0
+
   def set_items_received(self, n:int) -> None:
     self._write32(self.addresses["items received"], n)
 
@@ -1258,7 +1273,8 @@ class Sly2Interface(GameInterface):
     # is actually missing.
     if self._read_bytes(cave, len(blob)) != blob:
       self._write_bytes(cave, blob)
-    for name in ("death flag", "coin pops", "coin amount", "coin timer"):
+    for name in ("death flag", "coin pops", "coin amount", "coin timer",
+                 "sound id", "sound interval", "sound timer"):
       self._write32(self.addresses[name], 0)
     self._write32(self.addresses["coin interval"], COIN_POP_INTERVAL)
     self._write_bytes(

@@ -20,6 +20,8 @@ from .data.Constants import (
   LOOT,
   PICKPOCKET_LOOT_TABLE_CHANCES,
   MEGA_JUMP_GADGET_ID,
+  ALARM_SOUND_ID,
+  ALARM_INTERVAL,
   episode_key,
   episode_name,
   episode_number
@@ -777,6 +779,7 @@ def activate_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
   ctx.active_traps[trap] = time() + trap.duration
   if trap is Items.Trap.NOISE:
     ctx.game_interface.alert_guards()
+    ctx.game_interface.play_sound(ALARM_SOUND_ID, ALARM_INTERVAL)
 
 def handle_traps(ctx: 'Sly2Context') -> None:
   """Applies active timed traps each tick and expires finished ones"""
@@ -796,6 +799,10 @@ def apply_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
     ctx.game_interface.set_clock_speed(1.5)
   elif trap is Items.Trap.ICE:
     ctx.game_interface.set_friction(0.2)
+  elif trap is Items.Trap.NOISE and not ctx.game_interface.sound_playing():
+    # A map reload clears the cave's request; re-arm without resetting the
+    # rhythm of an alarm that is still going.
+    ctx.game_interface.play_sound(ALARM_SOUND_ID, ALARM_INTERVAL)
 
 def end_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
   """Restores default state when a timed trap expires"""
@@ -805,6 +812,7 @@ def end_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
     ctx.game_interface.set_friction(1.5)
   elif trap is Items.Trap.NOISE:
     ctx.game_interface.release_guards()
+    ctx.game_interface.stop_sound()
 
 def reset_traps(ctx: 'Sly2Context') -> None:
   """
@@ -818,6 +826,7 @@ def reset_traps(ctx: 'Sly2Context') -> None:
   ctx.game_interface.set_clock_speed(1.0)
   ctx.game_interface.set_friction(1.5)
   ctx.game_interface.release_guards()
+  ctx.game_interface.stop_sound()
 
 async def handle_checks(ctx: 'Sly2Context') -> None:
   """Send checks to the multiworld"""

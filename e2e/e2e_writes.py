@@ -3,7 +3,13 @@ the game changed reloads the state in tearDown, which also drops the cave."""
 
 import time
 
-from ..data.Constants import CAVE_BLOB, CAVE_HOOK_ENTRY, POWERUP_TEXT
+from ..data.Constants import (
+  ALARM_INTERVAL,
+  ALARM_SOUND_ID,
+  CAVE_BLOB,
+  CAVE_HOOK_ENTRY,
+  POWERUP_TEXT,
+)
 from ..Sly2Interface import INFOBOX_CLIENT_STRING, Sly2Episode
 from .harness import POLL_INTERVAL, E2ETestBase
 
@@ -91,3 +97,24 @@ class TestWrites(E2ETestBase):
     self.wait_until("payout_done", 10.0)
     self.assertEqual(self.interface.get_coins(), before + 50)
     self.assertEqual(self.interface.get_bottles(Sly2Episode(1)), 0)
+
+  def sound_idle(self) -> bool:
+    return not self.interface.sound_playing()
+
+  def test_cave_sound(self) -> None:
+    self.interface.install_cave()
+    self.interface.clear_cache()
+    self.assertTrue(self.interface.cave_live())
+    # One-shot: the cave plays it and clears the request.
+    self.assertTrue(self.interface.play_sound(ALARM_SOUND_ID))
+    self.assertEqual(self.raw32(self.addr["sound id"]), ALARM_SOUND_ID)
+    self.wait_until("sound_idle", 2.0)
+    # Repeat: stays armed until stopped.
+    self.assertTrue(self.interface.play_sound(ALARM_SOUND_ID, ALARM_INTERVAL))
+    time.sleep(0.5)
+    self.interface.clear_cache()
+    self.assertTrue(self.interface.sound_playing())
+    self.assertEqual(self.raw32(self.addr["sound interval"]), ALARM_INTERVAL)
+    self.interface.stop_sound()
+    self.interface.clear_cache()
+    self.assertFalse(self.interface.sound_playing())

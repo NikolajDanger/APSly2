@@ -714,6 +714,9 @@ ADDRESSES = {
     "coin amount": 0x42CF14,
     "coin timer": 0x42CF18,
     "coin interval": 0x42CF1C,
+    "sound id": 0x42CF0C,
+    "sound interval": 0x42CF2C,
+    "sound timer": 0x42CF30,
     "clock speed": 0x2DDED8,
     "friction": 0x2C3C90,
     "string table": 0x3e1ad4,
@@ -1304,8 +1307,10 @@ CAVE_BLOB = (
   "08005baf0c005b8f0400458f08005baf00005b8f1b00bb00123000002328a600"+
   "040045afffff7b2700005baf100046af2d00043ce685050c30eb843442001a3c"+
   "20cf5a370000458f2d00043c30eb8434f885050c2128a200e4ee070c29000424"+
-  "25204000beec070c2528000042001a3c04cf5a3700005f8f2000448f2400458f"+
-  "144b080800000000"
+  "25204000beec070c2528000042001a3c0ccf5a3700005b8f110060130000"+
+  "00002000468f0800c010000000002400458f0300a010ffffa524090000102400"+
+  "45af02000010240046af000040afe4ee070c2520600325204000beec070c2528"+
+  "000042001a3c04cf5a3700005f8f2000448f2400458f144b080800000000"
 )
 # damage_info struct; +0x00/+0x04 skeleton, +0x08 entity and +0x0C damage
 # type are patched from the live character at kill time. +0x10 = -2000
@@ -1329,6 +1334,10 @@ CAVE_PATCH_SLOTS = 4
 COIN_POP_INTERVAL = 4
 COIN_POPS_MIN = 3
 COIN_POPS_MAX = 5
+# The alarm "BAAH" sound (found live 2026-08-24; global across maps), replayed
+# every ALARM_INTERVAL frames while the Noise trap is active.
+ALARM_SOUND_ID = 0x158
+ALARM_INTERVAL = 60
 
 MENU_RETURN_DATA = (
   "8F1B8DAE"+

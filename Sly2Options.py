@@ -452,7 +452,7 @@ class TrapWeights(OptionCounter):
   - Slow-mo Trap: slows the game down for a few seconds.
   - Sugar Rush Trap: speeds the game up for a few seconds.
   - Ice Trap: makes the ground slippery for a few seconds.
-  - Noise Trap: alerts nearby guards for a few seconds.
+  - Noise Trap: sounds an alarm and alerts nearby guards for a few seconds.
   """
 
   display_name = "Trap Weights"

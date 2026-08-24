@@ -8,6 +8,7 @@ from time import time
 
 from NetUtils import NetworkItem
 
+from ..data.Constants import ALARM_INTERVAL, ALARM_SOUND_ID
 from ..data.Items import Trap, item_dict
 from ..Sly2Client import _handle_game_ready
 from .harness import E2ETestBase
@@ -112,17 +113,27 @@ class TestTrapTick(TickTestBase):
     self.ctx.items_received.extend(
       NetworkItem(item_dict[name].code, -1, 1)
       for name in (
-        Trap.SLOW_MO.item_name, Trap.ICE.item_name, Trap.SLY_1.item_name
+        Trap.SLOW_MO.item_name, Trap.ICE.item_name, Trap.SLY_1.item_name,
+        Trap.NOISE.item_name
       )
     )
     await self.tick()
     await self.tick()
-    self.assertEqual(set(self.ctx.active_traps), {Trap.SLOW_MO, Trap.ICE})
+    self.assertEqual(
+      set(self.ctx.active_traps), {Trap.SLOW_MO, Trap.ICE, Trap.NOISE}
+    )
     self.assertEqual(self.read_float(addresses["clock speed"]), 0.5)
     self.assertAlmostEqual(
       self.read_float(addresses["friction"]), 0.2, places=6
     )
     self.assertEqual(self.pine.read_int32(addresses["health"]["Sly"]), 1)
+    self.assertTrue(self.interface.sound_playing())
+    self.assertEqual(
+      self.pine.read_int32(addresses["sound id"]), ALARM_SOUND_ID
+    )
+    self.assertEqual(
+      self.pine.read_int32(addresses["sound interval"]), ALARM_INTERVAL
+    )
 
     self.pine.write_float(addresses["clock speed"], DEFAULT_CLOCK)
     await self.tick()
@@ -134,3 +145,5 @@ class TestTrapTick(TickTestBase):
     self.assertEqual(self.ctx.active_traps, {})
     self.assertEqual(self.read_float(addresses["clock speed"]), DEFAULT_CLOCK)
     self.assertEqual(self.read_float(addresses["friction"]), DEFAULT_FRICTION)
+    self.interface.clear_cache()
+    self.assertFalse(self.interface.sound_playing())

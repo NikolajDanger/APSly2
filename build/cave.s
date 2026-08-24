@@ -36,6 +36,11 @@
 #     sound, so a received Coins item clinks in like a real coin grab. The
 #     client writes the amount before the number of installments, since the
 #     latter is what starts the payout.
+#   sound: while a sound id is set, plays it through the game's own sound
+#     functions. With interval 0 the sound plays once and the id is cleared;
+#     with interval N it replays every N frames until the client clears the id,
+#     so a rhythmic effect keeps frame-accurate timing without the client
+#     driving each hit.
 #
 # The routine's code and its data area are deliberately on different 4K pages:
 # once the routine has run, its own page is a translated-code page with the
@@ -107,12 +112,12 @@ coins:
 	lui   $k0, 0x0042
 	ori   $k0, $k0, 0xcf10      # k0 = 0x0042CF10 (COIN_POPS)
 	lw    $k1, 0($k0)
-	beq   $k1, $zero, done
+	beq   $k1, $zero, sound
 	nop
 	lw    $k1, 8($k0)           # COIN_TIMER
 	beq   $k1, $zero, pop
 	addiu $k1, $k1, -1
-	b     done
+	b     sound
 	sw    $k1, 8($k0)
 pop:
 	lw    $k1, 12($k0)          # COIN_INTERVAL
@@ -138,6 +143,31 @@ pop:
 	addu  $a1, $a1, $v0
 	jal   0x1fbb90             # new sound instance, id 41 (coin pickup)
 	addiu $a0, $zero, 41
+	move  $a0, $v0
+	jal   0x1fb2f8             # play it
+	move  $a1, $zero
+sound:
+	lui   $k0, 0x0042
+	ori   $k0, $k0, 0xcf0c      # k0 = 0x0042CF0C (SOUND_ID request)
+	lw    $k1, 0($k0)
+	beq   $k1, $zero, done      # no sound armed
+	nop
+	lw    $a2, 0x20($k0)        # SOUND_INTERVAL (0x0042CF2C), frames; 0=once
+	beq   $a2, $zero, splay
+	nop
+	lw    $a1, 0x24($k0)        # SOUND_TIMER (0x0042CF30)
+	beq   $a1, $zero, sreset
+	addiu $a1, $a1, -1
+	b     done
+	sw    $a1, 0x24($k0)        # count down to the next repeat
+sreset:
+	b     sfire
+	sw    $a2, 0x24($k0)        # timer = interval, then play (stay armed)
+splay:
+	sw    $zero, 0($k0)         # one-shot: clear the request after playing
+sfire:
+	jal   0x1fbb90             # new sound instance, id = k1
+	move  $a0, $k1
 	move  $a0, $v0
 	jal   0x1fb2f8             # play it
 	move  $a1, $zero
