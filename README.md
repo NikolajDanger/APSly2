@@ -44,7 +44,7 @@ The randomizer has full support for [Universal Tracker](https://github.com/Faris
 
 ## Troubleshooting
 ### I completed some jobs but can't start the next one
-Each episode is split into chunks by its chalk-talk cutscenes, and each chunk is unlocked by a separate `Progressive <Episode>` item. If you've finished the jobs you have access to and the next job marker is missing, you need another of that episode's items. The episode menu shows how many chunks you've unlocked (e.g. `Unlocked 2/4`).
+Each episode is split into chunks by its chalk-talk cutscenes, and each chunk is unlocked by a separate `Progressive <Episode>` item. If you've finished the jobs you have access to and the next job marker is missing, you need another of that episode's items. The episode menu shows how many chunks you've unlocked (e.g. `Unlocked 2/4`). When using `Gradual sections`, episode 8's label instead shows your progress towards the next section (`Parts required for section 2: 3/5`).
 
 ### The client won't connect to my PCSX2 instance
 Before asking for help in the Discord channel:

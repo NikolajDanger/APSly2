@@ -1176,6 +1176,33 @@ class TestUpdate(ClientTestBase):
     await self.tick()
     self.assertEqual(self.pine.peek_cstring(address), b"Unlocked 1/4")
 
+  async def test_gradual_ep8_label(self) -> None:
+    self.slot_data["episode_8_keys"] = 3
+    self.slot_data["required_keys_episode_8"] = 8
+    self.enter(0, 1)
+    address = self.addr["text"]["Episode 8"]
+    await self.tick()
+    self.assertEqual(
+      self.pine.peek_cstring(address), b"Parts required for section 1: 0/2"
+    )
+    # A part that opens no new section must still refresh the label
+    self.give(CLOCKWERK_PARTS[0])
+    await self.tick()
+    await self.tick()
+    self.assertEqual(
+      self.pine.peek_cstring(address), b"Parts required for section 1: 1/2"
+    )
+    self.give(CLOCKWERK_PARTS[1])
+    await self.tick()
+    await self.tick()
+    self.assertEqual(
+      self.pine.peek_cstring(address), b"Parts required for section 2: 2/4"
+    )
+    self.give(*CLOCKWERK_PARTS[2:8])
+    await self.tick()
+    await self.tick()
+    self.assertEqual(self.pine.peek_cstring(address), b"Unlocked 4/4")
+
   async def test_jobs_follow_items_and_game_changes(self) -> None:
     self.enter(1, 2)
     await self.tick()

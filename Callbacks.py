@@ -390,17 +390,25 @@ def replace_text(ctx: 'Sly2Context') -> None:
   # and how many Clockwerk parts you have
   for i in range(1,9):
     available = ctx.available_episodes[Sly2Episode(i)]
-    if available > 0:
-      total = len(EPISODES[list(EPISODES.keys())[i-1]])
+    total = len(EPISODES[list(EPISODES.keys())[i-1]])
+    gradual = i == 8 and ctx.slot_data["episode_8_keys"] == 3
+    if gradual and available < total:
+      section = available + 1
+      required_keys = ctx.slot_data["required_keys_episode_8"]
+      threshold = ceil(required_keys * section / 4)
+      rep_text = (
+        f"Parts required for section {section}: "
+        f"{ctx.clockwerk_parts_count}/{threshold}"
+      )
+    elif available > 0:
       rep_text = f"Unlocked {min(available, total)}/{total}"
+    elif i == 8 and ctx.slot_data["episode_8_keys"] != 4:
+      required_keys = ctx.slot_data["required_keys_episode_8"]
+      rep_text = (
+        f"{ctx.clockwerk_parts_count}/{required_keys} Clockwerk parts"
+      )
     else:
-      if i == 8 and ctx.slot_data["episode_8_keys"] != 4:
-        required_keys = ctx.slot_data["required_keys_episode_8"]
-        rep_text = (
-          f"{ctx.clockwerk_parts_count}/{required_keys} Clockwerk parts"
-        )
-      else:
-        rep_text = "Locked"
+      rep_text = "Locked"
     texts.append((addresses[f"Episode {i}"], rep_text))
   ctx.game_interface.set_texts(texts)
 
@@ -646,10 +654,13 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
   rebind = False
 
   if len(network_items) != ctx.notified_items:
-    ctx.clockwerk_parts_count = sum(
+    clockwerk_parts_count = sum(
       1 for i in network_items
       if Items.from_id(i.item).category == "Clockwerk Part"
     )
+    if clockwerk_parts_count != ctx.clockwerk_parts_count:
+      ctx.clockwerk_parts_count = clockwerk_parts_count
+      ctx.text_dirty = True
 
   for i, network_item in enumerate(network_items):
     item = Items.from_id(network_item.item)

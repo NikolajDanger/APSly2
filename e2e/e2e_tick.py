@@ -66,3 +66,18 @@ class TestEpisodeMenuTick(TickTestBase):
     self.assertTrue(labels[0].startswith("Unlocked 1/"), labels)
     self.assertEqual(labels[1:7], ["Locked"] * 6)
     self.assertTrue(labels[7].endswith("Clockwerk parts"), labels)
+
+
+class TestGradualMenuTick(TickTestBase):
+  state = "episode_menu"
+  episode = 0
+  map_id = 1
+  options = {"episode_8_keys": 3, "required_keys_episode_8": 8}
+
+  async def test_ticks(self) -> None:
+    await self.run_ticks()
+    addresses = self.interface.addresses
+    self.assertEqual(
+      self.pine.read_string(addresses["text"]["Episode 8"], 64),
+      "Parts required for section 1: 0/2"
+    )
