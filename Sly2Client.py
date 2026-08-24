@@ -12,7 +12,9 @@ import NetUtils
 import Utils
 
 from .data import Locations, Items
-from .data.Constants import EPISODES, TASKS, ENEMIES, episode_key
+from .data.Constants import (
+  EPISODES, TASKS, ENEMIES, episode_key, episode_name
+)
 from .data.Names import (
   ItemCategory,
   LocationCategory,
@@ -20,7 +22,9 @@ from .data.Names import (
   thiefnet_location,
   vault_location,
 )
-from .Sly2Interface import Sly2Interface, Sly2Episode, PowerUps
+from .Sly2Interface import (
+  Sly2Interface, Sly2Episode, PowerUps, CycleCounts
+)
 from .Callbacks import (
   init,
   update,
@@ -33,6 +37,9 @@ from .Callbacks import (
 # Child of CommonClient's "Client" logger so records propagate to the UI log
 # pane, which only has handlers on "Client" itself.
 logger = logging.getLogger("Client.Sly2")
+
+RETRY_WAITS = (3, 3, 10, 30)
+TICK_LOG_INTERVAL = 10
 
 # Load Universal Tracker
 tracker_loaded: bool = False
@@ -290,8 +297,11 @@ class Sly2Context(CommonContext): # type: ignore[misc]
   pcsx2_sync_task: Optional[asyncio.Task] = None
   is_connected_to_game: bool = False
   is_connected_to_server: bool = False
+  connection_retry_attempts: int = 0
+  last_connect_message: Optional[str] = None
   slot_data: Optional[dict[str, Utils.Any]] = None
   last_error_message: Optional[str] = None
+  tick_stats: list[tuple[float, CycleCounts]]
   notification_queue: deque[str]
   notification_timestamp: float = 0
   showing_notification: bool = False
@@ -352,6 +362,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     self.active_traps = {}
     self.trap_cursor = 0
     self.trap_baseline_pending = False
+    self.tick_stats = []
     self.reset_world_state()
 
   def reset_world_state(self) -> None:
@@ -384,6 +395,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     self.active_traps.clear()
     self.bottle_flags = []
     self.job_statuses = []
+    self.tick_stats.clear()
     mark_dirty(self)
 
   def reset_server_state(self) -> None:
@@ -598,6 +610,8 @@ def update_connection_status(ctx: Sly2Context, status: bool) -> None:
 
   if status:
     logger.info("Connected to Sly 2")
+    ctx.connection_retry_attempts = 0
+    ctx.last_connect_message = None
   else:
     logger.info(
       "Unable to connect to the PCSX2 instance, attempting to reconnect..."
@@ -609,60 +623,121 @@ async def pcsx2_sync_task(ctx: Sly2Context) -> None:
   logger.info("Starting Sly 2 Connector, attempting to connect to emulator...")
   ctx.game_interface.connect_to_game()
   while not ctx.exit_event.is_set():
-    try:
-      is_connected = ctx.game_interface.get_connection_state()
-      update_connection_status(ctx, is_connected)
-      if is_connected:
-        await _handle_game_ready(ctx)
-      else:
-        await _handle_game_not_ready(ctx)
-    except ConnectionError:
-      ctx.game_interface.disconnect_from_game()
-    except Exception as e:
-      if isinstance(e, RuntimeError):
-        logger.error(str(e))
-      else:
-        logger.error(traceback.format_exc())
-      await asyncio.sleep(3)
-      continue
+    await _sync_tick(ctx)
+  logger.info("Sly 2 Connector stopped")
+
+async def _sync_tick(ctx: Sly2Context) -> None:
+  try:
+    is_connected = ctx.game_interface.get_connection_state()
+    update_connection_status(ctx, is_connected)
+    if is_connected:
+      await _handle_game_ready(ctx)
+    else:
+      await _handle_game_not_ready(ctx)
+  except ConnectionError:
+    logger.debug("Tick aborted by connection error", exc_info=True)
+    ctx.game_interface.disconnect_from_game()
+    await asyncio.sleep(1)
+  except Exception as e:
+    if isinstance(e, RuntimeError):
+      logger.error(str(e))
+    else:
+      logger.error(traceback.format_exc())
+    await asyncio.sleep(3)
 
 async def _handle_game_ready(ctx: Sly2Context) -> None:
+  started = time()
   ctx.game_interface.clear_cache()
   ctx.game_interface.prefetch_tick_state()
-  current_episode = ctx.game_interface.get_current_episode()
-  current_map = ctx.game_interface.get_current_map()
 
   ctx.game_interface.skip_cutscene()
   # ctx.game_interface.skip_dialogue()
 
+  if await _handle_loading(ctx):
+    # Discard loading-tick counts so they don't land in the next tick
+    ctx.game_interface.take_cycle_counts()
+    return
+
+  ap_connected = _check_server_connection(ctx)
+  await _handle_map_change(ctx, ap_connected)
+  await update(ctx, ap_connected)
+  _record_tick(ctx, time() - started)
+
+  await _handle_pacing(ctx)
+
+async def _handle_loading(ctx: Sly2Context) -> bool:
+  """Consume the tick during a level transition, plus one grace tick after
+  loading ends"""
   if ctx.is_loading:
     if not ctx.game_interface.is_loading():
       ctx.is_loading = False
+      logger.debug("Level transition finished")
       await asyncio.sleep(1)
     await asyncio.sleep(0.1)
-    return
+    return True
 
   if ctx.game_interface.is_loading():
     ctx.is_loading = True
+    logger.debug("Level transition started")
     await asyncio.sleep(0.1)
-    return
+    return True
 
-  connected_to_server = (ctx.server is not None) and (ctx.slot is not None)
+  return False
 
-  new_connection = ctx.is_connected_to_server != connected_to_server
-  if new_connection and connected_to_server:
+def _check_server_connection(ctx: Sly2Context) -> bool:
+  connected = (ctx.server is not None) and (ctx.slot is not None)
+  if connected and not ctx.is_connected_to_server:
+    logger.info("Connected to Archipelago server")
     ctx.trap_baseline_pending = True
+  elif ctx.is_connected_to_server and not connected:
+    logger.info("Server connection lost, game state frozen until reconnect")
+  return connected
+
+def _map_description(episode: Sly2Episode, map_id: int) -> str:
+  if episode == Sly2Episode.Title_Screen:
+    return f"the title screen (map {map_id})"
+  return f"{episode_name(int(episode))} (map {map_id})"
+
+async def _handle_map_change(ctx: Sly2Context, ap_connected: bool) -> None:
+  current_episode = ctx.game_interface.get_current_episode()
+  current_map = ctx.game_interface.get_current_map()
+
+  server_edge = ctx.is_connected_to_server != ap_connected
   map_changed = (
     (ctx.current_episode, ctx.current_map) != (current_episode, current_map)
   )
-  if map_changed or new_connection:
-    ctx.current_episode = current_episode
-    ctx.current_map = current_map
-    ctx.is_connected_to_server = connected_to_server
-    await init(ctx, connected_to_server)
+  if not (map_changed or server_edge):
+    return
 
-  await update(ctx, connected_to_server)
+  if map_changed:
+    logger.info(f"Entered {_map_description(current_episode, current_map)}")
+  ctx.current_episode = current_episode
+  ctx.current_map = current_map
+  ctx.is_connected_to_server = ap_connected
+  logger.debug("Running per-map init")
+  await init(ctx, ap_connected)
 
+def _record_tick(ctx: Sly2Context, elapsed: float) -> None:
+  ctx.tick_stats.append((elapsed, ctx.game_interface.take_cycle_counts()))
+  if len(ctx.tick_stats) < TICK_LOG_INTERVAL:
+    return
+
+  times = [t for t, _ in ctx.tick_stats]
+  counts = [c for _, c in ctx.tick_stats]
+  totals = CycleCounts(*(sum(column) for column in zip(*counts)))
+  message = (
+    f"Last {len(times)} ticks: {totals.batches} batches "
+    f"({totals.writes} writes/{totals.reads} reads), tick time "
+    f"{min(times):.3f}/{sum(times)/len(times):.3f}/{max(times):.3f}s"
+  )
+  if totals.pine_reads or totals.pine_writes:
+    message += (
+      f"; {totals.pine_reads} PINE reads, {totals.pine_writes} PINE writes"
+    )
+  logger.debug(message)
+  ctx.tick_stats.clear()
+
+async def _handle_pacing(ctx: Sly2Context) -> None:
   if ctx.server:
     ctx.last_error_message = None
     if not ctx.slot:
@@ -679,10 +754,32 @@ async def _handle_game_ready(ctx: Sly2Context) -> None:
 
 
 async def _handle_game_not_ready(ctx: Sly2Context) -> None:
-  """If the game is not connected, this will retry connecting to the game."""
-  if not ctx.exit_event.is_set():
-    ctx.game_interface.connect_to_game()
-  await asyncio.sleep(3)
+  """Retry the game connection with a capped backoff"""
+  if ctx.exit_event.is_set():
+    return
+
+  game = ctx.game_interface
+  game.connect_to_game()
+  if game.get_connection_state():
+    return
+
+  if game.pcsx2_interface.is_connected():
+    ctx.connection_retry_attempts = 0
+    wait = RETRY_WAITS[0]
+    message = "Connected to PCSX2, waiting for Sly 2 to be loaded..."
+  else:
+    ctx.connection_retry_attempts = min(
+      ctx.connection_retry_attempts + 1, len(RETRY_WAITS)
+    )
+    wait = RETRY_WAITS[ctx.connection_retry_attempts - 1]
+    message = (
+      f"Could not connect to PCSX2, retrying every {wait} seconds. Check "
+      "that PCSX2 is running and PINE is enabled on port 28011."
+    )
+  if ctx.last_connect_message != message:
+    logger.info(message)
+    ctx.last_connect_message = message
+  await asyncio.sleep(wait)
 
 def launch_client() -> None:
   Utils.init_logging("Sly 2 Client")

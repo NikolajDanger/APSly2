@@ -117,6 +117,13 @@ INFOBOX_CLIENT_STRING = 1
 def in_ee_ram(address: int, size: int = 4) -> bool:
   return EE_RAM_START <= address and address + size <= EE_RAM_END
 
+class CycleCounts(NamedTuple):
+  reads: int = 0
+  writes: int = 0
+  batches: int = 0
+  pine_reads: int = 0
+  pine_writes: int = 0
+
 class GameInterface():
   """
   Base class for connecting with a pcsx2 game
@@ -144,9 +151,29 @@ class GameInterface():
     # present, so one batch read at the top of a tick replaces the scattered
     # single reads that would otherwise each cost a round trip.
     self._cache: dict[tuple[int, int], bytes] = {}
+    # Memory operations since the last take_cycle_counts. reads/writes count
+    # every call whether or not the tick cache served it; the pine_* subset
+    # is what actually crossed the socket.
+    self.cycle_reads = 0
+    self.cycle_writes = 0
+    self.cycle_batches = 0
+    self.cycle_pine_reads = 0
+    self.cycle_pine_writes = 0
 
   def clear_cache(self) -> None:
     self._cache.clear()
+
+  def take_cycle_counts(self) -> CycleCounts:
+    counts = CycleCounts(
+      self.cycle_reads, self.cycle_writes, self.cycle_batches,
+      self.cycle_pine_reads, self.cycle_pine_writes
+    )
+    self.cycle_reads = 0
+    self.cycle_writes = 0
+    self.cycle_batches = 0
+    self.cycle_pine_reads = 0
+    self.cycle_pine_writes = 0
+    return counts
 
   def prefetch(self, reads: list[tuple[int, int]]) -> None:
     """Batch read (size, address) ranges into the tick cache"""
@@ -158,6 +185,7 @@ class GameInterface():
     ]
     if not chunks:
       return
+    self.cycle_batches += 1
     values = self.pcsx2_interface.batch_read(chunks)
     for (size, address), value in zip(chunks, values):
       self._cache[(address, size)] = value.to_bytes(size, "little")
@@ -183,8 +211,10 @@ class GameInterface():
   def _read_int(self, address: int, size: int) -> int:
     if not in_ee_ram(address, size):
       return 0
+    self.cycle_reads += 1
     data = self._cache.get((address, size))
     if data is None:
+      self.cycle_pine_reads += 1
       read = {
         1: self.pcsx2_interface.read_int8,
         2: self.pcsx2_interface.read_int16,
@@ -194,12 +224,14 @@ class GameInterface():
     return int.from_bytes(data, "little")
 
   def _batch_read(self, size: int, addresses: list[int]) -> list[int]:
+    self.cycle_reads += len(addresses)
     values = {
       a: int.from_bytes(self._cache[(a, size)], "little")
       for a in addresses if (a, size) in self._cache
     }
     missing = [a for a in addresses if a not in values]
     if missing:
+      self.cycle_pine_reads += len(missing)
       read = {
         1: self.pcsx2_interface.batch_read_int8,
         2: self.pcsx2_interface.batch_read_int16,
@@ -214,6 +246,11 @@ class GameInterface():
   def _log_write(
     self, kind: str, address: int | list[int], value: object
   ) -> None:
+    # Called exactly when a write is actually issued to PINE.
+    if isinstance(address, list):
+      self.cycle_pine_writes += len(address)
+    else:
+      self.cycle_pine_writes += 1
     if not self.write_logger.isEnabledFor(DEBUG):
       return
     # sys._getframe(2) is the method that issued the write, past this
@@ -226,6 +263,9 @@ class GameInterface():
       f"{sys._getframe(2).f_code.co_name} {kind} {where} = {value}")
 
   def _writable(self, address: int, size: int = 4) -> bool:
+    # Every write path checks writability exactly once per operation, so
+    # this doubles as the logical-write counter.
+    self.cycle_writes += 1
     if in_ee_ram(address, size):
       return True
 
@@ -250,8 +290,10 @@ class GameInterface():
   def _read_bytes(self, address: int, n: int) -> bytes:
     if not in_ee_ram(address, n):
       return bytes(n)
+    self.cycle_reads += 1
     data = self._cached_bytes(address, n)
     if data is None:
+      self.cycle_pine_reads += 1
       return self.pcsx2_interface.read_bytes(address, n)
     return data
 

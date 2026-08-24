@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING
-from time import sleep, time
+from asyncio import sleep
+from time import time
 from random import choice, randint
 from math import ceil
 
@@ -58,57 +59,14 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
     in_hub = ctx.game_interface.in_hub()
     current_map = ctx.game_interface.get_current_map()
 
-    # If the player is in a safehouse, set the thiefnet items
-    if in_safehouse and not ctx.in_safehouse:
-      ctx.in_safehouse = True
-      await set_thiefnet(ctx)
-      set_prices(ctx)
-    elif ctx.in_hub and not in_hub:
-      ctx.in_hub = False
-      ctx.in_safehouse = False
-    elif ctx.in_safehouse and ctx.in_hub and not in_safehouse:
-      ctx.in_safehouse = False
-      ctx.episode_hint_shown = False
-      unset_thiefnet(ctx)
-
-    if in_hub:
-      ctx.in_hub = True
+    await handle_safehouse(ctx, in_safehouse, in_hub)
 
     if ctx.current_episode == Sly2Episode.Title_Screen:
       if ctx.text_dirty:
         replace_text(ctx)
         ctx.text_dirty = False
     else:
-      if ctx.current_episode == Sly2Episode.Anatomy_for_Disaster:
-        check_clockla(ctx)
-        ctx.game_interface.allow_sly_treasure_pickup()
-        ctx.game_interface.hide_mega_jump_pack()
-
-      if check_jobs(ctx):
-        ctx.jobs_dirty = True
-      check_tasks(ctx)
-
-      if ctx.jobs_dirty and in_hub:
-        if ctx.game_interface.get_current_job() == 0xffffffff:
-          set_jobs(ctx)
-          ctx.jobs_dirty = False
-
-      if ctx.loot_dirty:
-        set_pickpocketing(ctx)
-        if ctx.slot_data["randomize_loot"]:
-          set_loot_table(ctx)
-        ctx.loot_dirty = False
-
-      bottle_flags = ctx.game_interface.get_bottle_flags()
-      if bottle_flags != ctx.bottle_flags:
-        ctx.bottle_flags = bottle_flags
-        ctx.bottles_dirty = True
-      if ctx.bottles_dirty:
-        if ctx.slot_data["bottle_location_bundle_size"] != 0:
-          set_bottles(ctx)
-        if in_hub:
-          set_bottles_collected(ctx)
-        ctx.bottles_dirty = False
+      handle_episode_state(ctx, in_hub)
 
       if not in_safehouse:
         if ctx.slot_data["include_vaults"]:
@@ -130,7 +88,67 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
       await handle_checks(ctx)
       await handle_check_goal(ctx)
 
-  boot_from_invalid_episode(ctx, ap_connected)
+  await boot_from_invalid_episode(ctx, ap_connected)
+
+async def handle_safehouse(
+  ctx: 'Sly2Context', in_safehouse: bool, in_hub: bool
+) -> None:
+  """Track safehouse/hub presence and swap the ThiefNet shop in and out"""
+  if in_safehouse and not ctx.in_safehouse:
+    ctx.in_safehouse = True
+    ctx.game_interface.logger.debug(
+      "Entered safehouse, applying ThiefNet shop"
+    )
+    await set_thiefnet(ctx)
+    set_prices(ctx)
+  elif ctx.in_hub and not in_hub:
+    ctx.in_hub = False
+    ctx.in_safehouse = False
+  elif ctx.in_safehouse and ctx.in_hub and not in_safehouse:
+    ctx.in_safehouse = False
+    ctx.episode_hint_shown = False
+    ctx.game_interface.logger.debug("Left safehouse, restoring powerups")
+    unset_thiefnet(ctx)
+
+  if in_hub:
+    ctx.in_hub = True
+
+def handle_episode_state(ctx: 'Sly2Context', in_hub: bool) -> None:
+  """Per-tick upkeep of the game state the client owns while in an episode:
+  jobs, loot tables and bottles, gated by their dirty flags"""
+  if ctx.slot_data is None:
+    return
+
+  if ctx.current_episode == Sly2Episode.Anatomy_for_Disaster:
+    check_clockla(ctx)
+    ctx.game_interface.allow_sly_treasure_pickup()
+    ctx.game_interface.hide_mega_jump_pack()
+
+  if check_jobs(ctx):
+    ctx.jobs_dirty = True
+  check_tasks(ctx)
+
+  if ctx.jobs_dirty and in_hub:
+    if ctx.game_interface.get_current_job() == 0xffffffff:
+      set_jobs(ctx)
+      ctx.jobs_dirty = False
+
+  if ctx.loot_dirty:
+    set_pickpocketing(ctx)
+    if ctx.slot_data["randomize_loot"]:
+      set_loot_table(ctx)
+    ctx.loot_dirty = False
+
+  bottle_flags = ctx.game_interface.get_bottle_flags()
+  if bottle_flags != ctx.bottle_flags:
+    ctx.bottle_flags = bottle_flags
+    ctx.bottles_dirty = True
+  if ctx.bottles_dirty:
+    if ctx.slot_data["bottle_location_bundle_size"] != 0:
+      set_bottles(ctx)
+    if in_hub:
+      set_bottles_collected(ctx)
+    ctx.bottles_dirty = False
 
 def mark_dirty(ctx: 'Sly2Context') -> None:
   """Have update re-apply every piece of game state the client owns"""
@@ -432,7 +450,9 @@ def replace_text(ctx: 'Sly2Context') -> None:
     texts.append((addresses[f"Episode {i}"], rep_text))
   ctx.game_interface.set_texts(texts)
 
-def boot_from_invalid_episode(ctx: 'Sly2Context', ap_connected: bool) -> None:
+async def boot_from_invalid_episode(
+  ctx: 'Sly2Context', ap_connected: bool
+) -> None:
   """Sends the player to the episode menu if they are in an invalid episode"""
   current_episode = ctx.current_episode
 
@@ -448,9 +468,12 @@ def boot_from_invalid_episode(ctx: 'Sly2Context', ap_connected: bool) -> None:
   # Skipping the intro breaks saving
 
   if not_connected or locked_episode:
+    ctx.game_interface.logger.debug(
+      f"Booting from locked or disconnected episode {int(current_episode)}"
+    )
     ctx.game_interface.to_episode_menu()
     # Sleeping because stuff breaks if we don't
-    sleep(1)
+    await sleep(1)
 
 def check_clockla(ctx: 'Sly2Context') -> None:
   if ctx.jobs_completed[7][3][0]:
@@ -728,6 +751,11 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
 
   ctx.all_bottles = bottles
   ctx.game_interface.set_items_received(len(network_items))
+  if len(network_items) > notify_from:
+    ctx.game_interface.logger.debug(
+      f"Processed {len(network_items) - notify_from} new item(s), "
+      f"{len(network_items)} total"
+    )
   ctx.notified_items = len(network_items)
   if not in_safehouse:
     ctx.trap_cursor = len(network_items)
@@ -753,6 +781,7 @@ def handle_traps(ctx: 'Sly2Context') -> None:
   """Applies active timed traps each tick and expires finished ones"""
   for trap, expiry in list(ctx.active_traps.items()):
     if time() >= expiry:
+      ctx.game_interface.logger.debug(f"Trap expired: {trap}")
       end_trap(ctx, trap)
       del ctx.active_traps[trap]
     else:
@@ -890,6 +919,12 @@ async def handle_checks(ctx: 'Sly2Context') -> None:
       for loot in LOOT
     ):
       ctx.loot_dirty = True
+    names = ", ".join(sorted(
+      Locations.from_id(code).name for code in new_locations
+    ))
+    ctx.game_interface.logger.debug(
+      f"Sending {len(new_locations)} new location check(s): {names}"
+    )
     await ctx.send_msgs([
       {"cmd": "LocationChecks", "locations": ctx.locations_checked}
     ])
@@ -904,6 +939,9 @@ async def handle_deathlink(ctx: 'Sly2Context') -> None:
   if time()-ctx.deathlink_timestamp > 20:
     if ctx.game_interface.alive():
       if ctx.queued_deaths > 0:
+        ctx.game_interface.logger.debug(
+          f"Applying queued DeathLink ({ctx.queued_deaths} pending)"
+        )
         ctx.game_interface.kill_player(choice(DEATHLINK_DAMAGE_TYPES))
         ctx.queued_deaths = 0
         ctx.deathlink_timestamp = time()
@@ -913,6 +951,7 @@ async def handle_deathlink(ctx: 'Sly2Context') -> None:
       death_message = DEATH_TYPES.get(damage_type, "{player} died")
       death_message = death_message.format(player=player_name)
 
+      ctx.game_interface.logger.info(f"DeathLink sent: {death_message}")
       await ctx.send_death(death_message)
       ctx.deathlink_timestamp = time()
 
@@ -992,6 +1031,7 @@ async def handle_check_goal(ctx: 'Sly2Context') -> None:
 
   if goaled:
     ctx.goal_sent = True
+    ctx.game_interface.logger.info("Goal completed, sending victory")
     await ctx.send_msgs([
       {"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}
     ])

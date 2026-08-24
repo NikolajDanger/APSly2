@@ -32,6 +32,7 @@ from ..data.Constants import (
 from ..Sly2Interface import (
   EE_RAM_START,
   MAX_GUARDS,
+  CycleCounts,
   PowerUps,
   Sly2Episode,
   Sly2Interface
@@ -798,6 +799,25 @@ class TestTickCache(InterfaceTestBase):
     self.pine.poke32(self.addr["loading"], 2)
     self.interface.prefetch_tick_state()
     self.assertEqual(self.pine.reads, 0)
+
+  def test_cycle_counts_prefetched_tick(self) -> None:
+    set_location(self.pine, self.addr, 1, 2)
+    build_dag(self.pine, self.addr)
+    # First prefetch walks the DAG; measure a steady tick after it
+    self.interface.clear_cache()
+    self.interface.prefetch_tick_state()
+    self.interface.take_cycle_counts()
+    self.interface.clear_cache()
+    self.interface.prefetch_tick_state()
+    self.interface.in_safehouse()
+    self.interface.alive()
+    self.interface.set_clock_speed(1.0)
+    counts = self.interface.take_cycle_counts()
+    self.assertEqual(counts.batches, 2)
+    self.assertGreaterEqual(counts.reads, 2)
+    self.assertEqual(counts.writes, 1)
+    self.assertEqual((counts.pine_reads, counts.pine_writes), (0, 1))
+    self.assertEqual(self.interface.take_cycle_counts(), CycleCounts())
 
 
 class TestDagCache(InterfaceTestBase):

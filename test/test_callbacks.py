@@ -62,7 +62,13 @@ from ..data.Names import (
   treasure_location,
   vault_location,
 )
-from ..Sly2Client import _handle_game_ready
+from ..pcsx2_interface.pine import PineConnectionError
+from ..Sly2Client import (
+  _handle_game_not_ready,
+  _handle_game_ready,
+  _sync_tick,
+  update_connection_status
+)
 from ..Sly2Interface import PowerUps, Sly2Episode
 from .client_base import (
   ClientTestBase,
@@ -1443,8 +1449,8 @@ class TestInitPerMap(ClientTestBase):
     self.assertEqual(len(self.ctx.sent_cmds("Set")), 3)
 
 
-class TestTick(ClientTestBase):
-  """Whole ticks through _handle_game_ready, including the prefetch"""
+class TickHarness(ClientTestBase):
+  """Drives whole ticks through _handle_game_ready, including the prefetch"""
   options = {"tasksanity": True, "include_vaults": True}
 
   async def asyncSetUp(self) -> None:
@@ -1480,6 +1486,8 @@ class TestTick(ClientTestBase):
     )
     self.assertEqual(self.ctx.sent, [])
 
+
+class TestTick(TickHarness):
   async def test_hub_steady_state(self) -> None:
     self.place(1, 2)
     await self.settle()
@@ -1539,3 +1547,173 @@ class TestTick(ClientTestBase):
     self.assertIsNone(self.ctx.current_episode)
     await self.tick()
     self.assertEqual(self.ctx.current_episode, Sly2Episode.The_Black_Chateau)
+
+
+class TestConnectionMachine(ClientTestBase):
+  """The sync task's connection-state machine and retry backoff"""
+
+  async def test_game_connect_logs_once(self) -> None:
+    self.ctx.connection_retry_attempts = 2
+    self.ctx.last_connect_message = "old"
+    with self.assertLogs("Client.Sly2", "INFO") as logs:
+      update_connection_status(self.ctx, True)
+      update_connection_status(self.ctx, True)
+    self.assertEqual(len(logs.output), 1)
+    self.assertIn("Connected to Sly 2", logs.output[0])
+    self.assertEqual(self.ctx.connection_retry_attempts, 0)
+    self.assertIsNone(self.ctx.last_connect_message)
+
+  async def test_backoff_progression(self) -> None:
+    self.pine.connected = False
+    self.interface.current_game = None
+    with (
+      patch.object(self.pine, "connect", side_effect=PineConnectionError),
+      patch.object(Sly2Client.asyncio, "sleep") as sleep_mock,
+      self.assertLogs("Client.Sly2", "INFO") as logs
+    ):
+      for _ in range(5):
+        await _handle_game_not_ready(self.ctx)
+    waits = [c.args[0] for c in sleep_mock.call_args_list]
+    self.assertEqual(waits, [3, 3, 10, 30, 30])
+    retry_lines = [r for r in logs.output if "Could not connect" in r]
+    self.assertEqual(len(retry_lines), 3)
+
+  async def test_emulator_without_game(self) -> None:
+    self.pine.game_id = ""
+    self.interface.current_game = None
+    self.ctx.connection_retry_attempts = 3
+    with (
+      patch.object(Sly2Client.asyncio, "sleep") as sleep_mock,
+      self.assertLogs("Client.Sly2", "INFO") as logs
+    ):
+      await _handle_game_not_ready(self.ctx)
+      await _handle_game_not_ready(self.ctx)
+    self.assertEqual(self.ctx.connection_retry_attempts, 0)
+    self.assertEqual([c.args[0] for c in sleep_mock.call_args_list], [3, 3])
+    waiting = [r for r in logs.output if "waiting for Sly 2" in r]
+    self.assertEqual(len(waiting), 1)
+
+  async def test_retry_resets_on_connect(self) -> None:
+    self.pine.connected = False
+    self.interface.current_game = None
+    with (
+      patch.object(self.pine, "connect", side_effect=PineConnectionError),
+      patch.object(Sly2Client.asyncio, "sleep"),
+      self.assertLogs("Client.Sly2", "INFO")
+    ):
+      for _ in range(3):
+        await _handle_game_not_ready(self.ctx)
+    self.assertEqual(self.ctx.connection_retry_attempts, 3)
+    with patch.object(Sly2Client.asyncio, "sleep") as sleep_mock:
+      await _handle_game_not_ready(self.ctx)
+    sleep_mock.assert_not_called()
+    with self.assertLogs("Client.Sly2", "INFO"):
+      update_connection_status(self.ctx, True)
+    self.assertEqual(self.ctx.connection_retry_attempts, 0)
+    self.assertIsNone(self.ctx.last_connect_message)
+
+  async def test_sync_tick_connection_error(self) -> None:
+    with (
+      patch.object(
+        Sly2Client, "_handle_game_ready", side_effect=ConnectionError
+      ),
+      patch.object(Sly2Client.asyncio, "sleep") as sleep_mock,
+      self.assertLogs("Client.Sly2", "INFO")
+    ):
+      await _sync_tick(self.ctx)
+    self.assertIsNone(self.interface.current_game)
+    sleep_mock.assert_called_once_with(1)
+
+  async def test_sync_tick_runtime_error(self) -> None:
+    with (
+      patch.object(
+        Sly2Client, "_handle_game_ready", side_effect=RuntimeError("boom")
+      ),
+      patch.object(Sly2Client.asyncio, "sleep") as sleep_mock,
+      self.assertLogs("Client.Sly2", "ERROR") as logs
+    ):
+      await _sync_tick(self.ctx)
+    self.assertEqual(len(logs.output), 1)
+    self.assertIn("boom", logs.output[0])
+    self.assertNotIn("Traceback", logs.output[0])
+    sleep_mock.assert_called_once_with(3)
+
+
+class TestTickLogging(TickHarness):
+  """Edge-triggered logging and the cycle summary on whole ticks"""
+
+  async def test_loading_edges_log(self) -> None:
+    self.place(1, 2)
+    await self.settle()
+    self.pine.poke32(self.addr["loading"], 2)
+    with self.assertLogs("Client.Sly2", "DEBUG") as logs:
+      await self.tick()
+    self.assertTrue(
+      any("Level transition started" in r for r in logs.output)
+    )
+    self.pine.poke32(self.addr["loading"], 0)
+    with self.assertLogs("Client.Sly2", "DEBUG") as logs:
+      await self.tick()
+    self.assertTrue(
+      any("Level transition finished" in r for r in logs.output)
+    )
+
+  async def test_map_change_logs_episode_name(self) -> None:
+    self.place(1, 2)
+    await self.settle()
+    self.pine.poke32(self.addr["map id"], 3)
+    with self.assertLogs("Client.Sly2", "INFO") as logs:
+      await self.tick()
+    self.assertTrue(
+      any("Entered The Black Chateau (map 3)" in r for r in logs.output)
+    )
+
+  async def test_server_edges_log(self) -> None:
+    self.place(1, 2)
+    with self.assertLogs("Client.Sly2", "INFO") as logs:
+      await self.tick()
+    self.assertTrue(
+      any("Connected to Archipelago server" in r for r in logs.output)
+    )
+    await self.settle()
+    self.ctx.server = None
+    with self.assertLogs("Client.Sly2", "INFO") as logs:
+      await self.tick()
+      await self.tick()
+    self.assertTrue(
+      any("Server connection lost" in r for r in logs.output)
+    )
+    waiting = [
+      r for r in logs.output
+      if "Waiting for player to connect to server" in r
+    ]
+    self.assertEqual(len(waiting), 1)
+
+  async def test_steady_state_is_silent(self) -> None:
+    self.place(1, 2)
+    await self.settle()
+    with self.assertNoLogs("Client.Sly2", "INFO"):
+      await self.tick()
+
+  async def test_checks_send_logged(self) -> None:
+    self.place(1, 2)
+    await self.settle()
+    self.pine.poke32(self.addr["vaults"][0], 1)
+    with self.assertLogs("Client.Sly2", "DEBUG") as logs:
+      await self.tick()
+    line = next(r for r in logs.output if "new location check(s)" in r)
+    self.assertIn("1 new location check(s)", line)
+    self.assertIn(vault_location(EpisodeName.THE_BLACK_CHATEAU), line)
+
+  async def test_cycle_summary_every_tenth_tick(self) -> None:
+    self.place(1, 2)
+    await self.settle()
+    self.ctx.tick_stats.clear()
+    with self.assertNoLogs("Client.Sly2", "DEBUG"):
+      for _ in range(9):
+        await self.tick()
+    with self.assertLogs("Client.Sly2", "DEBUG") as logs:
+      await self.tick()
+    line = next(r for r in logs.output if "Last 10 ticks" in r)
+    self.assertIn("20 batches", line)
+    self.assertNotIn("PINE", line)
