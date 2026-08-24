@@ -5,7 +5,7 @@ unit suite."""
 from typing import Any
 
 from ..data.Constants import (
-  CAVE_HOOK_ORIG0, CAVE_HOOK_ORIG1, LOOT_PRICES, MEGA_JUMP_UNLOAD_CALL,
+  CAVE_HOOK_ORIG, LOOT_PRICES, MEGA_JUMP_UNLOAD_CALL,
   POWERUP_TEXT, SLY_BACK_NODE, TREASURE_PRICES
 )
 from ..Sly2Interface import PowerUps, Sly2Episode, in_ee_ram
@@ -187,11 +187,10 @@ class HubChecks(HubTestMixin):
 
   def test_cave_pristine(self) -> None:
     hook = self.addr["cave hook"]
-    self.assertEqual(self.raw32(hook), CAVE_HOOK_ORIG0)
-    self.assertEqual(self.raw32(hook + 4), CAVE_HOOK_ORIG1)
+    self.assertEqual(self.raw32(hook), CAVE_HOOK_ORIG)
     self.assertFalse(self.interface.cave_live())
     self.assertEqual(
-      self.pine.read_bytes(self.addr["cave"], 0x1000), bytes(0x1000)
+      self.pine.read_bytes(self.addr["cave"], 0x2000), bytes(0x2000)
     )
 
   def test_prefetch_parity(self) -> None:

@@ -276,17 +276,18 @@ def fix_mega_jump(ctx: 'Sly2Context') -> None:
 async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
   """Called when the player connects to the AP server or a new map has
   finished loading"""
-  ctx.game_interface.set_title_start_enabled(
-    ctx.current_episode != Sly2Episode.Title_Screen
-  )
-  ctx.bottles_text = None
+  with ctx.game_interface.batched_patches():
+    ctx.game_interface.set_title_start_enabled(
+      ctx.current_episode != Sly2Episode.Title_Screen
+    )
+    ctx.bottles_text = None
 
-  if not ap_connected or ctx.slot_data is None:
-    return
+    if not ap_connected or ctx.slot_data is None:
+      return
 
-  mark_dirty(ctx)
-  fix_mega_jump(ctx)
-  ctx.game_interface.install_cave()
+    mark_dirty(ctx)
+    fix_mega_jump(ctx)
+    ctx.game_interface.install_cave()
 
   if ctx.current_episode == Sly2Episode.Title_Screen:
     if ctx.game_interface.stuck_in_cairo():

@@ -1,10 +1,9 @@
 """Reversible writes against the ep1_hub savestate. Every test that leaves
-the game changed reloads the state in tearDown; the cave hook is never
-restored live, since that has crashed PCSX2."""
+the game changed reloads the state in tearDown, which also drops the cave."""
 
 import time
 
-from ..data.Constants import CAVE_BLOB, CAVE_HOOK_JUMP, POWERUP_TEXT
+from ..data.Constants import CAVE_BLOB, CAVE_HOOK_ENTRY, POWERUP_TEXT
 from ..Sly2Interface import INFOBOX_CLIENT_STRING, Sly2Episode
 from .harness import POLL_INTERVAL, E2ETestBase
 
@@ -85,8 +84,7 @@ class TestWrites(E2ETestBase):
     self.assertEqual(self.interface.refused_patches, set())
     self.assertTrue(self.interface.cave_live())
     hook = self.addr["cave hook"]
-    self.assertEqual(self.raw32(hook), CAVE_HOOK_JUMP)
-    self.assertEqual(self.raw32(hook + 4), 0)
+    self.assertEqual(self.raw32(hook), CAVE_HOOK_ENTRY)
     blob = bytes.fromhex(CAVE_BLOB)
     self.assertEqual(self.pine.read_bytes(self.addr["cave"], len(blob)), blob)
     self.assertTrue(self.interface.queue_coins(50, 5))

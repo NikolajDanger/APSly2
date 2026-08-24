@@ -1,44 +1,95 @@
-# Shared code cave (SCUS-97316). Source for CAVE_BLOB in data/Constants.py.
-# PINE cannot call game functions, so this cave is written into free EE RAM
-# and the per-frame world-update loop (0x226550) is trampoline-hooked at
-# 0x226674 to run it. Each call site is driven by client-written words that
-# the cave consumes itself:
-#   death (DEATH_FLAG): calls the damage function 0x1A19A0 with the
-#     fabricated damage_info struct at 0x42BE00 -> a real animated death.
-#   coins (COIN_POPS, COIN_AMOUNT): while COIN_POPS != 0, every COIN_INTERVAL
-#     frames pay out COIN_AMOUNT/COIN_POPS (the last pop takes the remainder)
-#     with SetCoins(GetCoins()+pop) (0x1617E0/0x161798, which tick the HUD
-#     counter) followed by the coin pickup sound, id 41 via 0x1FBB90/0x1FB2F8
-#     exactly as the coin entity plays it. Splitting into several pops gives
-#     the clinking of a real coin grab. The client writes COIN_AMOUNT before
-#     COIN_POPS, since COIN_POPS is the trigger.
+# Shared code cave for SCUS-97316: the client's way of making the game run its
+# own code. PINE can only read and write memory, never call a function, so the
+# client writes this small routine into a stretch of RAM the game never uses and
+# then arranges for the game to run it once every frame.
 #
-# Assemble + emit the hex blob:
+# *How it gets called*: Every frame the game walks a list of objects and calls
+# each one's update function, which it finds by looking the function up in a
+# table of pointers attached to the object's class (a C++ vtable). One class in
+# that list has exactly one live object in every map, title screen and menu
+# included. The client overwrites that class's "update" pointer so it points at
+# this routine; the routine does its work and then jumps to the real update
+# function, so the object keeps working as before. The hook is therefore just
+# one pointer changed in a data table, and putting the original pointer back
+# unhooks it again.
+#
+# *Why a pointer and not a patched instruction*: PCSX2 does not interpret the
+# game's code instruction by instruction: it translates each stretch to native
+# code the first time it runs and keeps the translation. To notice when the game
+# modifies its own code, it marks every memory page holding translated code as
+# read-only; a write to such a page trips that guard, and the guard throws the
+# page's translations away so they get redone. A PINE write arrives on PINE's
+# own thread, so the guard throws translations away while the game thread may
+# be right in the middle of running them. A table of pointers is data, never
+# translated, so its page is never guarded and writing it is harmless.
+#
+# What the routine does each frame:
+#   patches: up to four (address, value) pairs. The routine stores each value at
+#     its address and clears the request. This lets the client's remaining
+#     instruction patches be written by the game thread, for the same reason as
+#     above.
+#   death: when the death flag is set, calls the game's damage function with a
+#     fabricated "lethal hit" record, so the player dies with the real animation
+#     instead of the map just reloading.
+#   coins: while a payout is pending, every few frames adds one installment to
+#     the wallet through the game's own coin functions and plays the coin pickup
+#     sound, so a received Coins item clinks in like a real coin grab. The
+#     client writes the amount before the number of installments, since the
+#     latter is what starts the payout.
+#
+# The routine's code and its data area are deliberately on different 4K pages:
+# once the routine has run, its own page is a translated-code page with the
+# guard described above, and every request the client wrote into it would trip
+# that guard from PINE's thread.
+#
+# Assemble + emit the hex blob (CAVE_BLOB in data/Constants.py):
 #   llvm-mc --assemble --triple=mipsel --mcpu=mips64r2 --filetype=obj \
 #     -o cave.o cave.s
 #   llvm-objcopy -O binary --only-section=.text cave.o cave.bin
 #   python3 -c "print(open('cave.bin','rb').read().hex())"
-#
-# Layout in the cave's free block: DEATH_FLAG=0x0042BF00, RA_SAVE=0x0042BF04,
-# heartbeat=0x0042BF08, COIN_POPS=0x0042BF10, COIN_AMOUNT=0x0042BF14,
-# COIN_TIMER=0x0042BF18, COIN_INTERVAL=0x0042BF1C, COIN_POP=0x0042BF20; the
-# damage_info struct lives at 0x0042BE00. k0/k1 are never kept live across a
-# call (an interrupt may clobber them), so state round-trips through memory.
 	.set noreorder
 	.set noat
 	.text
 	.globl _start
 _start:
 	lui   $k0, 0x0042
-	ori   $k0, $k0, 0xbf08      # k0 = 0x0042BF08 (heartbeat counter)
+	ori   $k0, $k0, 0xcf08      # k0 = 0x0042CF08 (heartbeat counter)
 	lw    $k1, 0($k0)
 	addiu $k1, $k1, 1
 	sw    $k1, 0($k0)           # bump every frame -> proves hook fires
 	lui   $k0, 0x0042
-	ori   $k0, $k0, 0xbf04      # k0 = 0x0042BF04 (RA_SAVE)
+	ori   $k0, $k0, 0xcf04      # k0 = 0x0042CF04 (RA_SAVE)
 	sw    $ra, 0($k0)
+	sw    $a0, 0x20($k0)        # A0_SAVE: the update method's object
+	sw    $a1, 0x24($k0)        # A1_SAVE
 	lui   $k0, 0x0042
-	ori   $k0, $k0, 0xbf00      # k0 = 0x0042BF00 (DEATH_FLAG)
+	ori   $k0, $k0, 0xcf40      # k0 = 0x0042CF40 (PATCH slot 0)
+	lw    $k1, 0($k0)
+	beq   $k1, $zero, patch1
+	lw    $a1, 4($k0)
+	sw    $a1, 0($k1)
+	sw    $zero, 0($k0)
+patch1:
+	lw    $k1, 8($k0)
+	beq   $k1, $zero, patch2
+	lw    $a1, 12($k0)
+	sw    $a1, 0($k1)
+	sw    $zero, 8($k0)
+patch2:
+	lw    $k1, 16($k0)
+	beq   $k1, $zero, patch3
+	lw    $a1, 20($k0)
+	sw    $a1, 0($k1)
+	sw    $zero, 16($k0)
+patch3:
+	lw    $k1, 24($k0)
+	beq   $k1, $zero, death
+	lw    $a1, 28($k0)
+	sw    $a1, 0($k1)
+	sw    $zero, 24($k0)
+death:
+	lui   $k0, 0x0042
+	ori   $k0, $k0, 0xcf00      # k0 = 0x0042CF00 (DEATH_FLAG)
 	lw    $k1, 0($k0)
 	beq   $k1, $zero, coins
 	nop
@@ -51,10 +102,10 @@ _start:
 	addiu $a0, $a0, 0x0df0      # a0 = entity+0xDF0 (damage block)
 	lui   $a1, 0x0042
 	jal   0x1a19a0             # game damage function
-	ori   $a1, $a1, 0xbe00      # a1 = &damage_info @0x0042BE00
+	ori   $a1, $a1, 0xce00      # a1 = &damage_info @0x0042CE00
 coins:
 	lui   $k0, 0x0042
-	ori   $k0, $k0, 0xbf10      # k0 = 0x0042BF10 (COIN_POPS)
+	ori   $k0, $k0, 0xcf10      # k0 = 0x0042CF10 (COIN_POPS)
 	lw    $k1, 0($k0)
 	beq   $k1, $zero, done
 	nop
@@ -79,7 +130,7 @@ pop:
 	jal   0x161798             # GetCoins(0x2DEB30)
 	ori   $a0, $a0, 0xeb30
 	lui   $k0, 0x0042
-	ori   $k0, $k0, 0xbf20
+	ori   $k0, $k0, 0xcf20
 	lw    $a1, 0($k0)
 	lui   $a0, 0x002d
 	ori   $a0, $a0, 0xeb30
@@ -92,9 +143,9 @@ pop:
 	move  $a1, $zero
 done:
 	lui   $k0, 0x0042
-	ori   $k0, $k0, 0xbf04
+	ori   $k0, $k0, 0xcf04
 	lw    $ra, 0($k0)
-	lw    $2, -11524($19)       # relocated original at 0x226674
-	lw    $4, 8($20)            # relocated original at 0x226678
-	j     0x22667c             # return to hook+8
+	lw    $a0, 0x20($k0)
+	lw    $a1, 0x24($k0)
+	j     0x212c50             # the original update method
 	nop

@@ -1,8 +1,11 @@
 from enum import IntEnum
-from typing import Optional, NamedTuple, Tuple, Dict, List, Iterator
+from typing import (
+  Optional, NamedTuple, Tuple, Dict, List, Iterator, Generator
+)
 from math import ceil
 import struct
 import sys
+from contextlib import contextmanager
 from logging import Logger, DEBUG, CRITICAL, getLogger
 from time import time
 import traceback
@@ -35,9 +38,9 @@ from .data.Constants import (
   SLY_BACK_NODE,
   TREASURE_VTABLE,
   CAVE_BLOB,
-  CAVE_HOOK_JUMP,
-  CAVE_HOOK_ORIG0,
-  CAVE_HOOK_ORIG1,
+  CAVE_HOOK_ENTRY,
+  CAVE_HOOK_ORIG,
+  CAVE_PATCH_SLOTS,
   COIN_POP_INTERVAL,
   DEATH_INFO_TEMPLATE
 )
@@ -139,6 +142,8 @@ class GameInterface():
     self.logger = logger
     self.reported_bad_writes = set()
     self.refused_patches = set()
+    self._pending_patches: List[Tuple[int, int, int]] = []
+    self._defer_patches = False
     self.reported_duplicate = False
     # Own logger so /trace can enable write logging by setting its level to
     # DEBUG. It propagates to the root file handler regardless of the root
@@ -352,18 +357,46 @@ class GameInterface():
   def safe_patch(self, address: int, value: int, expected: int) -> None:
     """Write a code patch only if the word there is the instruction we mean
     to replace (or already the patch). Refusing on anything else stops a
-    wrong address from corrupting code."""
-    current = self._read32(address)
-    if current == value:
+    wrong address from corrupting code. Inside `batched_patches` the write
+    is held back and issued with the others as one PINE message."""
+    self._pending_patches.append((address, value, expected))
+    if not self._defer_patches:
+      self._flush_patches()
+
+  @contextmanager
+  def batched_patches(self) -> Generator[None, None, None]:
+    """Collect every `safe_patch` in the block into one PINE message, so
+    the code patches of one map load reach the cave together."""
+    self._defer_patches = True
+    try:
+      yield
+    finally:
+      self._defer_patches = False
+      self._flush_patches()
+
+  def _flush_patches(self) -> None:
+    patches = self._pending_patches
+    self._pending_patches = []
+    if not patches:
       return
-    if current == expected:
-      self._write32(address, value)
-    elif address not in self.refused_patches:
-      self.refused_patches.add(address)
-      self.logger.warning(
-        f"Refused patch at {address:#010x}: found {current:#010x}, "
-        f"expected {expected:#010x}"
-      )
+    current = self._batch_read32([address for address, _, _ in patches])
+    operations = []
+    for (address, value, expected), word in zip(patches, current):
+      if word == value:
+        continue
+      if word == expected:
+        operations.append((address, value))
+      elif address not in self.refused_patches:
+        self.refused_patches.add(address)
+        self.logger.warning(
+          f"Refused patch at {address:#010x}: found {word:#010x}, "
+          f"expected {expected:#010x}"
+        )
+    if operations:
+      self._write_patches(operations)
+
+  def _write_patches(self, operations: list[tuple[int, int]]) -> None:
+    self._batch_write32(operations)
 
   def _batch_write32(self, operations: list[tuple[int, int]]) -> None:
     valid = []
@@ -1184,19 +1217,59 @@ class Sly2Interface(GameInterface):
 
     return self._read32(active_character + 0xe2c)
 
+  def _write_patches(self, operations: list[tuple[int, int]]) -> None:
+    """Instruction patches go through the cave once it is hooked, so the
+    EE thread stores them itself. PCSX2 caches native translations of game
+    code and write-protects their pages; a write from PINE's thread into
+    one flushes translations the EE thread may be executing right then,
+    which can abort the emulator (see CAVE_BLOB). Data patches (the hook
+    itself) and, without the cave or a free request slot, code patches are
+    written directly."""
+    text_end = self.addresses["text end"]
+    code = [op for op in operations if op[0] < text_end]
+    direct = [op for op in operations if op[0] >= text_end]
+    if direct:
+      self._batch_write32(direct)
+    if not code:
+      return
+    requests = []
+    if self.cave_live():
+      slots = self.addresses["cave patches"]
+      pending = self._batch_read32(
+        [slots + 8*i for i in range(CAVE_PATCH_SLOTS)]
+      )
+      free = [slots + 8*i for i, a in enumerate(pending) if a == 0]
+      while code and free:
+        address, value = code.pop(0)
+        slot = free.pop(0)
+        requests += [(slot + 4, value), (slot, address)]
+    if code:
+      self.logger.debug(f"Writing {len(code)} code patch(es) directly")
+    self._batch_write32(requests + code)
+
   def install_cave(self) -> None:
-    """Install the code cave and its per-frame trampoline hook, so the client
-    can have the game call its own functions."""
-    self._write_bytes(self.addresses["cave"], bytes.fromhex(CAVE_BLOB))
+    """Install the code cave and hook it in as the per-frame update method
+    of a singleton object (see cave.s), so the client can have the game call
+    its own functions."""
+    cave = self.addresses["cave"]
+    blob = bytes.fromhex(CAVE_BLOB)
+    # Once the cave runs, its page holds recompiled code and a PINE write
+    # there races the recompiler (see CAVE_BLOB), so only write it when it
+    # is actually missing.
+    if self._read_bytes(cave, len(blob)) != blob:
+      self._write_bytes(cave, blob)
     for name in ("death flag", "coin pops", "coin amount", "coin timer"):
       self._write32(self.addresses[name], 0)
     self._write32(self.addresses["coin interval"], COIN_POP_INTERVAL)
-    hook = self.addresses["cave hook"]
-    self.safe_patch(hook, CAVE_HOOK_JUMP, CAVE_HOOK_ORIG0)
-    self.safe_patch(hook + 4, 0, CAVE_HOOK_ORIG1)
+    self._write_bytes(
+      self.addresses["cave patches"], bytes(8 * CAVE_PATCH_SLOTS)
+    )
+    self.safe_patch(
+      self.addresses["cave hook"], CAVE_HOOK_ENTRY, CAVE_HOOK_ORIG
+    )
 
   def cave_live(self) -> bool:
-    return self._read32(self.addresses["cave hook"]) == CAVE_HOOK_JUMP
+    return self._read32(self.addresses["cave hook"]) == CAVE_HOOK_ENTRY
 
   def kill_player(self, damage_type: int = 0x200) -> None:
     if self.in_safehouse() or self.get_current_episode() == 0:

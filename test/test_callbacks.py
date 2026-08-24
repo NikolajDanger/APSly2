@@ -32,8 +32,8 @@ from ..Callbacks import (
   update
 )
 from ..data.Constants import (
-  CAVE_HOOK_JUMP,
-  CAVE_HOOK_ORIG0,
+  CAVE_HOOK_ENTRY,
+  CAVE_HOOK_ORIG,
   COIN_POPS_MAX,
   COIN_POPS_MIN,
   DEATHLINK_DAMAGE_TYPES,
@@ -502,7 +502,7 @@ class TestHandleDeathlink(ClientTestBase):
     self.ctx.death_link_enabled = True
     self.active = set_active_character(self.pine, self.addr)
     # Pretend the cave is installed so kill_player takes the animated path.
-    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_JUMP)
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ENTRY)
 
   async def run_at(self, now: float) -> None:
     with patch.object(Callbacks, "time", return_value=now):
@@ -541,7 +541,7 @@ class TestHandleDeathlink(ClientTestBase):
 
   async def test_fallback_without_cave(self) -> None:
     # Cave not installed -> blunt kill so the death is not lost.
-    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG0)
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG)
     self.ctx.queued_deaths = 1
     self.ctx.deathlink_timestamp = 990.0
     await self.run_at(1011.0)
@@ -567,7 +567,7 @@ class TestPayOutCoins(ClientTestBase):
   async def asyncSetUp(self) -> None:
     await super().asyncSetUp()
     self.pine.poke32(self.addr["coins"], 100)
-    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_JUMP)
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ENTRY)
 
   def test_nothing_pending(self) -> None:
     self.pine.clear_writes()
@@ -599,7 +599,7 @@ class TestPayOutCoins(ClientTestBase):
     self.assertEqual(self.pine.peek32(self.addr["coin amount"]), 40)
 
   def test_fallback_without_cave(self) -> None:
-    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG0)
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG)
     self.ctx.pending_coins = 40
     self.ctx.prev_coins = 100
     pay_out_coins(self.ctx)

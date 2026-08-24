@@ -704,13 +704,16 @@ ADDRESSES = {
     "active character": 0x3D4A6C,
     "active character pointer": 0x2DE2F0,
     "cave": 0x42B000,
-    "cave hook": 0x226674,
-    "death struct": 0x42BE00,
-    "death flag": 0x42BF00,
-    "coin pops": 0x42BF10,
-    "coin amount": 0x42BF14,
-    "coin timer": 0x42BF18,
-    "coin interval": 0x42BF1C,
+    "cave hook": 0x2C96F4,
+    "cave patches": 0x42CF40,
+    # End of the ELF's .text; writes below it are instruction patches.
+    "text end": 0x259DF0,
+    "death struct": 0x42CE00,
+    "death flag": 0x42CF00,
+    "coin pops": 0x42CF10,
+    "coin amount": 0x42CF14,
+    "coin timer": 0x42CF18,
+    "coin interval": 0x42CF1C,
     "clock speed": 0x2DDED8,
     "friction": 0x2C3C90,
     "string table": 0x3e1ad4,
@@ -1283,22 +1286,26 @@ STALE_JOB_TRIGGERS: dict[int, list[tuple[int, int]]] = {
 }
 
 # Function-call framework. PINE can't call functions, so a small MIPS code
-# cave is written into free EE RAM and the per-frame loop is trampoline-hooked
-# to run it; the client writes a request and the cave makes the game call next
-# frame (an animated deathlink death, coin payouts with the pickup sound).
+# cave is written into free EE RAM and hooked in as a per-frame update method
+# (see CAVE_HOOK_ENTRY); the client writes a request and the cave makes the
+# game call next frame (an animated deathlink death, coin payouts with the
+# pickup sound, instruction patches).
 # Assembled from build/cave.s; the blob bakes in SCUS-97316 addresses (cave
-# data 0x42BExx/0x42BFxx, the game functions, hook return 0x22667C), so
-# reassemble if implementing for a different version.
+# data 0x42CExx/0x42CFxx, the game functions, the original update method
+# it tail-jumps to), so reassemble if implementing for a different version.
 CAVE_BLOB = (
-  "42001a3c08bf5a3700005b8f01007b2700005baf42001a3c04bf5a3700005faf"+
-  "42001a3c00bf5a3700005b8f0b00601300000000000040af2d001a3cf0e25a37"+
-  "0000448f0500801000000000f00d84244200053c6886060c00bea53442001a3c"+
-  "10bf5a3700005b8f200060130000000008005b8f03006013ffff7b271b000010"+
+  "42001a3c08cf5a3700005b8f01007b2700005baf42001a3c04cf5a3700005faf"+
+  "200044af240045af42001a3c40cf5a3700005b8f030060130400458f000065af"+
+  "000040af08005b8f030060130c00458f000065af080040af10005b8f03006013"+
+  "1400458f000065af100040af18005b8f030060131c00458f000065af180040af"+
+  "42001a3c00cf5a3700005b8f0b00601300000000000040af2d001a3cf0e25a37"+
+  "0000448f0500801000000000f00d84244200053c6886060c00cea53442001a3c"+
+  "10cf5a3700005b8f200060130000000008005b8f03006013ffff7b271b000010"+
   "08005baf0c005b8f0400458f08005baf00005b8f1b00bb00123000002328a600"+
   "040045afffff7b2700005baf100046af2d00043ce685050c30eb843442001a3c"+
-  "20bf5a370000458f2d00043c30eb8434f885050c2128a200e4ee070c29000424"+
-  "25204000beec070c2528000042001a3c04bf5a3700005f8ffcd2628e0800848e"+
-  "9f99080800000000"
+  "20cf5a370000458f2d00043c30eb8434f885050c2128a200e4ee070c29000424"+
+  "25204000beec070c2528000042001a3c04cf5a3700005f8f2000448f2400458f"+
+  "144b080800000000"
 )
 # damage_info struct; +0x00/+0x04 skeleton, +0x08 entity and +0x0C damage
 # type are patched from the live character at kill time. +0x10 = -2000
@@ -1308,11 +1315,15 @@ DEATH_INFO_TEMPLATE = (
   "f8e84246621436c5ed130ac50000803f00000000000000000000000000000000"+
   "0000000008000000"
 )
-# Hook at ADDRESSES["cave hook"] (0x226674) in the per-frame loop 0x226550:
-# `j 0x42B000` then a nop, relocating the two originals into the cave.
-CAVE_HOOK_JUMP = 0x0810AC00          # j 0x42B000
-CAVE_HOOK_ORIG0 = 0x8E62D2FC         # lw $2, -11524($19)
-CAVE_HOOK_ORIG1 = 0x8E840008         # lw $4, 8($20)
+# The hook is a vtable slot, ADDRESSES["cave hook"]: the per-frame update
+# method (slot +0x84) of the class at 0x2C9670, which has exactly one live
+# instance in every map, called by the world loop 0x226550. The client
+# points it at the cave, which tail-jumps to the original method.
+CAVE_HOOK_ENTRY = 0x0042B000         # the cave itself
+CAVE_HOOK_ORIG = 0x00212C50          # the class's original update method
+# (address, value) request pairs at ADDRESSES["cave patches"] the cave
+# stores on the EE thread, for code patches.
+CAVE_PATCH_SLOTS = 4
 # Frames between the pops of one coin payout, and the range the random number
 # of pops per payout is drawn from.
 COIN_POP_INTERVAL = 4
