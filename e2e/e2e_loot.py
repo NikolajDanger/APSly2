@@ -9,6 +9,7 @@ from ..data.Constants import (
   LOOT, LOOT_IDS, LOOT_PRICES, PICKPOCKET_LOOT_TABLE_CHANCES, TREASURE_PRICES
 )
 from ..data.Locations import location_dict
+from ..data.Names import pickpocket_location
 from ..pcsx2_interface.pine import Pine
 from ..Sly2Interface import Sly2Episode
 from ..test.client_base import make_slot_data
@@ -155,4 +156,4 @@ class TestLootTick(LootReads, TickTestBase):
       for message in self.ctx.sent_cmds("LocationChecks")
       for code in message["locations"]
     }
-    self.assertIn(location_dict[f"Pickpocket {first_loot}"].code, sent)
+    self.assertIn(location_dict[pickpocket_location(first_loot)].code, sent)

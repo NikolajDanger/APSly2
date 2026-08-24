@@ -48,6 +48,20 @@ from ..data.Constants import (
 )
 from ..data.Items import Trap, item_dict
 from ..data.Locations import location_dict
+from ..data.Names import (
+  EpisodeName,
+  ItemCategory,
+  ItemName,
+  bottle_item,
+  bottle_location,
+  clockwerk_part,
+  job_location,
+  pickpocket_location,
+  progressive_episode,
+  thiefnet_location,
+  treasure_location,
+  vault_location,
+)
 from ..Sly2Client import _handle_game_ready
 from ..Sly2Interface import PowerUps, Sly2Episode
 from .client_base import (
@@ -67,14 +81,16 @@ from .client_base import (
 WIRE_LOOT = json.loads(json.dumps(LOOT))
 EPISODE_NAMES = list(EPISODES)
 EP8 = Sly2Episode.Anatomy_for_Disaster
+EP1_ITEM = progressive_episode(EpisodeName.THE_BLACK_CHATEAU)
+EP8_ITEM = progressive_episode(EpisodeName.ANATOMY_FOR_DISASTER)
 CLOCKWERK_PARTS = [
   name for name, item in item_dict.items()
-  if item.category == "Clockwerk Part"
+  if item.category == ItemCategory.CLOCKWERK_PART
 ]
 
 
 def pickpocket_codes(names: list[str]) -> set[int]:
-  return {location_dict[f"Pickpocket {n}"].code for n in names}
+  return {location_dict[pickpocket_location(n)].code for n in names}
 
 
 class TestLootHelpers(unittest.TestCase):
@@ -157,8 +173,8 @@ class TestAvailableEpisodes(ClientTestBase):
     self.assertEqual(self.available(), {e: 0 for e in Sly2Episode})
 
   def test_progressive_episodes(self) -> None:
-    self.give("Progressive The Black Chateau", "Progressive The Black Chateau")
-    self.give("Progressive Menace from the North, Eh!")
+    self.give(EP1_ITEM, EP1_ITEM)
+    self.give(progressive_episode(EpisodeName.MENACE_FROM_THE_NORTH_EH))
     available = self.available()
     self.assertEqual(available[Sly2Episode.The_Black_Chateau], 2)
     self.assertEqual(available[Sly2Episode.Menace_from_the_North_Eh], 1)
@@ -168,12 +184,12 @@ class TestAvailableEpisodes(ClientTestBase):
     self.slot_data["episode_8_keys"] = 4
     self.parts(8)
     self.assertEqual(self.available()[EP8], 0)
-    self.give(*["Progressive Anatomy for Disaster"]*4)
+    self.give(*[EP8_ITEM]*4)
     self.assertEqual(self.available()[EP8], 4)
 
   def test_first_section(self) -> None:
     self.slot_data["episode_8_keys"] = 0
-    self.give("Progressive Anatomy for Disaster")
+    self.give(EP8_ITEM)
     self.parts(7)
     self.assertEqual(self.available()[EP8], 0)
     self.parts(8)
@@ -195,12 +211,12 @@ class TestAvailableEpisodes(ClientTestBase):
 
   def test_last_section(self) -> None:
     self.slot_data["episode_8_keys"] = 1
-    self.give(*["Progressive Anatomy for Disaster"]*3)
+    self.give(*[EP8_ITEM]*3)
     self.assertEqual(self.available()[EP8], 3)
     self.parts(8)
     self.assertEqual(self.available()[EP8], 4)
     self.ctx.items_received = []
-    self.give(*["Progressive Anatomy for Disaster"]*2)
+    self.give(*[EP8_ITEM]*2)
     self.parts(8)
     self.assertEqual(self.available()[EP8], 2)
 
@@ -211,15 +227,15 @@ class TestHandleReceived(ClientTestBase):
     self.enter(1, 2)
 
   async def test_powerups(self) -> None:
-    self.give("Paraglider", "Mega Jump")
+    self.give(ItemName.PARAGLIDER, ItemName.MEGA_JUMP)
     await handle_received(self.ctx, False)
     self.assertTrue(self.ctx.powerups.paraglide)
     self.assertTrue(self.ctx.powerups.mega_jump)
     self.assertEqual(self.interface.read_powerups(), self.ctx.powerups)
-    self.assertEqual(self.ctx.inventory[item_dict["Paraglider"].code], 1)
+    self.assertEqual(self.ctx.inventory[item_dict[ItemName.PARAGLIDER].code], 1)
 
   async def test_powerups_not_written_in_safehouse(self) -> None:
-    self.give("Paraglider")
+    self.give(ItemName.PARAGLIDER)
     self.ctx.in_safehouse = True
     await handle_received(self.ctx, True)
     self.assertTrue(self.ctx.powerups.paraglide)
@@ -227,9 +243,9 @@ class TestHandleReceived(ClientTestBase):
 
   async def test_bottles(self) -> None:
     self.give(
-      "Bottle - The Black Chateau",
-      "5 bottles - Menace from the North, Eh!",
-      "Bottle - The Black Chateau"
+      bottle_item(1, EpisodeName.THE_BLACK_CHATEAU),
+      bottle_item(5, EpisodeName.MENACE_FROM_THE_NORTH_EH),
+      bottle_item(1, EpisodeName.THE_BLACK_CHATEAU)
     )
     await handle_received(self.ctx, False)
     self.assertEqual(self.ctx.all_bottles[Sly2Episode.The_Black_Chateau], 2)
@@ -238,7 +254,10 @@ class TestHandleReceived(ClientTestBase):
     )
 
   async def test_notifications_from_high_water(self) -> None:
-    self.give("Paraglider", "Clockwerk Beak", "Progressive Jailbreak")
+    self.give(
+      ItemName.PARAGLIDER, clockwerk_part("Beak"),
+      progressive_episode(EpisodeName.JAILBREAK)
+    )
     self.pine.poke32(self.addr["items received"], 2)
     await handle_received(self.ctx, False)
     self.assertEqual(
@@ -256,7 +275,7 @@ class TestHandleReceived(ClientTestBase):
     self.assertEqual(len(self.ctx.notification_queue), 1)
 
   async def test_clockwerk_count_on_reconnect(self) -> None:
-    self.give("Clockwerk Beak", "Clockwerk Skull")
+    self.give(clockwerk_part("Beak"), clockwerk_part("Skull"))
     self.pine.poke32(self.addr["items received"], 2)
     await handle_received(self.ctx, False)
     self.assertEqual(self.ctx.clockwerk_parts_count, 2)
@@ -264,7 +283,7 @@ class TestHandleReceived(ClientTestBase):
 
   async def test_coins(self) -> None:
     self.pine.poke32(self.addr["coins"], 10)
-    self.give("Coins", "Coins")
+    self.give(ItemName.COINS, ItemName.COINS)
     self.pine.poke32(self.addr["items received"], 1)
     with patch.object(Callbacks, "randint", return_value=40) as randint:
       await handle_received(self.ctx, False)
@@ -275,7 +294,7 @@ class TestHandleReceived(ClientTestBase):
     self.assertEqual(self.interface.get_coins(), 10)
 
   async def test_trap_baseline_skips_backlog(self) -> None:
-    self.give("Slow-mo Trap")
+    self.give(Trap.SLOW_MO.item_name)
     self.ctx.trap_baseline_pending = True
     with patch.object(Callbacks, "time", return_value=1000.0):
       await handle_received(self.ctx, False)
@@ -283,14 +302,14 @@ class TestHandleReceived(ClientTestBase):
     self.assertEqual(self.ctx.active_traps, {})
     self.assertEqual(self.ctx.trap_cursor, 1)
 
-    self.give("Ice Trap")
+    self.give(Trap.ICE.item_name)
     with patch.object(Callbacks, "time", return_value=1000.0):
       await handle_received(self.ctx, False)
     self.assertEqual(self.ctx.active_traps, {Trap.ICE: 1020.0})
     self.assertEqual(self.ctx.trap_cursor, 2)
 
   async def test_traps_wait_for_safehouse_exit(self) -> None:
-    self.give("Ice Trap")
+    self.give(Trap.ICE.item_name)
     with patch.object(Callbacks, "time", return_value=1000.0):
       await handle_received(self.ctx, True)
     self.assertEqual(self.ctx.active_traps, {})
@@ -315,13 +334,13 @@ class TestHandleChecks(ClientTestBase):
   async def test_thiefnet(self) -> None:
     self.ctx.thiefnet_purchases = PowerUps(snooze_bomb=True)
     await handle_checks(self.ctx)
-    self.assertEqual(self.sent_locations(), [{self.loc("ThiefNet 03")}])
+    self.assertEqual(self.sent_locations(), [{self.loc(thiefnet_location(3))}])
 
   async def test_thiefnet_reread_in_safehouse(self) -> None:
     self.ctx.in_safehouse = True
     self.interface.load_powerups(PowerUps(paraglide=True, mega_jump=True))
     await handle_checks(self.ctx)
-    self.assertEqual(self.sent_locations(), [{self.loc("ThiefNet 21")}])
+    self.assertEqual(self.sent_locations(), [{self.loc(thiefnet_location(21))}])
 
   async def test_bottle_bundles(self) -> None:
     self.slot_data["bottle_location_bundle_size"] = 5
@@ -344,7 +363,8 @@ class TestHandleChecks(ClientTestBase):
     self.pine.poke32(self.addr["bottle flags"][3], 1 << 29)
     await handle_checks(self.ctx)
     self.assertEqual(
-      self.sent_locations(), [{self.loc("Jailbreak - Bottle #01")}]
+      self.sent_locations(),
+      [{self.loc(bottle_location(EpisodeName.JAILBREAK, 1))}]
     )
 
   async def test_jobs(self) -> None:
@@ -353,7 +373,10 @@ class TestHandleChecks(ClientTestBase):
     await handle_checks(self.ctx)
     self.assertEqual(self.sent_locations(), [{
       self.loc("The Black Chateau - Waterpump Destruction"),
-      self.loc("Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la")
+      self.loc(job_location(
+        EpisodeName.ANATOMY_FOR_DISASTER,
+        "Carmelita's Gunner/Defeat Clock-la"
+      ))
     }])
 
   async def test_treasures_loot_vaults(self) -> None:
@@ -361,11 +384,11 @@ class TestHandleChecks(ClientTestBase):
     self.pine.poke32(self.addr["loot"][list(LOOT).index("Gold Ring")], 1)
     self.ctx.vaults[5] = True
     await handle_checks(self.ctx)
-    treasure = f"{EPISODE_NAMES[2]} - Golden Scroll Case"
+    treasure = treasure_location(EPISODE_NAMES[2], "Golden Scroll Case")
     self.assertEqual(self.sent_locations(), [{
       self.loc(treasure),
-      self.loc("Pickpocket Gold Ring"),
-      self.loc(f"{EPISODE_NAMES[5]} - Vault")
+      self.loc(pickpocket_location("Gold Ring")),
+      self.loc(vault_location(EPISODE_NAMES[5]))
     }])
 
   async def test_only_new_locations_trigger_send(self) -> None:
@@ -379,8 +402,8 @@ class TestHandleChecks(ClientTestBase):
     self.assertEqual(len(sent), 2)
     self.assertEqual(
       sent[1],
-      {self.loc(f"{EPISODE_NAMES[0]} - Vault"),
-        self.loc(f"{EPISODE_NAMES[1]} - Vault")}
+      {self.loc(vault_location(EPISODE_NAMES[0])),
+        self.loc(vault_location(EPISODE_NAMES[1]))}
     )
     self.assertEqual(self.ctx.last_checked_locations, sent[1])
 
@@ -581,7 +604,7 @@ class TestPayOutCoins(ClientTestBase):
 
   async def test_update_pays_out_received_coins(self) -> None:
     self.enter(1, 2)
-    self.give("Coins")
+    self.give(ItemName.COINS)
     self.pine.poke32(self.addr["items received"], 0)
     with patch.object(Callbacks, "randint", side_effect=[40, 4]):
       await update(self.ctx, True)
@@ -930,7 +953,7 @@ class TestMegaJump(ClientTestBase):
     self.assertEqual(self.pine.writes, [])
 
   async def test_patches_and_binds(self) -> None:
-    self.give("Mega Jump")
+    self.give(ItemName.MEGA_JUMP)
     self.pine.poke32(self.bindings, 5)
     self.pine.poke32(self.bindings + 4, 0xFFFF_FFFF)
     fix_mega_jump(self.ctx)
@@ -963,12 +986,12 @@ class TestSetThiefnet(ClientTestBase):
     await super().asyncSetUp()
     self.enter(1, 2)
     self.ctx.locations_info = {
-      self.loc(f"ThiefNet {i+1:02}"): NetworkItem(
-        item_dict["Paraglider"].code, self.loc(f"ThiefNet {i+1:02}"), 1
+      self.loc(thiefnet_location(i+1)): NetworkItem(
+        item_dict[ItemName.PARAGLIDER].code, self.loc(thiefnet_location(i+1)), 1
       )
       for i in range(24)
     }
-    self.ctx.checked_locations = {self.loc("ThiefNet 02")}
+    self.ctx.checked_locations = {self.loc(thiefnet_location(2))}
     self.texts = self.addr["text"]["powerups"][0]
 
   def written_text(self, powerup: int) -> tuple[bytes, bytes]:
@@ -1002,7 +1025,7 @@ class TestSetThiefnet(ClientTestBase):
     self.assertEqual(len(scouts), 1)
     self.assertEqual(
       set(scouts[0]["locations"]),
-      {self.loc(f"ThiefNet {i+1:02}") for i in range(24)}
+      {self.loc(thiefnet_location(i+1)) for i in range(24)}
     )
     self.assertEqual(scouts[0]["create_as_hint"], 2)
 
@@ -1067,7 +1090,7 @@ class TestUpdate(ClientTestBase):
     build_dag(self.pine, self.addr)
     set_string_table(self.pine, self.addr, 1)
     set_infobox_pointers(self.pine, self.addr)
-    self.give("Progressive The Black Chateau")
+    self.give(EP1_ITEM)
 
   async def tick(self) -> None:
     self.interface.clear_cache()
@@ -1097,7 +1120,7 @@ class TestUpdate(ClientTestBase):
 
   async def test_hub_tick(self) -> None:
     self.enter(1, 2)
-    self.give("Mega Jump")
+    self.give(ItemName.MEGA_JUMP)
     self.pine.poke32(self.addr["unload mega jump"], MEGA_JUMP_UNLOAD_CALL)
     self.ctx.jobs_completed[0][0][0] = True
     await self.tick()
@@ -1170,7 +1193,7 @@ class TestUpdate(ClientTestBase):
     self.pine.poke_bytes(address, b"junk\0")
     await self.tick()
     self.assertEqual(self.pine.peek_cstring(address), b"junk")
-    self.give("Progressive A Starry Eyed Encounter")
+    self.give(progressive_episode(EpisodeName.A_STARRY_EYED_ENCOUNTER))
     self.pine.poke32(self.addr["map id"], 1)
     await self.tick()
     await self.tick()
@@ -1217,7 +1240,7 @@ class TestUpdate(ClientTestBase):
     self.assertEqual(job_status(self.pine, self.addr["jobs"][0][1][0]), 0)
     # ...until its chapter is unlocked by an item
     self.ctx.jobs_completed[0][0] = [True, True]
-    self.give("Progressive The Black Chateau")
+    self.give(EP1_ITEM)
     await self.tick()
     await self.tick()
     self.assertEqual(job_status(self.pine, self.addr["jobs"][0][1][0]), 1)
@@ -1227,7 +1250,7 @@ class TestUpdate(ClientTestBase):
     self.enter(1, 2)
     await self.tick()
     self.assertEqual(self.pine.peek32(self.addr["bottle count"]), 0)
-    self.give("5 bottles - The Black Chateau")
+    self.give(bottle_item(5, EpisodeName.THE_BLACK_CHATEAU))
     await self.tick()
     await self.tick()
     self.assertEqual(self.pine.peek32(self.addr["bottle count"]), 5)
@@ -1251,7 +1274,7 @@ class TestUpdate(ClientTestBase):
     self.pine.poke32(self.addr["loot"][index], 1)
     await self.tick()
     self.assertIn(
-      self.loc(f"Pickpocket {loot}"),
+      self.loc(pickpocket_location(loot)),
       self.ctx.sent_cmds("LocationChecks")[-1]["locations"]
     )
     self.assertTrue(self.ctx.loot_dirty)
@@ -1355,8 +1378,8 @@ class TestOnPackage(ClientTestBase):
 
   async def test_connected_populates_state(self) -> None:
     self.ctx.checked_locations = {
-      self.loc("ThiefNet 01"),
-      self.loc("The Black Chateau - Vault")
+      self.loc(thiefnet_location(1)),
+      self.loc(vault_location(EpisodeName.THE_BLACK_CHATEAU))
     }
     scheduled = self.run_package("Connected", {"slot_data": self.slot_data})
     await self.drain(scheduled)
@@ -1429,7 +1452,7 @@ class TestTick(ClientTestBase):
     build_dag(self.pine, self.addr)
     set_string_table(self.pine, self.addr, 1)
     set_infobox_pointers(self.pine, self.addr)
-    self.give("Progressive The Black Chateau")
+    self.give(EP1_ITEM)
     self.ctx.server = SimpleNamespace()
 
   def place(self, episode: int, map_id: int) -> None:

@@ -6,6 +6,7 @@ Breaking and Entering (node 10)."""
 import asyncio
 
 from ..data.Locations import location_dict
+from ..data.Names import EpisodeName, job_location
 from ..Sly2Client import _handle_game_ready
 from .harness import E2ETestBase
 from .tick_base import TickTestBase
@@ -89,7 +90,10 @@ class TestJobTick(TickTestBase):
       for code in message["locations"]
     }
     self.assertIn(
-      location_dict["The Black Chateau - Satellite Sabotage"].code, sent
+      location_dict[job_location(
+        EpisodeName.THE_BLACK_CHATEAU, "Satellite Sabotage"
+      )].code,
+      sent
     )
     self.assertEqual(
       self.interface.job_statuses([SECOND_JOB, SECOND_CHAPTER_JOB]),
@@ -104,5 +108,8 @@ class TestJobTick(TickTestBase):
       for code in message["locations"]
     }
     self.assertIn(
-      location_dict["The Black Chateau - Breaking and Entering"].code, sent
+      location_dict[job_location(
+        EpisodeName.THE_BLACK_CHATEAU, "Breaking and Entering"
+      )].code,
+      sent
     )

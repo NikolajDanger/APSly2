@@ -5,6 +5,22 @@ from BaseClasses import Region, CollectionState
 
 from .data.Locations import location_dict
 from .data.Constants import EPISODES, TREASURES, TASKS
+from .data.Names import (
+  MENU_REGION,
+  EpisodeName,
+  ItemCategory,
+  ItemName,
+  bottle_location,
+  bottles_collected_location,
+  episode_region,
+  job_location,
+  pickpocket_location,
+  progressive_episode,
+  task_location,
+  thiefnet_location,
+  treasure_location,
+  vault_location,
+)
 
 if typing.TYPE_CHECKING:
   from . import Sly2World
@@ -17,46 +33,47 @@ def create_access_rule(
   region"""
   def rule(state: CollectionState) -> bool:
     access = True
-    item_name = f"Progressive {episode}"
+    item_name = progressive_episode(episode)
+    parts = ItemCategory.CLOCKWERK_PART
 
-    ep_8 = episode == "Anatomy for Disaster"
+    ep_8 = episode == EpisodeName.ANATOMY_FOR_DISASTER
     keys_mode = options.episode_8_keys.value
     required_keys = options.required_keys_episode_8
 
     if ep_8 and keys_mode == 0:
       access = (
         access and
-        state.count_group("Clockwerk Part", player) >= required_keys and
+        state.count_group(parts, player) >= required_keys and
         state.count(item_name, player) >= n-1
       )
     elif ep_8 and keys_mode == 1 and n == 4:
       access = (
         access and
-        state.count_group("Clockwerk Part", player) >= required_keys and
+        state.count_group(parts, player) >= required_keys and
         state.count(item_name, player) >= n-1
       )
     elif ep_8 and keys_mode == 2:
       access = (
         access and
-        state.count_group("Clockwerk Part", player) >= required_keys
+        state.count_group(parts, player) >= required_keys
       )
     elif ep_8 and keys_mode == 3:
       access = (
         access and
-        state.count_group("Clockwerk Part", player) >=
+        state.count_group(parts, player) >=
         ceil(required_keys.value * n / 4)
       )
     else:
       access = access and state.count(item_name, player) >= n
 
-    if episode == "He Who Tames the Iron Horse" and n >= 3:
-      access = access and state.has("Paraglider", player)
+    if episode == EpisodeName.HE_WHO_TAMES_THE_IRON_HORSE and n >= 3:
+      access = access and state.has(ItemName.PARAGLIDER, player)
 
-    if episode == "Menace from the North, Eh!" and n == 4:
+    if episode == EpisodeName.MENACE_FROM_THE_NORTH_EH and n == 4:
       access = (
         access and
-        state.has("Paraglider", player) and
-        state.has("Alarm Clock", player)
+        state.has(ItemName.PARAGLIDER, player) and
+        state.has(ItemName.ALARM_CLOCK, player)
       )
 
     return access
@@ -65,9 +82,9 @@ def create_access_rule(
 
 def create_regions(world: "Sly2World") -> None:
   """Creates a region for each chapter of each episode"""
-  menu = Region("Menu", world.player, world.multiworld)
+  menu = Region(MENU_REGION, world.player, world.multiworld)
   menu.add_locations({
-    f"ThiefNet {i+1:02}": location_dict[f"ThiefNet {i+1:02}"].code
+    thiefnet_location(i+1): location_dict[thiefnet_location(i+1)].code
     for i in range(24)
   })
 
@@ -75,18 +92,20 @@ def create_regions(world: "Sly2World") -> None:
 
   for i, episode in enumerate(EPISODES.keys()):
     for n in range(1,5):
-      if n == 4 and episode == "Jailbreak":
+      if n == 4 and episode == EpisodeName.JAILBREAK:
         break
 
-      region = Region(f"Episode {i+1} ({n})", world.player, world.multiworld)
-      locations = {
-        f"{episode} - {job}": location_dict[f"{episode} - {job}"].code
-        for job in EPISODES[episode][n-1]
-      }
+      region = Region(
+        episode_region(i+1, n), world.player, world.multiworld
+      )
+      locations = {}
+      for job in EPISODES[episode][n-1]:
+        name = job_location(episode, job)
+        locations[name] = location_dict[name].code
       if world.options.tasksanity:
         for job in EPISODES[episode][n-1]:
           for _, task in TASKS.get(episode, {}).get(job, []):
-            name = f"{episode} - {job} - {task}"
+            name = task_location(episode, job, task)
             locations[name] = location_dict[name].code
       region.add_locations(locations)
 
@@ -102,7 +121,7 @@ def create_regions(world: "Sly2World") -> None:
 
   def add_bottles(episode: str, region: str, n:int) -> None:
     """Adds a location for n bottles collected in a specific episode"""
-    location_name = f"{episode} - {n:02} bottles collected"
+    location_name = bottles_collected_location(episode, n)
     world.get_region(region).add_locations(
       {location_name: location_dict[location_name].code}
     )
@@ -110,8 +129,8 @@ def create_regions(world: "Sly2World") -> None:
   if bottle_n == 1 and bottlesanity:
     for i, episode in enumerate(EPISODES.keys()):
       for n in range(1,31):
-        location_name = f"{episode} - Bottle #{n:02}"
-        world.get_region(f"Episode {i+1} (1)").add_locations(
+        location_name = bottle_location(episode, n)
+        world.get_region(episode_region(i+1, 1)).add_locations(
           {location_name: location_dict[location_name].code}
         )
 
@@ -120,31 +139,32 @@ def create_regions(world: "Sly2World") -> None:
       total_bottles = 0
       while total_bottles+bottle_n <= 30:
         total_bottles += bottle_n
-        add_bottles(episode, f"Episode {i+1} (1)", total_bottles)
+        add_bottles(episode, episode_region(i+1, 1), total_bottles)
 
       if total_bottles < 30:
-        add_bottles(episode, f"Episode {i+1} (1)", 30)
+        add_bottles(episode, episode_region(i+1, 1), 30)
 
 
   def add_vault(episode: str, region: str) -> None:
+    name = vault_location(episode)
     world.get_region(region).add_locations(
-      {f"{episode} - Vault": location_dict[f"{episode} - Vault"].code}
+      {name: location_dict[name].code}
     )
 
   if world.options.include_vaults:
-    add_vault("The Black Chateau", "Episode 1 (2)")
-    add_vault("A Starry Eyed Encounter", "Episode 2 (3)")
-    add_vault("The Predator Awakens", "Episode 3 (2)")
-    add_vault("Jailbreak", "Episode 4 (1)")
-    add_vault("A Tangled Web", "Episode 5 (3)")
-    add_vault("He Who Tames the Iron Horse", "Episode 6 (1)")
-    add_vault("Menace from the North, Eh!", "Episode 7 (2)")
-    add_vault("Anatomy for Disaster", "Episode 8 (2)")
+    add_vault(EpisodeName.THE_BLACK_CHATEAU, episode_region(1, 2))
+    add_vault(EpisodeName.A_STARRY_EYED_ENCOUNTER, episode_region(2, 3))
+    add_vault(EpisodeName.THE_PREDATOR_AWAKENS, episode_region(3, 2))
+    add_vault(EpisodeName.JAILBREAK, episode_region(4, 1))
+    add_vault(EpisodeName.A_TANGLED_WEB, episode_region(5, 3))
+    add_vault(EpisodeName.HE_WHO_TAMES_THE_IRON_HORSE, episode_region(6, 1))
+    add_vault(EpisodeName.MENACE_FROM_THE_NORTH_EH, episode_region(7, 2))
+    add_vault(EpisodeName.ANATOMY_FOR_DISASTER, episode_region(8, 2))
 
   for i, (ep, t) in enumerate(TREASURES.items()):
     for treasure in t:
-      location_name = f"{ep} - {treasure[0]}"
-      region = f"Episode {i+1} ({treasure[1]})"
+      location_name = treasure_location(ep, treasure[0])
+      region = episode_region(i+1, treasure[1])
       world.get_region(region).add_locations(
         {location_name: location_dict[location_name].code}
       )
@@ -155,14 +175,16 @@ def create_regions(world: "Sly2World") -> None:
     # can be accessed if the player has access to any 1 of the "base regions"
     hybrid_region_names = []
     for loot, eps in world.loot_table.items():
-      location_name = f"Pickpocket {loot}"
+      location_name = pickpocket_location(loot)
       if (
         getattr(world.multiworld, "generation_is_fake", False)
         and not world.fuzzing
       ):
-        regions = sorted(set(f"Episode {i} (1)" for i,_,_ in eps))
+        regions = sorted(set(episode_region(i, 1) for i,_,_ in eps))
       else:
-        regions = sorted(set(f"Episode {i} ({ceil(j/2)})" for i,_,j in eps))
+        regions = sorted(set(
+          episode_region(i, ceil(j/2)) for i,_,j in eps
+        ))
 
       region_name = "/".join(regions)
 

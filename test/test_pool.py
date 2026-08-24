@@ -8,9 +8,17 @@ from ..data.Items import (
   Trap,
   ordered_group,
 )
+from ..data.Names import (
+  EpisodeName,
+  ItemCategory,
+  ItemName,
+  bottle_item,
+  parse_progressive_episode,
+  progressive_episode,
+)
 from . import Sly2TestBase
 
-EP8 = "Progressive Anatomy for Disaster"
+EP8 = progressive_episode(EpisodeName.ANATOMY_FOR_DISASTER)
 
 
 class PoolTestBase(Sly2TestBase):
@@ -32,9 +40,11 @@ class TestDefaultPool(PoolTestBase):
     precollected = [
       item.name for item in self.multiworld.precollected_items[self.player]
     ]
-    self.assertEqual(precollected, ["Progressive Jailbreak"])
-    self.assertEqual(self.pool_names()["Progressive Jailbreak"], 2)
-    self.assertEqual(self.pool_names()["Progressive The Black Chateau"], 4)
+    jailbreak = progressive_episode(EpisodeName.JAILBREAK)
+    chateau = progressive_episode(EpisodeName.THE_BLACK_CHATEAU)
+    self.assertEqual(precollected, [jailbreak])
+    self.assertEqual(self.pool_names()[jailbreak], 2)
+    self.assertEqual(self.pool_names()[chateau], 4)
 
   def test_default_episode_8(self) -> None:
     self.assertEqual(self.pool_names()[EP8], 3)
@@ -45,9 +55,9 @@ class TestDefaultPool(PoolTestBase):
 
   def test_optional_powerups_absent(self) -> None:
     names = self.pool_names()
-    for name in ["TOM", "Mega Jump", "Time Rush"]:
+    for name in [ItemName.TOM, ItemName.MEGA_JUMP, ItemName.TIME_RUSH]:
       self.assertNotIn(name, names)
-    self.assertIn("Paraglider", names)
+    self.assertIn(ItemName.PARAGLIDER, names)
 
 
 class TestOptionalPowerups(PoolTestBase):
@@ -59,7 +69,7 @@ class TestOptionalPowerups(PoolTestBase):
 
   def test_present(self) -> None:
     names = self.pool_names()
-    for name in ["TOM", "Mega Jump", "Time Rush"]:
+    for name in [ItemName.TOM, ItemName.MEGA_JUMP, ItemName.TIME_RUSH]:
       self.assertEqual(names[name], 1)
 
 
@@ -143,10 +153,10 @@ class TestBottleBundles(PoolTestBase):
 
   def test_bundle_counts(self) -> None:
     names = self.pool_names()
-    for ep in ordered_group("Episode"):
-      ep = ep.removeprefix("Progressive ")
-      self.assertEqual(names[f"7 bottles - {ep}"], 4)
-      self.assertEqual(names[f"2 bottles - {ep}"], 1)
+    for ep in ordered_group(ItemCategory.EPISODE):
+      ep = parse_progressive_episode(ep)
+      self.assertEqual(names[bottle_item(7, ep)], 4)
+      self.assertEqual(names[bottle_item(2, ep)], 1)
     self.assert_pool_fills_locations()
 
 
@@ -158,9 +168,9 @@ class TestSingleBottles(PoolTestBase):
 
   def test_thirty_per_episode(self) -> None:
     names = self.pool_names()
-    for ep in ordered_group("Episode"):
-      ep = ep.removeprefix("Progressive ")
-      self.assertEqual(names[f"Bottle - {ep}"], 30)
+    for ep in ordered_group(ItemCategory.EPISODE):
+      ep = parse_progressive_episode(ep)
+      self.assertEqual(names[bottle_item(1, ep)], 30)
     self.assert_pool_fills_locations()
 
 
@@ -184,7 +194,7 @@ class TestTrapsWithoutWeights(PoolTestBase):
     names = self.pool_names()
     for trap in Trap:
       self.assertNotIn(trap.item_name, names)
-    self.assertIn("Coins", names)
+    self.assertIn(ItemName.COINS, names)
     self.assert_pool_fills_locations()
 
 

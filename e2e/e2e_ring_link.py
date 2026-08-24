@@ -8,6 +8,7 @@ import time
 from NetUtils import NetworkItem
 
 from ..data.Items import item_dict
+from ..data.Names import ItemName
 from ..Sly2Client import _handle_game_ready
 from .tick_base import TickTestBase
 
@@ -69,7 +70,7 @@ class TestRingLinkTick(TickTestBase):
     self.assertEqual(self.interface.get_coins(), 0)
 
     self.ctx.items_received.append(
-      NetworkItem(item_dict["Coins"].code, -1, 1)
+      NetworkItem(item_dict[ItemName.COINS].code, -1, 1)
     )
     deadline = time.monotonic() + 15.0
     while time.monotonic() < deadline and len(self.bounces()) < 2:

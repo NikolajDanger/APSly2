@@ -4,6 +4,7 @@ client's vault location check and goal completion ticks."""
 from NetUtils import ClientStatus
 
 from ..data.Locations import location_dict
+from ..data.Names import EpisodeName, vault_location
 from .harness import E2ETestBase
 from .tick_base import TickTestBase
 
@@ -62,7 +63,9 @@ class TestVaultTick(TickTestBase):
       for message in self.ctx.sent_cmds("LocationChecks")
       for code in message["locations"]
     }
-    self.assertIn(location_dict["The Black Chateau - Vault"].code, sent)
+    self.assertIn(
+      location_dict[vault_location(EpisodeName.THE_BLACK_CHATEAU)].code, sent
+    )
     self.assertFalse(self.ctx.goal_sent)
 
 

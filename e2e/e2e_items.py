@@ -9,14 +9,18 @@ from NetUtils import NetworkItem
 
 from ..data.Constants import MEGA_JUMP_GADGET_ID
 from ..data.Items import item_dict
+from ..data.Names import EpisodeName, ItemName, bottle_item, \
+  progressive_episode
 from ..Sly2Client import _handle_game_ready
 from ..Sly2Interface import INFOBOX_CLIENT_STRING, PowerUps, Sly2Episode
 from .harness import POLL_INTERVAL
 from .tick_base import TickTestBase
 
 ITEMS = [
-  "Progressive The Black Chateau", "Paraglider", "Trigger Bomb", "Mega Jump",
-  "Bottle - The Black Chateau", "Bottle - The Black Chateau", "Coins"
+  progressive_episode(EpisodeName.THE_BLACK_CHATEAU), ItemName.PARAGLIDER,
+  ItemName.TRIGGER_BOMB, ItemName.MEGA_JUMP,
+  bottle_item(1, EpisodeName.THE_BLACK_CHATEAU),
+  bottle_item(1, EpisodeName.THE_BLACK_CHATEAU), ItemName.COINS
 ]
 # trigger_bomb is bit 7 of byte 0; paraglide and mega_jump are bits 3 and 7
 # of byte 3 (fields 20 and 24, offset by the 7 leading pad bits).
@@ -65,7 +69,7 @@ class TestItemsTick(TickTestBase):
       ),
       "Bottles Collected: 0"
     )
-    self.assertEqual(self.ctx.inventory[item_dict["Paraglider"].code], 1)
+    self.assertEqual(self.ctx.inventory[item_dict[ItemName.PARAGLIDER].code], 1)
 
     slot_data = self.ctx.slot_data
     assert slot_data is not None

@@ -3,6 +3,7 @@ from typing import Any
 from unittest.mock import patch
 
 from .. import Sly2Client
+from ..data.Names import clockwerk_part
 from .client_base import (
   CHARACTER,
   ClientTestBase,
@@ -94,7 +95,10 @@ class TestClockwerkParts(CommandTestBase):
     self.slot_data["episode_8_keys"] = 1
     self.slot_data["required_keys_episode_8"] = 3
     self.slot_data["required_keys_goal"] = 5
-    self.give("Clockwerk Feather", "Clockwerk Bone", "Clockwerk Screw")
+    self.give(
+      clockwerk_part("Feather"), clockwerk_part("Bone"),
+      clockwerk_part("Screw")
+    )
     with self.assertLogs("Client.Sly2", "INFO") as logs:
       self.cmd._cmd_clockwerk_parts()
     text = "\n".join(logs.output)

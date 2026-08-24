@@ -4,6 +4,7 @@
 from NetUtils import NetworkItem
 
 from ..data.Items import item_dict
+from ..data.Names import EpisodeName, progressive_episode
 from .tick_base import TickTestBase
 
 
@@ -24,7 +25,9 @@ class TestEp8Tick(TickTestBase):
 
   async def test_ticks(self) -> None:
     self.ctx.items_received.append(
-      NetworkItem(item_dict["Progressive Anatomy for Disaster"].code, -1, 1)
+      NetworkItem(item_dict[
+        progressive_episode(EpisodeName.ANATOMY_FOR_DISASTER)
+      ].code, -1, 1)
     )
     await self.run_ticks()
     self.assertTrue(self.ctx.in_hub)

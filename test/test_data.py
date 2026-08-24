@@ -16,33 +16,54 @@ from ..data.Constants import (
   TASKS,
   TREASURE_PRICES,
   TREASURES,
+  episode_name,
+  episode_number,
 )
-from ..data.Items import item_dict, ordered_group
+from ..data.Items import item_dict, item_groups, ordered_group
 from ..data.Items import from_id as item_from_id
+from ..data.Names import (
+  EpisodeName,
+  ItemCategory,
+  ItemName,
+  bottle_item,
+  bottle_location,
+  bottles_collected_location,
+  job_location,
+  parse_bottle_item,
+  parse_progressive_episode,
+  progressive_episode,
+  treasure_location,
+)
 from ..data.Locations import location_dict, tasksanity_list
 from ..data.Locations import from_id as location_from_id
-from ..Sly2Interface import PowerUps
+from ..Sly2Interface import PowerUps, Sly2Episode
 from ..Sly2Options import BottleItemBundleSize
 
 GAME_ID = "SCUS-97316"
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 RULE_LOCATIONS = [
-  "A Tangled Web - Crystal Vase",
-  "A Tangled Web - Operation: High Road",
-  "He Who Tames the Iron Horse - Spice in the Sky",
-  "He Who Tames the Iron Horse - Ride the Iron Horse",
-  "Menace from the North, Eh! - Thermal Ride",
-  "Menace from the North, Eh! - Bottle #04",
-  "Menace from the North, Eh! - Jeweled Chalice",
-  "Anatomy for Disaster - Bottle #03",
-  "Menace from the North, Eh! - 30 bottles collected",
-  "Anatomy for Disaster - 30 bottles collected",
-  "The Black Chateau - Operation: Thunder Beak",
-  "The Predator Awakens - Operation: Wet Tiger",
-  "A Tangled Web - Operation: High Road",
-  "Menace from the North, Eh! - Operation: Canada Games",
-  "Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la",
+  treasure_location(EpisodeName.A_TANGLED_WEB, "Crystal Vase"),
+  job_location(EpisodeName.A_TANGLED_WEB, "Operation: High Road"),
+  job_location(EpisodeName.HE_WHO_TAMES_THE_IRON_HORSE, "Spice in the Sky"),
+  job_location(
+    EpisodeName.HE_WHO_TAMES_THE_IRON_HORSE, "Ride the Iron Horse"
+  ),
+  job_location(EpisodeName.MENACE_FROM_THE_NORTH_EH, "Thermal Ride"),
+  bottle_location(EpisodeName.MENACE_FROM_THE_NORTH_EH, 4),
+  treasure_location(EpisodeName.MENACE_FROM_THE_NORTH_EH, "Jeweled Chalice"),
+  bottle_location(EpisodeName.ANATOMY_FOR_DISASTER, 3),
+  bottles_collected_location(EpisodeName.MENACE_FROM_THE_NORTH_EH, 30),
+  bottles_collected_location(EpisodeName.ANATOMY_FOR_DISASTER, 30),
+  job_location(EpisodeName.THE_BLACK_CHATEAU, "Operation: Thunder Beak"),
+  job_location(EpisodeName.THE_PREDATOR_AWAKENS, "Operation: Wet Tiger"),
+  job_location(EpisodeName.A_TANGLED_WEB, "Operation: High Road"),
+  job_location(
+    EpisodeName.MENACE_FROM_THE_NORTH_EH, "Operation: Canada Games"
+  ),
+  job_location(
+    EpisodeName.ANATOMY_FOR_DISASTER, "Carmelita's Gunner/Defeat Clock-la"
+  ),
 ]
 
 
@@ -133,15 +154,21 @@ class TestLocationNames(unittest.TestCase):
     self.assert_locations(RULE_LOCATIONS)
 
   def test_rule_item_literals(self) -> None:
-    names = set()
+    src = ""
     for module in ("Rules.py", "Regions.py"):
       with open(os.path.join(REPO_ROOT, module)) as f:
-        names |= set(re.findall(r'state\.has\("([^"]+)"', f.read()))
+        src += f.read()
+    self.assertEqual(re.findall(r'state\.has(?:_group)?\("', src), [])
+    names = set(re.findall(r'state\.has\(ItemName\.([A-Z_0-9]+)', src))
+    groups = set(re.findall(
+      r'state\.(?:has_group|count_group)\(ItemCategory\.([A-Z_0-9]+)', src
+    ))
     self.assertTrue(names)
-    missing = [
-      name for name in names if name not in item_dict and name != "Victory"
-    ]
-    self.assertEqual(missing, [])
+    self.assertTrue(groups)
+    for name in names:
+      self.assertIn(getattr(ItemName, name), item_dict)
+    for group in groups:
+      self.assertIn(getattr(ItemCategory, group), item_groups)
 
   def test_bottle_items_cover_bundle_range(self) -> None:
     for ep in EPISODES:
@@ -183,6 +210,44 @@ class TestLootAndPrices(unittest.TestCase):
     self.assertEqual(len(PICKPOCKET_LOOT_TABLE_CHANCES), 100)
     for row in PICKPOCKET_LOOT_TABLE_CHANCES:
       self.assertEqual(len(row), 6)
+
+
+class TestNames(unittest.TestCase):
+  def test_episode_name_number_round_trip(self) -> None:
+    for i in range(1, 9):
+      name = episode_name(i)
+      self.assertEqual(episode_number(name), i)
+      self.assertEqual(
+        Sly2Episode(i).name,
+        name.replace(",", "").replace("!", "").replace(" ", "_")
+      )
+
+  def test_episode_name_constants_are_episode_keys(self) -> None:
+    constants = {
+      value for key, value in vars(EpisodeName).items()
+      if not key.startswith("_")
+    }
+    self.assertEqual(constants, set(EPISODES))
+
+  def test_bottle_item_round_trip(self) -> None:
+    for name, item in item_dict.items():
+      if item.category == ItemCategory.BOTTLES:
+        count, ep = parse_bottle_item(name)
+        self.assertEqual(bottle_item(count, ep), name)
+        self.assertIn(ep, EPISODES)
+
+  def test_progressive_episode_round_trip(self) -> None:
+    for name, item in item_dict.items():
+      if item.category == ItemCategory.EPISODE:
+        ep = parse_progressive_episode(name)
+        self.assertEqual(progressive_episode(ep), name)
+        self.assertIn(ep, EPISODES)
+
+  def test_parsers_reject_other_names(self) -> None:
+    with self.assertRaises(ValueError):
+      parse_bottle_item(ItemName.COINS)
+    with self.assertRaises(ValueError):
+      parse_progressive_episode(ItemName.COINS)
 
 
 class TestPowerUps(unittest.TestCase):

@@ -1,5 +1,7 @@
+from .Names import EpisodeName, job_location
+
 EPISODES = {
-  "The Black Chateau": [
+  EpisodeName.THE_BLACK_CHATEAU: [
     [
       "Satellite Sabotage",
       "Breaking and Entering",
@@ -20,7 +22,7 @@ EPISODES = {
     ],
 
   ],
-  "A Starry Eyed Encounter": [
+  EpisodeName.A_STARRY_EYED_ENCOUNTER: [
     [
       "Recon the Ballroom",
     ],
@@ -39,7 +41,7 @@ EPISODES = {
       "Operation: Hippo Drop",
     ],
   ],
-  "The Predator Awakens": [
+  EpisodeName.THE_PREDATOR_AWAKENS: [
     [
       "Spice Room Recon",
     ],
@@ -58,7 +60,7 @@ EPISODES = {
       "Operation: Wet Tiger"
     ],
   ],
-  "Jailbreak": [
+  EpisodeName.JAILBREAK: [
     [
       "Eavesdrop on Contessa",
       "Train Hack",
@@ -75,7 +77,7 @@ EPISODES = {
       "Operation: Trojan Tank",
     ],
   ],
-  "A Tangled Web": [
+  EpisodeName.A_TANGLED_WEB: [
     [
       "Know Your Enemy",
     ],
@@ -93,7 +95,7 @@ EPISODES = {
       "Operation: High Road",
     ],
   ],
-  "He Who Tames the Iron Horse": [
+  EpisodeName.HE_WHO_TAMES_THE_IRON_HORSE: [
     [
       "Cabin Crimes",
     ],
@@ -111,7 +113,7 @@ EPISODES = {
       "Operation: Choo-Choo",
     ],
   ],
-  "Menace from the North, Eh!": [
+  EpisodeName.MENACE_FROM_THE_NORTH_EH: [
     [
       "Recon the Sawmill",
     ],
@@ -130,7 +132,7 @@ EPISODES = {
       "Operation: Canada Games"
     ],
   ],
-  "Anatomy for Disaster": [
+  EpisodeName.ANATOMY_FOR_DISASTER: [
     [
       "Blimp HQ Recon",
     ],
@@ -152,25 +154,32 @@ EPISODES = {
 def episode_key(name: str) -> str:
   return name.lower().replace(",", "").replace("!", "").replace(" ", "_")
 
+def episode_name(number: int) -> str:
+  """Episode name for episode number."""
+  return list(EPISODES)[number - 1]
+
+def episode_number(name: str) -> int:
+  return list(EPISODES).index(name) + 1
+
 # Each single-boss Goal (option values 0-4) turns one operation's location into
 # the Victory event, in this order. The slug names the pair of
 # tracker/locations/operations/<slug>_{normal,goal}.json map files, which split
 # that operation's goal marker off the shared square so the two don't overlap.
 BOSS_GOALS = [
-  ("The Black Chateau", "thunder_beak"),
-  ("The Predator Awakens", "wet_tiger"),
-  ("A Tangled Web", "high_road"),
-  ("Menace from the North, Eh!", "canada_games"),
-  ("Anatomy for Disaster", "carmelitas_gunner"),
+  (EpisodeName.THE_BLACK_CHATEAU, "thunder_beak"),
+  (EpisodeName.THE_PREDATOR_AWAKENS, "wet_tiger"),
+  (EpisodeName.A_TANGLED_WEB, "high_road"),
+  (EpisodeName.MENACE_FROM_THE_NORTH_EH, "canada_games"),
+  (EpisodeName.ANATOMY_FOR_DISASTER, "carmelitas_gunner"),
 ]
 
 def boss_victory_location(episode: str) -> str:
-  return f"{episode} - {EPISODES[episode][-1][-1]}"
+  return job_location(episode, EPISODES[episode][-1][-1])
 
 # TaskSanity per-task checks: {episode: {job: [(dag_node_index, task_name)]}}.
 # Episode/job names key into EPISODES; jobs with no task checks are omitted.
 TASKS = {
-  "The Black Chateau": {
+  EpisodeName.THE_BLACK_CHATEAU: {
     "Satellite Sabotage": [
       (5, "Satellite Dish 1"), (6, "Satellite Dish 2"),
       (7, "Satellite Dish 3"),
@@ -198,7 +207,7 @@ TASKS = {
       (87, "Valves"), (88, "Truck Keys"), (93, "Sign Destruction"),
     ],
   },
-  "A Starry Eyed Encounter": {
+  EpisodeName.A_STARRY_EYED_ENCOUNTER: {
     "Recon the Ballroom": [
       (4, "Picture (Winch)"), (5, "Picture (Wing 1)"),
       (6, "Picture (Wing 2)"), (7, "Picture (Rajan)"),
@@ -233,7 +242,7 @@ TASKS = {
       (85, "Bridge Support 17"), (89, "Dance"),
     ],
   },
-  "The Predator Awakens": {
+  EpisodeName.THE_PREDATOR_AWAKENS: {
     "Spice Room Recon": [
       (7, "Picture (Clockwerk's Heart)"),
       (8, "Picture (Crane Controls)"), (9, "Picture (Entrance)"),
@@ -262,7 +271,7 @@ TASKS = {
       (72, "Protect Murray"), (75, "Flood the Palace"),
     ],
   },
-  "Jailbreak": {
+  EpisodeName.JAILBREAK: {
     "Train Hack": [
       (9, "Terminal 1"), (11, "Terminal 2"), (13, "Terminal 3"),
       (15, "Terminal 4"), (17, "Terminal 5"), (19, "Terminal 6"),
@@ -293,7 +302,7 @@ TASKS = {
       (100, "Hypno-box 4"), (105, "Lift Levers"),
     ],
   },
-  "A Tangled Web": {
+  EpisodeName.A_TANGLED_WEB: {
     "Know Your Enemy": [
       (2, "Picture (Neyla's HQ)"), (3, "Picture (Tank)"),
       (4, "Picture (Blimp)"), (5, "Picture (Boat)"),
@@ -330,7 +339,7 @@ TASKS = {
       (96, "Stop Carmelita"),
     ],
   },
-  "He Who Tames the Iron Horse": {
+  EpisodeName.HE_WHO_TAMES_THE_IRON_HORSE: {
     "Cabin Crimes": [
       (3, "Picture (Iron Horse 3)"), (4, "Picture (Iron Horse 2)"),
       (5, "Picture (Iron Horse 1)"), (7, "Iron Horse Blueprints 1"),
@@ -351,7 +360,7 @@ TASKS = {
       (63, "Defeat Neyla 1"), (68, "Defeat Neyla 2"),
     ],
   },
-  "Menace from the North, Eh!": {
+  EpisodeName.MENACE_FROM_THE_NORTH_EH: {
     "Recon the Sawmill": [
       (3, "Picture (Jean Bison's House)"), (4, "Picture (Boat)"),
       (5, "Picture (Bear)"), (6, "Picture (Sawmill Blades)"),
@@ -394,7 +403,7 @@ TASKS = {
       (107, "Spinning Logs"), (110, "Sabotage Spinning Logs"),
     ],
   },
-  "Anatomy for Disaster": {
+  EpisodeName.ANATOMY_FOR_DISASTER: {
     "Blimp HQ Recon": [
       (5, "Picture (Eggs)"), (6, "Picture (Clockwerk)"),
       (7, "Picture (Electro-platform)"), (10, "Picture (Neyla)"),
@@ -431,42 +440,42 @@ TASKS = {
 }
 
 TREASURES = {
-  "The Black Chateau": [
+  EpisodeName.THE_BLACK_CHATEAU: [
     ("Jade Vase", 2),
     ("Ivory Jewel Box", 2),
     ("Crystal Chalice", 2),
   ],
-  "A Starry Eyed Encounter": [
+  EpisodeName.A_STARRY_EYED_ENCOUNTER: [
     ("Ancestral Kite", 1),
     ("Burial Urn", 1),
     ("Ming Vase", 1),
   ],
-  "The Predator Awakens": [
+  EpisodeName.THE_PREDATOR_AWAKENS: [
     ("Gilded Scepter", 1),
     ("Golden Scroll Case", 1),
     ("Crystal Flask", 1),
   ],
-  "Jailbreak": [
+  EpisodeName.JAILBREAK: [
     ("Golden Orb", 1),
     ("Crystal Ball", 1),
     ("Ceremonial Lantern", 1),
   ],
-  "A Tangled Web": [
+  EpisodeName.A_TANGLED_WEB: [
     ("Jeweled Crown", 1),
     ("Royal Tiara", 1),
     ("Crystal Vase", 1),
   ],
-  "He Who Tames the Iron Horse": [
+  EpisodeName.HE_WHO_TAMES_THE_IRON_HORSE: [
     ("Crystal Bell", 1),
     ("Alabaster Chalice", 1),
     ("Golden Plate", 1),
   ],
-  "Menace from the North, Eh!": [
+  EpisodeName.MENACE_FROM_THE_NORTH_EH: [
     ("Jeweled Chalice", 1),
     ("Collectible Plate", 1),
     ("Jade Decanter", 1),
   ],
-  "Anatomy for Disaster": [
+  EpisodeName.ANATOMY_FOR_DISASTER: [
     ("Golden Headdress", 1),
     ("Jeweled Egg", 1),
     ("Golden Vase", 1),

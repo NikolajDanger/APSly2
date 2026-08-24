@@ -4,6 +4,13 @@ from enum import Enum
 from BaseClasses import Item, ItemClassification
 
 from .Constants import EPISODES
+from .Names import (
+  ItemCategory,
+  ItemName,
+  bottle_item,
+  clockwerk_part,
+  progressive_episode,
+)
 
 class Sly2Item(Item):
   game: str = "Sly 2: Band of Thieves"
@@ -42,70 +49,75 @@ class Sly2ItemData(NamedTuple):
 # with multiworlds generated with a version with a different order of items.
 
 filler_list = [
-  ("Coins",                   ItemClassification.filler,      "Filler"),
+  (ItemName.COINS, ItemClassification.filler, ItemCategory.FILLER),
 ]
 
 sly_powerups = [
-  ("Smoke Bomb",              ItemClassification.useful,      "Power-Up"),
-  ("Combat Dodge",            ItemClassification.useful,      "Power-Up"),
-  ("Stealth Slide",           ItemClassification.useful,      "Power-Up"),
-  ("Alarm Clock",             ItemClassification.progression, "Power-Up"),
-  ("Paraglider",              ItemClassification.progression, "Power-Up"),
-  ("Silent Obliteration",     ItemClassification.useful,      "Power-Up"),
-  ("Thief Reflexes",          ItemClassification.useful,      "Power-Up"),
-  ("Feral Pounce",            ItemClassification.progression, "Power-Up"),
-  ("Knockout Dive",           ItemClassification.useful,      "Power-Up"),
-  ("Insanity Strike",         ItemClassification.useful,      "Power-Up"),
-  ("Voltage Attack",          ItemClassification.useful,      "Power-Up"),
-  ("Long Toss",               ItemClassification.useful,      "Power-Up"),
-  ("Rage Bomb",               ItemClassification.useful,      "Power-Up"),
-  ("Music Box",               ItemClassification.useful,      "Power-Up"),
-  ("Lightning Spin",          ItemClassification.useful,      "Power-Up"),
-  ("Shadow Power",            ItemClassification.useful,      "Power-Up"),
-  ("TOM",                     ItemClassification.useful,      "Power-Up"),
-  ("Mega Jump",               ItemClassification.progression, "Power-Up"),
-  ("Time Rush",               ItemClassification.useful,      "Power-Up"),
+  (ItemName.SMOKE_BOMB,           ItemClassification.useful),
+  (ItemName.COMBAT_DODGE,         ItemClassification.useful),
+  (ItemName.STEALTH_SLIDE,        ItemClassification.useful),
+  (ItemName.ALARM_CLOCK,          ItemClassification.progression),
+  (ItemName.PARAGLIDER,           ItemClassification.progression),
+  (ItemName.SILENT_OBLITERATION,  ItemClassification.useful),
+  (ItemName.THIEF_REFLEXES,       ItemClassification.useful),
+  (ItemName.FERAL_POUNCE,         ItemClassification.progression),
+  (ItemName.KNOCKOUT_DIVE,        ItemClassification.useful),
+  (ItemName.INSANITY_STRIKE,      ItemClassification.useful),
+  (ItemName.VOLTAGE_ATTACK,       ItemClassification.useful),
+  (ItemName.LONG_TOSS,            ItemClassification.useful),
+  (ItemName.RAGE_BOMB,            ItemClassification.useful),
+  (ItemName.MUSIC_BOX,            ItemClassification.useful),
+  (ItemName.LIGHTNING_SPIN,       ItemClassification.useful),
+  (ItemName.SHADOW_POWER,         ItemClassification.useful),
+  (ItemName.TOM,                  ItemClassification.useful),
+  (ItemName.MEGA_JUMP,            ItemClassification.progression),
+  (ItemName.TIME_RUSH,            ItemClassification.useful),
 ]
 
 bentley_powerups = [
-  ("Trigger Bomb",            ItemClassification.useful,      "Power-Up"),
-  ("Size Destabilizer",       ItemClassification.useful,      "Power-Up"),
-  ("Snooze Bomb",             ItemClassification.useful,      "Power-Up"),
-  ("Adrenaline Burst",        ItemClassification.useful,      "Power-Up"),
-  ("Health Extractor",        ItemClassification.useful,      "Power-Up"),
-  ("Hover Pack",              ItemClassification.progression, "Power-Up"),
-  ("Reduction Bomb",          ItemClassification.useful,      "Power-Up"),
-  ("Temporal Lock",           ItemClassification.useful,      "Power-Up"),
+  (ItemName.TRIGGER_BOMB,         ItemClassification.useful),
+  (ItemName.SIZE_DESTABILIZER,    ItemClassification.useful),
+  (ItemName.SNOOZE_BOMB,          ItemClassification.useful),
+  (ItemName.ADRENALINE_BURST,     ItemClassification.useful),
+  (ItemName.HEALTH_EXTRACTOR,     ItemClassification.useful),
+  (ItemName.HOVER_PACK,           ItemClassification.progression),
+  (ItemName.REDUCTION_BOMB,       ItemClassification.useful),
+  (ItemName.TEMPORAL_LOCK,        ItemClassification.useful),
 ]
 
 murray_powerups = [
-  ("Fists of Flame",          ItemClassification.useful,      "Power-Up"),
-  ("Turnbuckle Launch",       ItemClassification.progression, "Power-Up"),
-  ("Juggernaut Throw",        ItemClassification.useful,      "Power-Up"),
-  ("Atlas Strength",          ItemClassification.useful,      "Power-Up"),
-  ("Raging Inferno Flop",     ItemClassification.useful,      "Power-Up"),
-  ("Berserker Charge",        ItemClassification.useful,      "Power-Up"),
-  ("Guttural Roar",           ItemClassification.useful,      "Power-Up"),
-  ("Diablo Fire Slam",        ItemClassification.useful,      "Power-Up"),
+  (ItemName.FISTS_OF_FLAME,       ItemClassification.useful),
+  (ItemName.TURNBUCKLE_LAUNCH,    ItemClassification.progression),
+  (ItemName.JUGGERNAUT_THROW,     ItemClassification.useful),
+  (ItemName.ATLAS_STRENGTH,       ItemClassification.useful),
+  (ItemName.RAGING_INFERNO_FLOP,  ItemClassification.useful),
+  (ItemName.BERSERKER_CHARGE,     ItemClassification.useful),
+  (ItemName.GUTTURAL_ROAR,        ItemClassification.useful),
+  (ItemName.DIABLO_FIRE_SLAM,     ItemClassification.useful),
 ]
 
-powerup_list = sly_powerups + bentley_powerups + murray_powerups
+powerup_list = [
+  (name, classification, ItemCategory.POWER_UP)
+  for name, classification in (
+    sly_powerups + bentley_powerups + murray_powerups
+  )
+]
 
 # Clockwerk parts are drawn for the pool in tiers (see gen_clockwerk): core
 # (in-game) parts fill small pools, additional parts join once core runs out,
 # silly parts only join once the pool exceeds 100, and repeatable parts pad
 # whatever's left (weighted toward the iconic Feather) so huge pools aren't one
 # item repeated.
-CLOCKWERK_CORE = [f"Clockwerk {s}" for s in [
+CLOCKWERK_CORE = [clockwerk_part(s) for s in [
   "Tail Feathers", "Wing (Right)", "Wing (Left)", "Heart (Right Half)",
   "Heart (Left Half)", "Eye (Right)", "Eye (Left)", "Lung (Right)",
   "Lung (Left)", "Stomach", "Talons", "Hate Chip", "Brain",
 ]]
-CLOCKWERK_ADDITIONAL = [f"Clockwerk {s}" for s in [
+CLOCKWERK_ADDITIONAL = [clockwerk_part(s) for s in [
   "Beak", "Ribcage", "Skull", "Leg (Right)", "Leg (Left)", "Neck", "Pelvis",
   "Spine", "Jaw",
 ]]
-CLOCKWERK_SILLY = [f"Clockwerk {s}" for s in [
+CLOCKWERK_SILLY = [clockwerk_part(s) for s in [
   "Gizzard", "Wishbone", "Spleen", "Gyroscope", "Power Core", "Servo Motor",
   "Mild Annoyance Chip", "Tongue", "Small Intestines", "Large Intestines",
   "Kidney (Left)", "Kidney (Right)", "Ureter", "Proventriculus", "Cloaca",
@@ -116,12 +128,12 @@ CLOCKWERK_SILLY = [f"Clockwerk {s}" for s in [
 ]]
 # (name, draw weight); Feather is weighted to ~half of the padding.
 CLOCKWERK_REPEATABLE = [
-  ("Clockwerk Feather", 3), ("Clockwerk Bone", 1),
-  ("Clockwerk Screw", 1), ("Clockwerk Cog", 1),
+  (clockwerk_part("Feather"), 3), (clockwerk_part("Bone"), 1),
+  (clockwerk_part("Screw"), 1), (clockwerk_part("Cog"), 1),
 ]
 
 clockwerk_parts_list = [
-  (name,                       ItemClassification.progression, "Clockwerk Part")
+  (name, ItemClassification.progression, ItemCategory.CLOCKWERK_PART)
   for name in (
     CLOCKWERK_CORE + CLOCKWERK_ADDITIONAL + CLOCKWERK_SILLY
     + [n for n, _ in CLOCKWERK_REPEATABLE]
@@ -129,21 +141,22 @@ clockwerk_parts_list = [
 ]
 
 bottle_list = [
-  (f"Bottle - {e}",           ItemClassification.progression, "Bottles")
+  (bottle_item(1, e), ItemClassification.progression, ItemCategory.BOTTLES)
   for e in EPISODES.keys()
 ] + [
-  (f"{i} bottles - {e}",      ItemClassification.progression, "Bottles")
+  (bottle_item(i, e), ItemClassification.progression, ItemCategory.BOTTLES)
   for e in EPISODES.keys() for i in range(2,31)
 ]
 
 progressive_episode_list = [
-  (f"Progressive {e}",        ItemClassification.progression, "Episode")
+  (progressive_episode(e), ItemClassification.progression,
+   ItemCategory.EPISODE)
   for e in EPISODES.keys()
 ]
 
 # Appended last so existing item IDs stay stable.
 trap_list = [
-  (trap.item_name,            ItemClassification.trap,        "Trap")
+  (trap.item_name, ItemClassification.trap, ItemCategory.TRAP)
   for trap in Trap
 ]
 
@@ -166,22 +179,22 @@ item_dict = {
 item_groups = {
   key: {item.name for item in item_dict.values() if item.category == key}
   for key in [
-    "Filler",
-    "Power-Up",
-    "Bottles",
-    "Episode",
-    "Clockwerk Part",
-    "Trap"
+    ItemCategory.FILLER,
+    ItemCategory.POWER_UP,
+    ItemCategory.BOTTLES,
+    ItemCategory.EPISODE,
+    ItemCategory.CLOCKWERK_PART,
+    ItemCategory.TRAP
   ]
 }
 
 item_groups.update({
-  "Episodes":          item_groups["Episode"],
-  "Gadgets":           item_groups["Power-Up"],
-  "Clockwerk Parts":   item_groups["Clockwerk Part"],
-  "Sly's Gadgets":     {name for name, _, _ in sly_powerups},
-  "Bentley's Gadgets": {name for name, _, _ in bentley_powerups},
-  "Murray's Gadgets":  {name for name, _, _ in murray_powerups},
+  "Episodes":          item_groups[ItemCategory.EPISODE],
+  "Gadgets":           item_groups[ItemCategory.POWER_UP],
+  "Clockwerk Parts":   item_groups[ItemCategory.CLOCKWERK_PART],
+  "Sly's Gadgets":     {name for name, _ in sly_powerups},
+  "Bentley's Gadgets": {name for name, _ in bentley_powerups},
+  "Murray's Gadgets":  {name for name, _ in murray_powerups},
 })
 
 def ordered_group(group: str) -> list[str]:

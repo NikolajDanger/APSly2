@@ -8,6 +8,7 @@ from NetUtils import NetworkItem
 
 from ..data.Constants import POWERUP_TEXT
 from ..data.Items import item_dict
+from ..data.Names import ItemName, thiefnet_location
 from ..data.Locations import location_dict
 from ..Sly2Client import _handle_game_ready
 from ..Sly2Interface import PowerUps
@@ -15,11 +16,14 @@ from .harness import E2ETestBase, load_state
 from .tick_base import TickTestBase
 
 SAFEHOUSE_STRINGS = (305, 306, 307, 308)
-SCOUTED = ["Paraglider", "Trigger Bomb", "Mega Jump", "Coins"] * 6
+SCOUTED = [
+  ItemName.PARAGLIDER, ItemName.TRIGGER_BOMB, ItemName.MEGA_JUMP,
+  ItemName.COINS
+] * 6
 
 
 def thiefnet_code(n: int) -> int:
-  return location_dict[f"ThiefNet {n:02}"].code
+  return location_dict[thiefnet_location(n)].code
 
 
 class TestSafehouse(E2ETestBase):

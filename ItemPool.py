@@ -2,10 +2,17 @@ import typing
 
 from BaseClasses import Item
 
-from .data.Constants import EPISODES
+from .data.Constants import EPISODES, episode_name
 from .data.Items import (
   ordered_group, Trap,
   CLOCKWERK_CORE, CLOCKWERK_ADDITIONAL, CLOCKWERK_SILLY, CLOCKWERK_REPEATABLE
+)
+from .data.Names import (
+  EpisodeName,
+  ItemCategory,
+  ItemName,
+  bottle_item,
+  progressive_episode,
 )
 # from .Sly2Options import StartingEpisode
 
@@ -15,11 +22,14 @@ if typing.TYPE_CHECKING:
 def gen_powerups(world: "Sly2World") -> list[Item]:
   """Generate the power-ups for the item pool"""
   powerups = []
-  for item_name in ordered_group("Power-Up"):
+  for item_name in ordered_group(ItemCategory.POWER_UP):
     if (
-      (item_name == "TOM" and not world.options.include_tom) or
-      (item_name == "Mega Jump" and not world.options.include_mega_jump) or
-      (item_name == "Time Rush" and not world.options.include_time_rush)
+      (item_name == ItemName.TOM and
+       not world.options.include_tom) or
+      (item_name == ItemName.MEGA_JUMP and
+       not world.options.include_mega_jump) or
+      (item_name == ItemName.TIME_RUSH and
+       not world.options.include_time_rush)
     ):
       continue
     else:
@@ -30,21 +40,23 @@ def gen_powerups(world: "Sly2World") -> list[Item]:
 def gen_episodes(world: "Sly2World") -> list[Item]:
   """Generate the progressive episodes items for the item pool"""
   all_episodes = [
-    item_name for item_name in ordered_group("Episode")
+    item_name for item_name in ordered_group(ItemCategory.EPISODE)
     for _ in range(4)
   ]
-  all_episodes.remove("Progressive Jailbreak") # Jailbreak only has 3 chapters
+  progressive_ep_8 = progressive_episode(EpisodeName.ANATOMY_FOR_DISASTER)
+  # Jailbreak only has 3 chapters
+  all_episodes.remove(progressive_episode(EpisodeName.JAILBREAK))
   if world.options.episode_8_keys in [0,1,2,3]:
-    all_episodes.remove("Progressive Anatomy for Disaster")
+    all_episodes.remove(progressive_ep_8)
 
   if world.options.episode_8_keys in [2,3]:
-    all_episodes.remove("Progressive Anatomy for Disaster")
-    all_episodes.remove("Progressive Anatomy for Disaster")
-    all_episodes.remove("Progressive Anatomy for Disaster")
+    all_episodes.remove(progressive_ep_8)
+    all_episodes.remove(progressive_ep_8)
+    all_episodes.remove(progressive_ep_8)
 
   # Make sure the starting episode is precollected
   starting_episode_n = world.options.starting_episode.value
-  starting_episode = f"Progressive {list(EPISODES.keys())[starting_episode_n]}"
+  starting_episode = progressive_episode(episode_name(starting_episode_n + 1))
   all_episodes.remove(starting_episode)
   world.multiworld.push_precollected(world.create_item(starting_episode))
 
@@ -102,19 +114,10 @@ def gen_bottles(world: "Sly2World") -> list[Item]:
     total_bottles = 30
     while total_bottles >= bottle_n:
       total_bottles -= bottle_n
-      if bottle_n == 1:
-        item_name = f"Bottle - {ep}"
-      else:
-        item_name = f"{bottle_n} bottles - {ep}"
-
-      bottles.append(world.create_item(item_name))
+      bottles.append(world.create_item(bottle_item(bottle_n.value, ep)))
 
     if total_bottles > 0:
-      if total_bottles == 1:
-        item_name = f"Bottle - {ep}"
-      else:
-        item_name = f"{total_bottles} bottles - {ep}"
-      bottles.append(world.create_item(item_name))
+      bottles.append(world.create_item(bottle_item(total_bottles, ep)))
 
   return bottles
 

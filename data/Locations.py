@@ -1,6 +1,18 @@
 from typing import NamedTuple
 
 from .Constants import EPISODES, TREASURES, LOOT, TASKS
+from .Names import (
+  LocationCategory,
+  bottle_location,
+  bottles_collected_location,
+  episode_location_prefix,
+  job_location,
+  pickpocket_location,
+  task_location,
+  thiefnet_location,
+  treasure_location,
+  vault_location,
+)
 
 class Sly2LocationData(NamedTuple):
   name: str
@@ -8,44 +20,44 @@ class Sly2LocationData(NamedTuple):
   category: str
 
 jobs_list = [
-  (f"{ep} - {job}",       "Job")
+  (job_location(ep, job), LocationCategory.JOB)
   for ep, chapters in EPISODES.items()
   for jobs in chapters for job in jobs
 ]
 
 vaults_list = [
-  (f"{ep} - Vault",        "Vault")
+  (vault_location(ep), LocationCategory.VAULT)
   for ep in EPISODES.keys()
 ]
 
 treasures_list = [
-  (f"{ep} - {treasure[0]}",  "Treasure")
+  (treasure_location(ep, treasure[0]), LocationCategory.TREASURE)
   for ep, t in TREASURES.items()
   for treasure in t
 ]
 
 bottles_list = [
-  (f"{ep} - {i:02} bottles collected", "Bottle")
+  (bottles_collected_location(ep, i), LocationCategory.BOTTLE)
   for ep in EPISODES.keys()
   for i in range(1,31)
 ] + [
-  (f"{ep} - Bottle #{i:02}", "Bottle")
+  (bottle_location(ep, i), LocationCategory.BOTTLE)
   for ep in EPISODES.keys()
   for i in range(1,31)
 ]
 
 purchases_list = [
-  (f"ThiefNet {i+1:02}", "Purchase")
+  (thiefnet_location(i+1), LocationCategory.PURCHASE)
   for i in range(24)
 ]
 
 pickpocket_list = [
-  (f"Pickpocket {loot}", "Pickpocket")
+  (pickpocket_location(loot), LocationCategory.PICKPOCKET)
   for loot in LOOT.keys()
 ]
 
 tasksanity_list = [
-  (f"{ep} - {job} - {task}", "Task")
+  (task_location(ep, job, task), LocationCategory.TASK)
   for ep, jobs in TASKS.items()
   for job, tasks in jobs.items()
   for _, task in tasks
@@ -75,27 +87,27 @@ location_groups = {
     if location.category == key
   }
   for key in [
-    "Job",
-    "Bottle",
-    "Vault",
-    "Treasure",
-    "Purchase",
-    "Pickpocket",
-    "Task"
+    LocationCategory.JOB,
+    LocationCategory.BOTTLE,
+    LocationCategory.VAULT,
+    LocationCategory.TREASURE,
+    LocationCategory.PURCHASE,
+    LocationCategory.PICKPOCKET,
+    LocationCategory.TASK
   ]
 }
 
 location_groups.update({
-  "Jobs":            location_groups["Job"],
-  "Bottles":         location_groups["Bottle"],
-  "Vaults":          location_groups["Vault"],
-  "Treasures":       location_groups["Treasure"],
-  "Loot":            location_groups["Pickpocket"],
-  "Pickpocket Loot": location_groups["Pickpocket"],
-  "ThiefNet":        location_groups["Purchase"],
-  "Tasks":           location_groups["Task"],
+  "Jobs":            location_groups[LocationCategory.JOB],
+  "Bottles":         location_groups[LocationCategory.BOTTLE],
+  "Vaults":          location_groups[LocationCategory.VAULT],
+  "Treasures":       location_groups[LocationCategory.TREASURE],
+  "Loot":            location_groups[LocationCategory.PICKPOCKET],
+  "Pickpocket Loot": location_groups[LocationCategory.PICKPOCKET],
+  "ThiefNet":        location_groups[LocationCategory.PURCHASE],
+  "Tasks":           location_groups[LocationCategory.TASK],
   "Operations": {
-    f"{ep} - {chapters[-1][-1]}"
+    job_location(ep, chapters[-1][-1])
     for ep, chapters in EPISODES.items()
   },
 })
@@ -103,7 +115,7 @@ location_groups.update({
 for ep in EPISODES:
   location_groups[ep] = {
     loc.name for loc in location_dict.values()
-    if loc.name.startswith(f"{ep} - ")
+    if loc.name.startswith(episode_location_prefix(ep))
   }
 
 def from_id(location_id: int) -> Sly2LocationData:

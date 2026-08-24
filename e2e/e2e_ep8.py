@@ -9,6 +9,7 @@ from ..data.Constants import (
   SLY_BACK_NODE, SLY_USER_BIT
 )
 from ..data.Items import item_dict
+from ..data.Names import EpisodeName, progressive_episode
 from ..pcsx2_interface.pine import Pine
 from ..Sly2Interface import Sly2Interface, in_ee_ram
 from .harness import E2ETestBase
@@ -93,7 +94,9 @@ class TestEp8PackTick(PackReads, TickTestBase):
 
   async def test_ticks(self) -> None:
     self.ctx.items_received.append(
-      NetworkItem(item_dict["Progressive Anatomy for Disaster"].code, -1, 1)
+      NetworkItem(item_dict[
+        progressive_episode(EpisodeName.ANATOMY_FOR_DISASTER)
+      ].code, -1, 1)
     )
     pedestal = self.pedestals()[0] + PEDESTAL_USERS
     self.pine.write_int32(pedestal, 6)

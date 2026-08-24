@@ -11,6 +11,7 @@ from typing import Any
 from NetUtils import NetworkItem, NetworkPlayer, NetworkSlot, SlotType
 
 from ..data.Items import item_dict
+from ..data.Names import EpisodeName, progressive_episode
 from ..Sly2Client import Sly2Context, _handle_game_ready
 from ..Sly2Interface import Sly2Episode
 from ..test.client_base import RecordingContext, make_slot_data
@@ -42,7 +43,9 @@ class TickTestBase(unittest.IsolatedAsyncioTestCase):
     self.ctx.slot_data = make_slot_data(**self.options)
     self.ctx.reset_world_state()
     self.ctx.items_received.append(
-      NetworkItem(item_dict["Progressive The Black Chateau"].code, -1, 1)
+      NetworkItem(item_dict[
+        progressive_episode(EpisodeName.THE_BLACK_CHATEAU)
+      ].code, -1, 1)
     )
     self.ctx.server = SimpleNamespace()
 

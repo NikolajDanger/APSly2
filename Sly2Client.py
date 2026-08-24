@@ -13,6 +13,13 @@ import Utils
 
 from .data import Locations, Items
 from .data.Constants import EPISODES, TASKS, ENEMIES, episode_key
+from .data.Names import (
+  ItemCategory,
+  LocationCategory,
+  pickpocket_location,
+  thiefnet_location,
+  vault_location,
+)
 from .Sly2Interface import Sly2Interface, Sly2Episode, PowerUps
 from .Callbacks import (
   init,
@@ -103,7 +110,7 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
     if isinstance(self.ctx, Sly2Context):
       clockwerk_parts = [
         i for i in self.ctx.items_received
-        if Items.from_id(i.item).category == "Clockwerk Part"
+        if Items.from_id(i.item).category == ItemCategory.CLOCKWERK_PART
       ]
       logger.info(f"Clockwerk parts: {len(clockwerk_parts)}")
       if self.ctx.slot_data is None:
@@ -175,7 +182,7 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
     available = compute_available_episodes(self.ctx)
 
     def loot_color(loot_name: str, accessible: bool) -> str:
-      code = Locations.location_dict[f"Pickpocket {loot_name}"].code
+      code = Locations.location_dict[pickpocket_location(loot_name)].code
       if code in self.ctx.checked_locations:
         return "grey"
       return "white" if accessible else "red"
@@ -489,7 +496,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
           loot_odds = loot_odds_row(ctx, episode, j)
           for k, name in enumerate(episode_loot(loot_table, episode, j)):
             text = f"{name} ({loot_odds[k]}%)" if show_odds else name
-            code = Locations.location_dict[f"Pickpocket {name}"].code
+            code = Locations.location_dict[pickpocket_location(name)].code
             if code in ctx.checked_locations:
               text = f"[color=808080]{text}[/color]"
             lines.append(f"  {text}")
@@ -552,13 +559,14 @@ class Sly2Context(CommonContext): # type: ignore[misc]
         )
 
       self.thiefnet_purchases = PowerUps(*[
-        Locations.location_dict[f"ThiefNet {i+1:02}"].code
+        Locations.location_dict[thiefnet_location(i+1)].code
         in self.checked_locations
         for i in range(24)
       ])
 
       self.vaults = [
-        Locations.location_dict[f"{ep} - Vault"].code in self.checked_locations
+        Locations.location_dict[vault_location(ep)].code
+        in self.checked_locations
         for ep in EPISODES.keys()
       ]
 
@@ -578,7 +586,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
         "cmd": "LocationScouts",
         "locations": [
           Locations.location_dict[location].code
-          for location in Locations.location_groups["Purchase"]
+          for location in Locations.location_groups[LocationCategory.PURCHASE]
         ]
       }]))
 

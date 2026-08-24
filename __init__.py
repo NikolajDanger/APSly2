@@ -19,6 +19,7 @@ from .Sly2Options import Sly2Options, StartingEpisode, sly2_option_groups
 from .Regions import create_regions
 from .data.Items import item_dict, item_groups, ordered_group, Sly2Item
 from .data.Locations import location_dict, location_groups, tasksanity_list
+from .data.Names import EpisodeName, ItemCategory, thiefnet_location
 from .data.Constants import (
   EPISODES,
   TASKS,
@@ -372,13 +373,13 @@ class Sly2World(World):
     # from locations collectable before the sections they unlock
     if opt.episode_8_keys.value != 4:
       def ep8_chapter_locations(n: int) -> int:
-        jobs = EPISODES["Anatomy for Disaster"][n-1]
+        jobs = EPISODES[EpisodeName.ANATOMY_FOR_DISASTER][n-1]
         count = len(jobs)
         if opt.tasksanity:
-          tasks = TASKS.get("Anatomy for Disaster", {})
+          tasks = TASKS.get(EpisodeName.ANATOMY_FOR_DISASTER, {})
           count += sum(len(tasks.get(job, [])) for job in jobs)
         count += sum(
-          1 for _, chapter in TREASURES["Anatomy for Disaster"]
+          1 for _, chapter in TREASURES[EpisodeName.ANATOMY_FOR_DISASTER]
           if chapter == n
         )
         if n == 1 and opt.bottle_location_bundle_size != 0:
@@ -400,7 +401,7 @@ class Sly2World(World):
         episode_items -= 1
       gadgets = sum(
         1 for item in item_dict.values()
-        if item.category == "Power-Up" and
+        if item.category == ItemCategory.POWER_UP and
         item.classification == ItemClassification.progression
       )
       capacity = n_locations - sum(chapters) - episode_items - gadgets
@@ -579,7 +580,7 @@ class Sly2World(World):
 
   def get_filler_item_name(self) -> str:
     # Currently just coins
-    return self.random.choice(ordered_group("Filler"))
+    return self.random.choice(ordered_group(ItemCategory.FILLER))
 
   def create_regions(self) -> None:
     create_regions(self)
@@ -667,7 +668,7 @@ class Sly2World(World):
         spoiler_text += "\n- " + message.replace("\n", " ")
     spoiler_text += f"\n====== Sly 2 ({name}) ThiefNet Costs ======"
     thiefnet_cost_text = "\n".join(
-      f"- ThiefNet {i+1:02}: {cost} coins"
+      f"- {thiefnet_location(i+1)}: {cost} coins"
       for i, cost in enumerate(self.thiefnet_costs)
     )
     spoiler_text += "\n"+thiefnet_cost_text

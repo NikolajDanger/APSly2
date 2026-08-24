@@ -19,7 +19,24 @@ from .data.Constants import (
   LOOT,
   PICKPOCKET_LOOT_TABLE_CHANCES,
   MEGA_JUMP_GADGET_ID,
-  episode_key
+  episode_key,
+  episode_name,
+  episode_number
+)
+from .data.Names import (
+  ItemCategory,
+  ItemName,
+  bottle_location,
+  bottles_collected_location,
+  job_location,
+  parse_bottle_item,
+  parse_progressive_episode,
+  pickpocket_location,
+  progressive_episode,
+  task_location,
+  thiefnet_location,
+  treasure_location,
+  vault_location,
 )
 from .Sly2Interface import Sly2Episode, PowerUps, INFOBOX_CLIENT_STRING
 
@@ -143,7 +160,7 @@ def dynamic_loot_odds(
     return base_odds
 
   collected = [
-    Locations.location_dict[f"Pickpocket {name}"].code in checked
+    Locations.location_dict[pickpocket_location(name)].code in checked
     for name in names
   ]
   if not any(collected) or all(collected):
@@ -223,7 +240,7 @@ def fix_mega_jump(ctx: 'Sly2Context') -> None:
   transition (unbinds to -1, patched out here) and from the episode 8 level
   script on entry (unbinds to 0, can't be patched), so also re-bind it into
   the first empty slot whenever it's owned but unbound."""
-  mega_jump = Items.item_dict["Mega Jump"].code
+  mega_jump = Items.item_dict[ItemName.MEGA_JUMP].code
   if not (
     ctx.powerups.mega_jump or
     any(i.item == mega_jump for i in ctx.items_received)
@@ -325,7 +342,9 @@ async def set_thiefnet(ctx: 'Sly2Context') -> None:
     info = ctx.locations_info
     ctx.thiefnet_items = []
     for i in range(24):
-      location_info = info[Locations.location_dict[f"ThiefNet {i+1:02}"].code]
+      location_info = info[
+        Locations.location_dict[thiefnet_location(i+1)].code
+      ]
 
       player_name = ctx.player_names[location_info.player]
       item_name = ctx.item_names.lookup_in_slot(
@@ -336,7 +355,8 @@ async def set_thiefnet(ctx: 'Sly2Context') -> None:
       ctx.thiefnet_items.append(string)
 
   ctx.thiefnet_purchases = PowerUps(*[
-    Locations.location_dict[f"ThiefNet {i+1:02}"].code in ctx.checked_locations
+    Locations.location_dict[thiefnet_location(i+1)].code
+    in ctx.checked_locations
     for i in range(24)
   ])
 
@@ -344,7 +364,7 @@ async def set_thiefnet(ctx: 'Sly2Context') -> None:
     await ctx.send_msgs([{
       "cmd": "LocationScouts",
       "locations": [
-        Locations.location_dict[f"ThiefNet {i+1:02}"].code
+        Locations.location_dict[thiefnet_location(i+1)].code
         for i in range(24)
       ],
       "create_as_hint": 2
@@ -536,9 +556,9 @@ def handle_episode_hint(ctx: 'Sly2Context') -> None:
         available < len(completed)))):
     ctx.notification("Collect more Clockwerk parts to unlock the next jobs.")
   else:
-    episode_name = list(EPISODES.keys())[episode-1]
+    item_name = progressive_episode(episode_name(int(episode)))
     ctx.notification(
-      f"Collect another Progressive {episode_name} to unlock the next jobs."
+      f"Collect another {item_name} to unlock the next jobs."
     )
   ctx.episode_hint_shown = True
 
@@ -585,7 +605,7 @@ def compute_available_episodes(ctx: 'Sly2Context') -> dict:
 
   clockwerk_parts = sum(
     1 for i in ctx.items_received
-    if Items.from_id(i.item).category == "Clockwerk Part"
+    if Items.from_id(i.item).category == ItemCategory.CLOCKWERK_PART
   )
   episode_8_keys = ctx.slot_data["episode_8_keys"]
   required = ctx.slot_data["required_keys_episode_8"]
@@ -603,11 +623,11 @@ def compute_available_episodes(ctx: 'Sly2Context') -> dict:
 
   for network_item in ctx.items_received:
     item = Items.from_id(network_item.item)
-    if item.category != "Episode":
+    if item.category != ItemCategory.EPISODE:
       continue
-    episode = Sly2Episode[
-      item.name[12:].replace(" ","_").replace(",","").replace("!","")
-    ]
+    episode = Sly2Episode(
+      episode_number(parse_progressive_episode(item.name))
+    )
     if (
       episode != Sly2Episode.Anatomy_for_Disaster or
       episode_8_keys in [1,4] or
@@ -656,7 +676,7 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
   if len(network_items) != ctx.notified_items:
     clockwerk_parts_count = sum(
       1 for i in network_items
-      if Items.from_id(i.item).category == "Clockwerk Part"
+      if Items.from_id(i.item).category == ItemCategory.CLOCKWERK_PART
     )
     if clockwerk_parts_count != ctx.clockwerk_parts_count:
       ctx.clockwerk_parts_count = clockwerk_parts_count
@@ -669,11 +689,11 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
     if i >= notify_from:
       ctx.inventory[network_item.item] += 1
       ctx.notification(f"Received {item.name} from {player}")
-      rebind = rebind or item.name == "Mega Jump"
+      rebind = rebind or item.name == ItemName.MEGA_JUMP
 
-    if item.category == "Power-Up":
+    if item.category == ItemCategory.POWER_UP:
       # I have strong opinions about this. It should be paraglider
-      if item.name == "Paraglider":
+      if item.name == ItemName.PARAGLIDER:
         item_name = "Paraglide"
       else:
         item_name = item.name
@@ -682,27 +702,17 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
       new_powerups = list(ctx.powerups)
       new_powerups[item_n] = True
       ctx.powerups = PowerUps(*new_powerups)
-    elif item.category == "Bottles":
-      split = item.name.index("-")
-      episode_name = item.name[split+2:]
-      episode = Sly2Episode[
-        # Jean's second episode has a weird name, thus the strange replace.
-        # There's probably a better way to do this, but I don't care enough
-        episode_name.replace(" ","_").replace(",","").replace("!","")
-      ]
-      amount = item.name[:split-1]
-      if amount == "Bottle":
-        count = 1
-      else:
-        count = int(amount[:-8])
-
+    elif item.category == ItemCategory.BOTTLES:
+      count, ep_name = parse_bottle_item(item.name)
+      episode = Sly2Episode(episode_number(ep_name))
       bottles[episode] += count
-    elif item.name == "Coins" and i >= notify_from:
+    elif item.name == ItemName.COINS and i >= notify_from:
       ctx.pending_coins += randint(
         ctx.slot_data["coins_minimum"],
         ctx.slot_data["coins_maximum"]
       )
-    elif item.category == "Trap" and i >= ctx.trap_cursor and not in_safehouse:
+    elif (item.category == ItemCategory.TRAP and i >= ctx.trap_cursor and
+          not in_safehouse):
       activate_trap(ctx, Items.Trap.from_item_name(item.name))
 
   if ctx.current_episode != 0 and not ctx.in_safehouse:
@@ -791,7 +801,7 @@ async def handle_checks(ctx: 'Sly2Context') -> None:
   purchases = list(ctx.thiefnet_purchases)[:24]
   for i, purchased in enumerate(purchases):
     if purchased:
-      location_name = f"ThiefNet {i+1:02}"
+      location_name = thiefnet_location(i+1)
       location_code = Locations.location_dict[location_name].code
       ctx.locations_checked.add(location_code)
 
@@ -804,12 +814,10 @@ async def handle_checks(ctx: 'Sly2Context') -> None:
         continue
 
       bottles = ctx.game_interface.get_bottle_list(ep)
+      ep_name = episode_name(ep.value)
       for i, b in enumerate(bottles):
         if b:
-          episode_name = ep.name.replace('_',' ')
-          if ep.value == 7:
-            episode_name = "Menace from the North, Eh!"
-          location_name = f"{episode_name} - Bottle #{i+1:02}"
+          location_name = bottle_location(ep_name, i+1)
           location_code = Locations.location_dict[location_name].code
           ctx.locations_checked.add(location_code)
 
@@ -819,44 +827,42 @@ async def handle_checks(ctx: 'Sly2Context') -> None:
         continue
 
       bottles = ctx.game_interface.get_bottles(ep)
+      ep_name = episode_name(ep.value)
       for i in range(1,bottles+1):
         if i%bottle_n == 0 or i == 30:
-          episode_name = ep.name.replace('_',' ')
-          if ep.value == 7:
-            episode_name = "Menace from the North, Eh!"
-          location_name = f"{episode_name} - {i:02} bottles collected"
+          location_name = bottles_collected_location(ep_name, i)
           location_code = Locations.location_dict[location_name].code
           ctx.locations_checked.add(location_code)
 
   # Jobs
   for i, episode in enumerate(ctx.jobs_completed):
-    episode_name = list(EPISODES.keys())[i]
+    ep_name = episode_name(i+1)
     for j, chapter in enumerate(episode):
       for k, job in enumerate(chapter):
         if job:
-          job_name = EPISODES[episode_name][j][k]
-          location_name = f"{episode_name} - {job_name}"
+          job_name = EPISODES[ep_name][j][k]
+          location_name = job_location(ep_name, job_name)
           location_code = Locations.location_dict[location_name].code
           ctx.locations_checked.add(location_code)
 
   # Tasks
   if ctx.slot_data["tasksanity"]:
-    for i, episode_name in enumerate(EPISODES.keys()):
+    for i, ep_name in enumerate(EPISODES.keys()):
       done = ctx.tasks_completed[i]
-      for job_name, tasks in TASKS.get(episode_name, {}).items():
+      for job_name, tasks in TASKS.get(ep_name, {}).items():
         for idx, task_name in tasks:
           if done.get(idx):
-            location_name = f"{episode_name} - {job_name} - {task_name}"
+            location_name = task_location(ep_name, job_name, task_name)
             location_code = Locations.location_dict[location_name].code
             ctx.locations_checked.add(location_code)
 
   # Treasures
   treasures_stolen = ctx.game_interface.all_treasures_stolen()
-  for i, (episode_name,episode_treasures) in enumerate(TREASURES.items()):
+  for i, (ep_name,episode_treasures) in enumerate(TREASURES.items()):
     for j, treasure in enumerate(episode_treasures):
       stolen = treasures_stolen[i][j]
       if stolen:
-        location_name = f"{episode_name} - {treasure[0]}"
+        location_name = treasure_location(ep_name, treasure[0])
         location_code = Locations.location_dict[location_name].code
         ctx.locations_checked.add(location_code)
 
@@ -865,15 +871,14 @@ async def handle_checks(ctx: 'Sly2Context') -> None:
   for i, loot in enumerate(LOOT.keys()):
     stolen = loot_stolen[i]
     if stolen:
-      location_name = f"Pickpocket {loot}"
+      location_name = pickpocket_location(loot)
       location_code = Locations.location_dict[location_name].code
       ctx.locations_checked.add(location_code)
 
   # Vaults
   for i, opened in enumerate(ctx.vaults):
-    episode_name = list(EPISODES.keys())[i]
     if opened:
-      location_name = f"{episode_name} - Vault"
+      location_name = vault_location(episode_name(i+1))
       location_code = Locations.location_dict[location_name].code
       ctx.locations_checked.add(location_code)
 
@@ -881,7 +886,7 @@ async def handle_checks(ctx: 'Sly2Context') -> None:
   new_locations = ctx.locations_checked - ctx.last_checked_locations
   if new_locations:
     if any(
-      Locations.location_dict[f"Pickpocket {loot}"].code in new_locations
+      Locations.location_dict[pickpocket_location(loot)].code in new_locations
       for loot in LOOT
     ):
       ctx.loot_dirty = True

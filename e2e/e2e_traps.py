@@ -111,7 +111,9 @@ class TestTrapTick(TickTestBase):
     addresses = self.interface.addresses
     self.ctx.items_received.extend(
       NetworkItem(item_dict[name].code, -1, 1)
-      for name in ("Slow-mo Trap", "Ice Trap", "Sly 1 Trap")
+      for name in (
+        Trap.SLOW_MO.item_name, Trap.ICE.item_name, Trap.SLY_1.item_name
+      )
     )
     await self.tick()
     await self.tick()
