@@ -717,6 +717,21 @@ ADDRESSES = {
     "sound id": 0x42CF0C,
     "sound interval": 0x42CF2C,
     "sound timer": 0x42CF30,
+    # Generic call request: fn, a0..a3, result, completion counter.
+    "cave call": 0x42CF80,
+    "heap bottom": 0x2F6384,
+    "loot pool": 0x3E0930,
+    "loot pool last": 0x3E0934,
+    "texture table count": 0x3DCFF0,
+    "texture table": 0x3DCFF4,
+    "clut table count": 0x3DCFF8,
+    "clut table": 0x3DCFFC,
+    "texture registry": 0x3DD010,
+    "clut registry": 0x3DD018,
+    "pending textures": 0x3DCF98,
+    "pending cluts": 0x3DCF9C,
+    "texture loader": 0x170730,
+    "texture records": (0x1F80000, 0x1FE0000),
     "clock speed": 0x2DDED8,
     "friction": 0x2C3C90,
     "string table": 0x3e1ad4,
@@ -1292,7 +1307,8 @@ STALE_JOB_TRIGGERS: dict[int, list[tuple[int, int]]] = {
 # cave is written into free EE RAM and hooked in as a per-frame update method
 # (see CAVE_HOOK_ENTRY); the client writes a request and the cave makes the
 # game call next frame (an animated deathlink death, coin payouts with the
-# pickup sound, instruction patches).
+# pickup sound, instruction patches, sounds, and arbitrary function calls
+# for the loot-model texture loader).
 # Assembled from build/cave.s; the blob bakes in SCUS-97316 addresses (cave
 # data 0x42CExx/0x42CFxx, the game functions, the original update method
 # it tail-jumps to), so reassemble if implementing for a different version.
@@ -1307,10 +1323,12 @@ CAVE_BLOB = (
   "08005baf0c005b8f0400458f08005baf00005b8f1b00bb00123000002328a600"+
   "040045afffff7b2700005baf100046af2d00043ce685050c30eb843442001a3c"+
   "20cf5a370000458f2d00043c30eb8434f885050c2128a200e4ee070c29000424"+
-  "25204000beec070c2528000042001a3c0ccf5a3700005b8f110060130000"+
-  "00002000468f0800c010000000002400458f0300a010ffffa524090000102400"+
-  "45af02000010240046af000040afe4ee070c2520600325204000beec070c2528"+
-  "000042001a3c04cf5a3700005f8f2000448f2400458f144b080800000000"
+  "25204000beec070c2528000042001a3c80cf5a3700005b8f0c0060130400448f"+
+  "0800458f0c00468f09f860031000478f42001a3c80cf5a37140042af000040af"+
+  "18005b8f01007b2718005baf42001a3c0ccf5a3700005b8f1100601300000000"+
+  "2000468f0800c010000000002400458f0300a010ffffa52409000010240045af"+
+  "02000010240046af000040afe4ee070c2520600325204000beec070c25280000"+
+  "42001a3c04cf5a3700005f8f2000448f2400458f144b080800000000"
 )
 # damage_info struct; +0x00/+0x04 skeleton, +0x08 entity and +0x0C damage
 # type are patched from the live character at kill time. +0x10 = -2000

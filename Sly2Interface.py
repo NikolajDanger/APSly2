@@ -13,6 +13,7 @@ import traceback
 from .pcsx2_interface.pine import (
   Pine, PineConnectionError, DuplicateConnectionError
 )
+from .LootInstall import LootInstaller
 from .data.Constants import (
   MENU_RETURN_DATA,
   ADDRESSES,
@@ -483,6 +484,7 @@ class Sly2Interface(GameInterface):
   def __init__(self, logger: Logger) -> None:
     super().__init__(logger)
     self.last_skip = time()
+    self.loot_installer = LootInstaller(self, logger)
     self._dag_key: Optional[tuple[int, int]] = None
     self._dag_nodes: list[int] = []
     self._dag_parents: dict[int, list[int]] = {}
@@ -1208,6 +1210,26 @@ class Sly2Interface(GameInterface):
     self._write32(self.addresses["sound id"], sound_id)
     return True
 
+  def call_function(self, function: int, arguments: list[int]) -> bool:
+    """Has the cave call `function(*arguments)` next frame; `call_count`
+    advances once it has"""
+    if not self.cave_live():
+      return False
+    slot = self.addresses["cave call"]
+    padded = (arguments + [0] * 4)[:4]
+    self._batch_write32([(slot + 4 + 4*i, a) for i, a in enumerate(padded)])
+    self._write32(slot, function)
+    return True
+
+  def call_count(self) -> int:
+    return self._read32(self.addresses["cave call"] + 0x18)
+
+  def install_loot_models(self, loot_ids: list[int]) -> list[int]:
+    return self.loot_installer.install(loot_ids)
+
+  def poll_loot_textures(self) -> bool:
+    return self.loot_installer.poll()
+
   def stop_sound(self) -> None:
     self._write32(self.addresses["sound id"], 0)
     self._write32(self.addresses["sound interval"], 0)
@@ -1274,8 +1296,9 @@ class Sly2Interface(GameInterface):
     if self._read_bytes(cave, len(blob)) != blob:
       self._write_bytes(cave, blob)
     for name in ("death flag", "coin pops", "coin amount", "coin timer",
-                 "sound id", "sound interval", "sound timer"):
+                 "sound id", "sound interval", "sound timer", "cave call"):
       self._write32(self.addresses[name], 0)
+    self.loot_installer.reset()
     self._write32(self.addresses["coin interval"], COIN_POP_INTERVAL)
     self._write_bytes(
       self.addresses["cave patches"], bytes(8 * CAVE_PATCH_SLOTS)

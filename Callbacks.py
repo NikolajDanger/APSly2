@@ -8,6 +8,7 @@ from NetUtils import ClientStatus
 
 from .data import Items, Locations
 from .data.Constants import (
+  LOOT_IDS,
   COIN_POPS_MAX,
   COIN_POPS_MIN,
   EPISODES,
@@ -139,7 +140,9 @@ def handle_episode_state(ctx: 'Sly2Context', in_hub: bool) -> None:
     set_pickpocketing(ctx)
     if ctx.slot_data["randomize_loot"]:
       set_loot_table(ctx)
+      install_loot_models(ctx)
     ctx.loot_dirty = False
+  ctx.game_interface.poll_loot_textures()
 
   bottle_flags = ctx.game_interface.get_bottle_flags()
   if bottle_flags != ctx.bottle_flags:
@@ -244,6 +247,16 @@ def set_loot_table(ctx: 'Sly2Context') -> None:
   loot_table = ctx.slot_data["loot_table"]
   ctx.game_interface.set_loot_table(ctx.current_episode, loot_table)
 
+def install_loot_models(ctx: 'Sly2Context') -> None:
+  if ctx.slot_data is None or ctx.current_episode is None:
+    return
+
+  ctx.game_interface.install_loot_models([
+    LOOT_IDS[loot]
+    for loot, locations in ctx.slot_data["loot_table"].items()
+    if any(ep == ctx.current_episode.value for ep, _, _ in locations)
+  ])
+
 def set_prices(ctx: 'Sly2Context') -> None:
   if ctx.slot_data is None:
     return
@@ -306,6 +319,7 @@ async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
 
     if ctx.slot_data["randomize_loot"]:
       set_loot_table(ctx)
+      install_loot_models(ctx)
     ctx.loot_dirty = False
 
     set_prices(ctx)

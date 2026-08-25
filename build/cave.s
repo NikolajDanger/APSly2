@@ -41,6 +41,9 @@
 #     with interval N it replays every N frames until the client clears the id,
 #     so a rhythmic effect keeps frame-accurate timing without the client
 #     driving each hit.
+#   call: when a function pointer is set, calls it with the four argument words
+#     that follow it, stores the return value, clears the pointer and bumps a
+#     completion counter, so the client can run any game function.
 #
 # The routine's code and its data area are deliberately on different 4K pages:
 # once the routine has run, its own page is a translated-code page with the
@@ -112,12 +115,12 @@ coins:
 	lui   $k0, 0x0042
 	ori   $k0, $k0, 0xcf10      # k0 = 0x0042CF10 (COIN_POPS)
 	lw    $k1, 0($k0)
-	beq   $k1, $zero, sound
+	beq   $k1, $zero, call
 	nop
 	lw    $k1, 8($k0)           # COIN_TIMER
 	beq   $k1, $zero, pop
 	addiu $k1, $k1, -1
-	b     sound
+	b     call
 	sw    $k1, 8($k0)
 pop:
 	lw    $k1, 12($k0)          # COIN_INTERVAL
@@ -146,6 +149,23 @@ pop:
 	move  $a0, $v0
 	jal   0x1fb2f8             # play it
 	move  $a1, $zero
+call:
+	lui   $k0, 0x0042
+	ori   $k0, $k0, 0xcf80      # k0 = 0x0042CF80 (CALL_FN request)
+	lw    $k1, 0($k0)
+	beq   $k1, $zero, sound     # no call armed
+	lw    $a0, 4($k0)           # CALL_A0..A3
+	lw    $a1, 8($k0)
+	lw    $a2, 12($k0)
+	jalr  $k1
+	lw    $a3, 16($k0)
+	lui   $k0, 0x0042
+	ori   $k0, $k0, 0xcf80
+	sw    $v0, 0x14($k0)        # CALL_RESULT
+	sw    $zero, 0($k0)         # clear the request
+	lw    $k1, 0x18($k0)        # CALL_COUNT: bumped once per completed call
+	addiu $k1, $k1, 1
+	sw    $k1, 0x18($k0)
 sound:
 	lui   $k0, 0x0042
 	ori   $k0, $k0, 0xcf0c      # k0 = 0x0042CF0C (SOUND_ID request)
