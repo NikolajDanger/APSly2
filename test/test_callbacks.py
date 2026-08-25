@@ -68,6 +68,7 @@ from ..pcsx2_interface.pine import PineConnectionError
 from ..Sly2Client import (
   _handle_game_not_ready,
   _handle_game_ready,
+  _handle_loading,
   _sync_tick,
   update_connection_status
 )
@@ -1568,6 +1569,25 @@ class TestTick(TickHarness):
     self.assertIsNone(self.ctx.current_episode)
     await self.tick()
     self.assertEqual(self.ctx.current_episode, Sly2Episode.The_Black_Chateau)
+
+
+class TestLoadingGrace(TickHarness):
+  async def _grace_waits(self, episode: int, map_id: int) -> list[float]:
+    self.enter(episode, map_id)
+    self.ctx.is_loading = True
+    self.pine.poke32(self.addr["loading"], 0)
+    self.interface.clear_cache()
+    with patch.object(Sly2Client.asyncio, "sleep") as sleep_mock:
+      deferred = await _handle_loading(self.ctx)
+    self.assertTrue(deferred)
+    self.assertFalse(self.ctx.is_loading)
+    return [c.args[0] for c in sleep_mock.call_args_list]
+
+  async def test_title_path_defers_one_tick(self) -> None:
+    self.assertEqual(await self._grace_waits(0, 1), [0.1])
+
+  async def test_episode_path_defers_one_tick(self) -> None:
+    self.assertEqual(await self._grace_waits(1, 2), [0.1])
 
 
 class TestConnectionMachine(ClientTestBase):

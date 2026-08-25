@@ -666,13 +666,11 @@ async def _handle_game_ready(ctx: Sly2Context) -> None:
   await _handle_pacing(ctx)
 
 async def _handle_loading(ctx: Sly2Context) -> bool:
-  """Consume the tick during a level transition, plus one grace tick after
-  loading ends"""
+  """Consume the tick during a level transition"""
   if ctx.is_loading:
     if not ctx.game_interface.is_loading():
       ctx.is_loading = False
       logger.debug("Level transition finished")
-      await asyncio.sleep(1)
     await asyncio.sleep(0.1)
     return True
 
