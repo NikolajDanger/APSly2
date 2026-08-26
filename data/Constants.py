@@ -717,6 +717,8 @@ ADDRESSES = {
     "sound id": 0x42CF0C,
     "sound interval": 0x42CF2C,
     "sound timer": 0x42CF30,
+    # 8 pointers, which point to the "vault opened" flag of each episode.
+    "vault marker table": 0x42CF60,
     # Generic call request: fn, a0..a3, result, completion counter.
     "cave call": 0x42CF80,
     "heap bottom": 0x2F6384,
@@ -1341,8 +1343,13 @@ CAVE_BLOB = (
   "18005b8f01007b2718005baf42001a3c0ccf5a3700005b8f1100601300000000"+
   "2000468f0800c010000000002400458f0300a010ffffa52409000010240045af"+
   "02000010240046af000040afe4ee070c2520600325204000beec070c25280000"+
-  "42001a3c04cf5a3700005f8f2000448f2400458f144b080800000000"
+  "42001a3c04cf5a3700005f8f2000448f2400458f144b0808000000003d00023c"+
+  "604a438cffff6324801803004200023c60cf4234211043000000428c0000428c"+
+  "0800e00300000000"
 )
+CAVE_VAULT_MARKER = 0x0042B1FC
+VAULT_MARKER_PATCH_SITE = 0x0022AACC
+VAULT_MARKER_ORIG = 0x0C076BAA
 # damage_info struct; +0x00/+0x04 skeleton, +0x08 entity and +0x0C damage
 # type are patched from the live character at kill time. +0x10 = -2000
 # (lethal), +0x20.. a location/dir, +0x44 = 8.

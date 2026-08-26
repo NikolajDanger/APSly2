@@ -40,6 +40,9 @@ from .data.Constants import (
   CAVE_HOOK_ENTRY,
   CAVE_HOOK_ORIG,
   CAVE_PATCH_SLOTS,
+  CAVE_VAULT_MARKER,
+  VAULT_MARKER_PATCH_SITE,
+  VAULT_MARKER_ORIG,
   COIN_POP_INTERVAL,
   DEATH_INFO_TEMPLATE,
   THIEFNET_DESCRIPTION_FORMAT,
@@ -1329,12 +1332,25 @@ class Sly2Interface(GameInterface):
     self._write_bytes(
       self.addresses["cave patches"], bytes(8 * CAVE_PATCH_SLOTS)
     )
+    self._write_bytes(
+      self.addresses["vault marker table"],
+      b"".join(a.to_bytes(4, "little") for a in self.addresses["vaults"])
+    )
     self.safe_patch(
       self.addresses["cave hook"], CAVE_HOOK_ENTRY, CAVE_HOOK_ORIG
     )
 
   def cave_live(self) -> bool:
     return self._read32(self.addresses["cave hook"]) == CAVE_HOOK_ENTRY
+
+  def set_vault_marker(self) -> None:
+    """Redirect the vault marker's "gadget ownership" check to the function in
+    the code cave instead."""
+    self.safe_patch(
+      VAULT_MARKER_PATCH_SITE,
+      0x0C000000 | (CAVE_VAULT_MARKER >> 2),
+      VAULT_MARKER_ORIG,
+    )
 
   def kill_player(self, damage_type: int = 0x200) -> None:
     if self.in_safehouse() or self.get_current_episode() == 0:

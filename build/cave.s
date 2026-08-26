@@ -199,3 +199,20 @@ done:
 	lw    $a1, 0x24($k0)
 	j     0x212c50             # the original update method
 	nop
+
+# Extra function, not part of the per-frame routine. Sets v0 to 0 or 1
+# depending on whether the current episode's vault is open. This is to replace
+# the function that decides whether to display the vault marker, which normally
+# just checks if the vault gadget is owned.
+vault_marker_opened:
+	lui   $v0, 0x003d
+	lw    $v1, 0x4a60($v0)      # world id (1..8)
+	addiu $v1, $v1, -1          # -> table index 0..7
+	sll   $v1, $v1, 2
+	lui   $v0, 0x0042
+	ori   $v0, $v0, 0xcf60      # &vault_table (client-populated)
+	addu  $v0, $v0, $v1
+	lw    $v0, 0($v0)           # this episode's vault-flag address
+	lw    $v0, 0($v0)           # v0 = flag (1 = opened)
+	jr    $ra
+	nop

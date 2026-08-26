@@ -7,6 +7,7 @@ from ..data.Constants import (
   CAVE_BLOB,
   CAVE_HOOK_ENTRY,
   CAVE_HOOK_ORIG,
+  CAVE_VAULT_MARKER,
   COIN_POP_INTERVAL,
   LOOT,
   LOOT_IDS,
@@ -25,7 +26,9 @@ from ..data.Constants import (
   ENTITY_CHILD_LINK,
   SLY_BACK_NODE,
   TREASURE_VTABLE,
-  TREASURE_PRICES
+  TREASURE_PRICES,
+  VAULT_MARKER_PATCH_SITE,
+  VAULT_MARKER_ORIG
 )
 from ..Sly2Interface import (
   EE_RAM_START,
@@ -336,6 +339,44 @@ class TestCave(InterfaceTestBase):
     self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG)
     self.pine.clear_writes()
     self.assertFalse(self.interface.play_sound(0x158))
+    self.assertEqual(self.pine.writes, [])
+
+
+class TestVaultMarker(InterfaceTestBase):
+  def _install(self) -> None:
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG)
+    self.interface.install_cave()
+
+  def test_install_writes_vault_table(self) -> None:
+    self._install()
+    table = self.addr["vault marker table"]
+    for i, address in enumerate(self.addr["vaults"]):
+      self.assertEqual(self.pine.peek32(table + 4*i), address)
+
+  def test_set_vault_marker_redirects_through_cave(self) -> None:
+    self._install()
+    self.pine.poke32(VAULT_MARKER_PATCH_SITE, VAULT_MARKER_ORIG)
+    self.interface.clear_cache()
+    self.pine.clear_writes()
+    self.interface.set_vault_marker()
+    slot = self.addr["cave patches"]
+    redirect = 0x0C000000 | (CAVE_VAULT_MARKER >> 2)
+    self.assertEqual(self.pine.peek32(slot), VAULT_MARKER_PATCH_SITE)
+    self.assertEqual(self.pine.peek32(slot + 4), redirect)
+    # the game thread writes the instruction, rather than PINE
+    self.assertEqual(
+      self.pine.peek32(VAULT_MARKER_PATCH_SITE), VAULT_MARKER_ORIG
+    )
+    self.assertFalse(self.pine.written(VAULT_MARKER_PATCH_SITE))
+
+  def test_set_vault_marker_idempotent(self) -> None:
+    self._install()
+    self.pine.poke32(
+      VAULT_MARKER_PATCH_SITE, 0x0C000000 | (CAVE_VAULT_MARKER >> 2)
+    )
+    self.interface.clear_cache()
+    self.pine.clear_writes()
+    self.interface.set_vault_marker()
     self.assertEqual(self.pine.writes, [])
 
 
