@@ -334,7 +334,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
   inventory: Dict[int,int]
   available_episodes: Dict[Sly2Episode,int]
   all_bottles: Dict[Sly2Episode,int]
-  thiefnet_items: Optional[list[str]] = None
+  thiefnet_items: Optional[list[tuple[str, str]]] = None
   powerups: PowerUps = PowerUps()
   thiefnet_purchases: PowerUps = PowerUps()
   jobs_completed: list[list[list[bool]]]

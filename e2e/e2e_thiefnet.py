@@ -81,11 +81,13 @@ class TestThiefNetTick(TickTestBase):
     self.interface.clear_cache()
 
   def name_at(self, n: int, length: int = 64) -> tuple[str, str]:
-    powerups = self.interface.addresses["text"]["powerups"][0]
-    name_address, description_address = list(powerups.values())[n]
+    name_id, description_id = self.interface._thiefnet_string_ids(n)
+    name_pair = self.interface._string_pair(name_id)
+    description_pair = self.interface._string_pair(description_id)
+    assert name_pair is not None and description_pair is not None
     return (
-      self.pine.read_string(name_address, 32),
-      self.pine.read_string(description_address, length)
+      self.pine.read_string(self.pine.read_int32(name_pair), 64),
+      self.pine.read_string(self.pine.read_int32(description_pair), length)
     )
 
   async def test_ticks(self) -> None:
@@ -101,13 +103,17 @@ class TestThiefNetTick(TickTestBase):
       self.interface._batch_read32(addresses["thiefnet costs"]),
       slot_data["thiefnet_costs"]
     )
+    self.assertEqual(
+      self.pine.read_string(addresses["thiefnet description format"], 16),
+      "%.0s%s. %s"
+    )
     for n in range(24):
       with self.subTest(n=n + 1):
         name, description = self.name_at(n)
-        self.assertEqual(name, f"Check #{n + 1}")
-        self.assertTrue(
-          description.startswith(f"Tester's {SCOUTED[n]}"[:10]), description
-        )
+        # Own item (player 1), so the row is the bare item name and the
+        # description carries the owner prefix and classification.
+        self.assertEqual(name, SCOUTED[n])
+        self.assertEqual(description, f"Tester's {SCOUTED[n]}: Filler item")
     self.assertEqual(self.ctx.sent_cmds("LocationChecks"), [])
 
     self.interface.load_powerups(PowerUps(trigger_bomb=True))

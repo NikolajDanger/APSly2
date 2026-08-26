@@ -25,7 +25,6 @@ from ..data.Constants import (
   ENTITY_CHILD_LINK,
   SLY_BACK_NODE,
   TREASURE_VTABLE,
-  POWERUP_TEXT,
   TREASURE_PRICES
 )
 from ..Sly2Interface import (
@@ -52,7 +51,8 @@ from .client_base import (
   set_location,
   set_parents,
   set_string_table,
-  string_buffer
+  string_buffer,
+  STRING_TABLE
 )
 from .fake_pine import FakePine
 
@@ -422,37 +422,56 @@ class TestThiefNet(InterfaceTestBase):
   def setUp(self) -> None:
     super().setUp()
     self.pine.poke32(self.addr["world id"], 1)
-    self.texts = self.addr["text"]["powerups"][0]
+    self.vanilla = list(self.addr["text"]["powerups"][0].values())
+    self.pine.poke32(self.addr["string table"], STRING_TABLE)
+    self.pine.poke32(self.addr["string pair count"], 2 * len(self.vanilla))
+    for slot, (name_buffer, desc_buffer) in enumerate(self.vanilla):
+      entry = self.addr["thiefnet costs"][slot] - 8
+      name_id, desc_id = 100 + 2*slot, 101 + 2*slot
+      self.pine.poke32(entry + 0x14, name_id)
+      self.pine.poke32(entry + 0x18, desc_id)
+      for i, (text_id, buffer) in enumerate((
+        (name_id, name_buffer), (desc_id, desc_buffer)
+      )):
+        pair = STRING_TABLE + (2*slot + i) * 8
+        self.pine.poke32(pair, text_id)
+        self.pine.poke32(pair + 4, buffer)
 
-  def written_text(self, powerup: int) -> tuple[bytes, bytes]:
-    name, description = list(self.texts.values())[powerup]
-    return self.pine.peek_cstring(name), self.pine.peek_cstring(description)
+  def pointer(self, powerup: int, description: bool) -> int:
+    return self.pine.peek32(STRING_TABLE + (2*powerup + description) * 8 + 4)
 
-  def test_short_texts_unchanged(self) -> None:
-    self.interface.set_thiefnet(0, ("Check #1", "Tester's Thing"))
-    self.assertEqual(self.written_text(0), (b"Check #1", b"Tester's Thing"))
+  def resolved(self, powerup: int, description: bool) -> bytes:
+    return self.pine.peek_cstring(self.pointer(powerup, description))
 
-  def test_name_truncation(self) -> None:
-    # "Trigger Bomb" is 12 chars, so the slot holds 15
-    self.interface.set_thiefnet(0, ("ABCDEFGHIJKLMNO", "d"))
-    self.assertEqual(self.written_text(0)[0], b"ABCDEFGHIJKLMNO")
-    self.interface.set_thiefnet(0, ("ABCDEFGHIJKLMNOP", "d"))
-    self.assertEqual(self.written_text(0)[0], b"ABCDEFGHIJKLM..")
+  def test_repoints_to_client_buffers(self) -> None:
+    self.interface.set_thiefnet(0, "Row Title", "Full name: Filler item")
+    name_buffer = self.addr["thiefnet name buffer"]
+    desc_buffer = self.addr["thiefnet description buffer"]
+    self.assertEqual(self.pointer(0, False), name_buffer)
+    self.assertEqual(self.pointer(0, True), desc_buffer)
+    self.assertEqual(self.pine.peek_cstring(name_buffer), b"Row Title")
+    self.assertEqual(
+      self.pine.peek_cstring(desc_buffer), b"Full name: Filler item"
+    )
 
-  def test_name_budget_at_multiple_of_16(self) -> None:
-    # "Adrenaline Burst" is 16 chars, so the slot holds 31
-    index = list(POWERUP_TEXT).index("Adrenaline Burst")
-    self.interface.set_thiefnet(index, ("x"*31, "d"))
-    self.assertEqual(self.written_text(index)[0], b"x"*31)
-    self.interface.set_thiefnet(index, ("x"*32, "d"))
-    self.assertEqual(self.written_text(index)[0], b"x"*29 + b"..")
+  def test_no_length_limit(self) -> None:
+    self.interface.set_thiefnet(0, "x"*40, "y"*200)
+    self.assertEqual(self.resolved(0, False), b"x"*40)
+    self.assertEqual(self.resolved(0, True), b"y"*200)
 
-  def test_description_truncation(self) -> None:
-    # The vanilla Trigger Bomb description is 37 chars, so the slot holds 47
-    self.interface.set_thiefnet(0, ("n", "y"*47))
-    self.assertEqual(self.written_text(0)[1], b"y"*47)
-    self.interface.set_thiefnet(0, ("n", "y"*48))
-    self.assertEqual(self.written_text(0)[1], b"y"*45 + b"..")
+  def test_per_slot_buffers(self) -> None:
+    self.interface.set_thiefnet(0, "first", "a")
+    self.interface.set_thiefnet(5, "sixth", "b")
+    self.assertEqual(self.resolved(0, False), b"first")
+    self.assertEqual(self.resolved(5, False), b"sixth")
+    self.assertNotEqual(self.pointer(0, False), self.pointer(5, False))
+
+  def test_format_swap(self) -> None:
+    self.interface.set_thiefnet_format()
+    self.assertEqual(
+      self.pine.peek_cstring(self.addr["thiefnet description format"]),
+      b"%.0s%s. %s"
+    )
 
   def test_cost_and_unlock(self) -> None:
     self.interface.set_thiefnet_cost(3, 250)
@@ -461,13 +480,18 @@ class TestThiefNet(InterfaceTestBase):
     for address in self.addr["thiefnet unlock"]:
       self.assertEqual(self.pine.peek32(address), 1)
 
-  def test_reset(self) -> None:
-    self.interface.set_thiefnet(0, ("Check #1", "Tester's Thing"))
+  def test_reset_restores_pointers_and_format(self) -> None:
+    self.interface.set_thiefnet_format()
+    for slot in range(len(self.vanilla)):
+      self.interface.set_thiefnet(slot, "row", "desc")
     self.interface.reset_thiefnet()
-    for i, (name, description) in enumerate(POWERUP_TEXT.items()):
-      self.assertEqual(
-        self.written_text(i), (name.encode(), description.encode())
-      )
+    self.assertEqual(
+      self.pine.peek_cstring(self.addr["thiefnet description format"]),
+      b"%s: %s. %s"
+    )
+    for slot, (name_buffer, desc_buffer) in enumerate(self.vanilla):
+      self.assertEqual(self.pointer(slot, False), name_buffer)
+      self.assertEqual(self.pointer(slot, True), desc_buffer)
 
 
 class TestGoals(InterfaceTestBase):

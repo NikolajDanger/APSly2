@@ -23,6 +23,8 @@ from .data.Constants import (
   MEGA_JUMP_GADGET_ID,
   ALARM_SOUND_ID,
   ALARM_INTERVAL,
+  THIEFNET_TABLE_LIMIT,
+  THIEFNET_DESCRIPTION_LIMIT,
   episode_key,
   episode_name,
   episode_number
@@ -367,12 +369,30 @@ def set_bottles(ctx: 'Sly2Context') -> None:
   bottles = ctx.all_bottles[ctx.current_episode]
   ctx.game_interface.set_bottles(bottles)
 
+def truncate(text: str, limit: int) -> str:
+  """Truncate text to given limit. Never leaves a space as the final
+  character."""
+  if len(text) <= limit:
+    return text
+  return text[:limit-2].rstrip()+".."
+
+def classification_label(flags: int) -> str:
+  if flags & 0b001:
+    return "Progression item"
+  if flags & 0b010:
+    return "Useful item"
+  if flags & 0b100:
+    return "Trap item"
+  return "Filler item"
+
 async def set_thiefnet(ctx: 'Sly2Context') -> None:
   """Sets the randomized ThiefNet items"""
   if ctx.slot_data is None:
     return
 
-  # Write all the names in the ThiefNet description
+  # The row title is the item name (prefixed with the owner unless it's your
+  # own), capped to one line. The description is always the full
+  # "{player}'s {item}" plus the item classification.
   if ctx.thiefnet_items is None:
     info = ctx.locations_info
     ctx.thiefnet_items = []
@@ -385,9 +405,17 @@ async def set_thiefnet(ctx: 'Sly2Context') -> None:
       item_name = ctx.item_names.lookup_in_slot(
         location_info.item, location_info.player
       )
-      string = f"{player_name}'s {item_name}"
+      full_name = f"{player_name}'s {item_name}"
+      own = location_info.player == ctx.slot
 
-      ctx.thiefnet_items.append(string)
+      table_name = truncate(
+        item_name if own else full_name, THIEFNET_TABLE_LIMIT
+      )
+      classification = classification_label(location_info.flags)
+      description = (
+        f"{truncate(full_name, THIEFNET_DESCRIPTION_LIMIT)}: {classification}"
+      )
+      ctx.thiefnet_items.append((table_name, description))
 
   ctx.thiefnet_purchases = PowerUps(*[
     Locations.location_dict[thiefnet_location(i+1)].code
@@ -409,11 +437,12 @@ async def set_thiefnet(ctx: 'Sly2Context') -> None:
   # start
   ctx.game_interface.load_powerups(ctx.thiefnet_purchases)
   ctx.game_interface.set_thiefnet_unlock()
+  ctx.game_interface.set_thiefnet_format()
 
   # Set costs and names
-  for i, item in enumerate(ctx.thiefnet_items):
+  for i, (table_name, description) in enumerate(ctx.thiefnet_items):
     ctx.game_interface.set_thiefnet_cost(i,ctx.slot_data["thiefnet_costs"][i])
-    ctx.game_interface.set_thiefnet(i,(f"Check #{i+1}",item))
+    ctx.game_interface.set_thiefnet(i, table_name, description)
 
 def unset_thiefnet(ctx: 'Sly2Context') -> None:
   """Returns powerups to the original state"""

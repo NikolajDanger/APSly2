@@ -49,18 +49,39 @@ class TestWrites(E2ETestBase):
     self.interface.set_thiefnet_cost(0, 1234)
     self.assertEqual(self.raw32(self.addr["thiefnet costs"][0]), 1234)
 
+  def resolved(self, string_id: int) -> int:
+    pair = self.interface._string_pair(string_id)
+    assert pair is not None
+    return self.raw32(pair)
+
   def test_thiefnet_text(self) -> None:
-    name, description = list(POWERUP_TEXT.items())[0]
-    name_address, description_address = self.addr["text"]["powerups"][0][name]
-    self.interface.set_thiefnet(0, ("AP Test", "An e2e description"))
-    self.assertEqual(self.pine.read_string(name_address, 32), "AP Test")
+    name_id, description_id = self.interface._thiefnet_string_ids(0)
+    name_address, description_address = self.addr["text"]["powerups"][0][
+      list(POWERUP_TEXT)[0]
+    ]
+    name_buffer = self.addr["thiefnet name buffer"]
+    description_buffer = self.addr["thiefnet description buffer"]
+
+    self.interface.set_thiefnet(0, "AP Test", "An e2e description")
+    self.assertEqual(self.resolved(name_id), name_buffer)
+    self.assertEqual(self.pine.read_string(name_buffer, 32), "AP Test")
+    self.assertEqual(self.resolved(description_id), description_buffer)
     self.assertEqual(
-      self.pine.read_string(description_address, 64), "An e2e description"
+      self.pine.read_string(description_buffer, 64), "An e2e description"
     )
-    self.interface.reset_thiefnet()
-    self.assertEqual(self.pine.read_string(name_address, 32), name)
+
+    self.interface.set_thiefnet_format()
     self.assertEqual(
-      self.pine.read_string(description_address, 256), description
+      self.pine.read_string(self.addr["thiefnet description format"], 16),
+      "%.0s%s. %s"
+    )
+
+    self.interface.reset_thiefnet()
+    self.assertEqual(self.resolved(name_id), name_address)
+    self.assertEqual(self.resolved(description_id), description_address)
+    self.assertEqual(
+      self.pine.read_string(self.addr["thiefnet description format"], 16),
+      "%s: %s. %s"
     )
 
   def infobox_closed(self) -> bool:

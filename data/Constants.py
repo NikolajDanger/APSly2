@@ -735,6 +735,12 @@ ADDRESSES = {
     "clock speed": 0x2DDED8,
     "friction": 0x2C3C90,
     "string table": 0x3e1ad4,
+    "string pair count": 0x3E1AD0,
+    # The format string for the thiefnet description box. Default "%s: %s. %s"
+    "thiefnet description format": 0x2A7A38,
+    # Where we're putting the custom thiefnet strings.
+    "thiefnet name buffer": 0x42D000,
+    "thiefnet description buffer": 0x42E000,
     "frame counter": 0x2F67D0,
     "input": 0x2E0CB4,
     "skip cutscene": 0x2F6810,
@@ -1271,6 +1277,13 @@ OTHER_POWERUPS = [
 MEGA_JUMP_GADGET_ID = 0x1F
 # `jal 0x14C258` at ADDRESSES["unload mega jump"]
 MEGA_JUMP_UNLOAD_CALL = 0x0C053096
+
+THIEFNET_DESCRIPTION_FORMAT = "%.0s%s. %s"
+THIEFNET_DESCRIPTION_FORMAT_VANILLA = "%s: %s. %s"
+THIEFNET_NAME_STRIDE = 0x40
+THIEFNET_DESCRIPTION_STRIDE = 0x100
+THIEFNET_TABLE_LIMIT = 28
+THIEFNET_DESCRIPTION_LIMIT = 60
 
 # Each pedestal carries a bitmask of the characters allowed to use it
 # (1 Sly, 2 Bentley, 4 Murray). The episode 8 level script clears Sly's bit

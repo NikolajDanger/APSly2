@@ -2,7 +2,6 @@ from enum import IntEnum
 from typing import (
   Optional, NamedTuple, Tuple, Dict, List, Iterator, Generator
 )
-from math import ceil
 import struct
 import sys
 from contextlib import contextmanager
@@ -19,7 +18,6 @@ from .data.Constants import (
   ADDRESSES,
   EPISODES,
   TASKS,
-  POWERUP_TEXT,
   HUB_MAPS,
   LOOT_IDS,
   MEGA_JUMP_GADGET_ID,
@@ -43,7 +41,11 @@ from .data.Constants import (
   CAVE_HOOK_ORIG,
   CAVE_PATCH_SLOTS,
   COIN_POP_INTERVAL,
-  DEATH_INFO_TEMPLATE
+  DEATH_INFO_TEMPLATE,
+  THIEFNET_DESCRIPTION_FORMAT,
+  THIEFNET_DESCRIPTION_FORMAT_VANILLA,
+  THIEFNET_NAME_STRIDE,
+  THIEFNET_DESCRIPTION_STRIDE
 )
 
 class Sly2Episode(IntEnum):
@@ -488,6 +490,8 @@ class Sly2Interface(GameInterface):
     self._dag_key: Optional[tuple[int, int]] = None
     self._dag_nodes: list[int] = []
     self._dag_parents: dict[int, list[int]] = {}
+    self._string_pairs_key: Optional[tuple[int, int]] = None
+    self._string_pairs: dict[int, int] = {}
 
   # =====================================================
   # Private Helper Methods - Job/Task Management
@@ -1066,35 +1070,52 @@ class Sly2Interface(GameInterface):
     relevant_bits = bits[7:43]
     return PowerUps(*relevant_bits)
 
-  def set_thiefnet(self, powerup: int, replacements: Tuple[str,str]) -> None:
-    def adjust_length(text: str, target_length: int) -> str:
-      if len(text) > target_length:
-        if target_length%16 == 0:
-          new_length = target_length+15
-        else:
-          new_length = ceil(target_length/16)*16-1
-      else:
-        new_length = len(text)
+  def _string_pair(self, string_id: int) -> Optional[int]:
+    """Returns the address of the pointer to a string with the given ID."""
+    base = self._read32(self.addresses["string table"])
+    count = self._read32(self.addresses["string pair count"])
+    key = (base, count)
+    # Dict is rebuilt when it moves (on map change).
+    if key != self._string_pairs_key:
+      self._string_pairs_key = key
+      data = self._read_bytes(base, count * 8)
+      self._string_pairs = {
+        int.from_bytes(data[i*8:i*8+4], "little"): base + i*8 + 4
+        for i in range(count)
+      }
+    return self._string_pairs.get(string_id)
 
-      if len(text) > new_length:
-        return text[:new_length-2]+".."
-      else:
-        return text
+  def _repoint_string(self, string_id: int, char_pointer: int) -> None:
+    pair = self._string_pair(string_id)
+    if pair is not None:
+      self._write32(pair, char_pointer)
 
-    powerups = self.addresses["text"]["powerups"][self.get_current_episode()-1]
-    addresses = list(powerups.values())[powerup]
+  def _thiefnet_string_ids(self, powerup: int) -> Tuple[int, int]:
+    """The (name, description) text ids of a ThiefNet gadget entry"""
+    entry = self.addresses["thiefnet costs"][powerup] - 8
+    return self._read32(entry + 0x14), self._read32(entry + 0x18)
 
-    new_gadget_name = adjust_length(
-      replacements[0],
-      len(list(POWERUP_TEXT.keys())[powerup])
+  def set_thiefnet(
+    self, powerup: int, table_name: str, description: str
+  ) -> None:
+    name_buffer = (
+      self.addresses["thiefnet name buffer"] + powerup * THIEFNET_NAME_STRIDE
     )
-    new_gadget_description = adjust_length(
-      replacements[1],
-      len(list(POWERUP_TEXT.values())[powerup])
+    description_buffer = (
+      self.addresses["thiefnet description buffer"]
+      + powerup * THIEFNET_DESCRIPTION_STRIDE
     )
+    self._write_bytes(name_buffer, self._encode_text(table_name))
+    self._write_bytes(description_buffer, self._encode_text(description))
+    name_id, description_id = self._thiefnet_string_ids(powerup)
+    self._repoint_string(name_id, name_buffer)
+    self._repoint_string(description_id, description_buffer)
 
-    self.set_text(addresses[0],new_gadget_name)
-    self.set_text(addresses[1],new_gadget_description)
+  def set_thiefnet_format(self) -> None:
+    self._write_bytes(
+      self.addresses["thiefnet description format"],
+      self._encode_text(THIEFNET_DESCRIPTION_FORMAT)
+    )
 
   def set_thiefnet_cost(self, powerup: int, cost: int) -> None:
     address = self.addresses["thiefnet costs"][powerup]
@@ -1109,10 +1130,15 @@ class Sly2Interface(GameInterface):
     self._batch_write32(write_operations)
 
   def reset_thiefnet(self) -> None:
+    self._write_bytes(
+      self.addresses["thiefnet description format"],
+      self._encode_text(THIEFNET_DESCRIPTION_FORMAT_VANILLA)
+    )
     powerups = self.addresses["text"]["powerups"][self.get_current_episode()-1]
-    for powerup, addresses in powerups.items():
-      self.set_text(addresses[0],powerup)
-      self.set_text(addresses[1],POWERUP_TEXT[powerup])
+    for powerup, (name, description) in enumerate(powerups.values()):
+      name_id, description_id = self._thiefnet_string_ids(powerup)
+      self._repoint_string(name_id, name)
+      self._repoint_string(description_id, description)
 
   # =====================================================
   # Text & Infobox

@@ -23,12 +23,14 @@ from ..Callbacks import (
   handle_received,
   handle_ring_link,
   handle_traps,
+  classification_label,
   init,
   loot_odds_row,
   pay_out_coins,
   reset_traps,
   set_jobs,
   set_thiefnet,
+  truncate,
   update
 )
 from ..data.Constants import (
@@ -45,7 +47,6 @@ from ..data.Constants import (
   MEGA_JUMP_GADGET_ID,
   MEGA_JUMP_UNLOAD_CALL,
   PICKPOCKET_LOOT_TABLE_CHANCES,
-  POWERUP_TEXT,
   episode_key
 )
 from ..data.Items import Trap, item_dict
@@ -84,7 +85,8 @@ from .client_base import (
   set_job_status,
   set_parents,
   set_string_table,
-  string_buffer
+  string_buffer,
+  STRING_TABLE
 )
 
 WIRE_LOOT = json.loads(json.dumps(LOOT))
@@ -1009,27 +1011,66 @@ class TestMegaJump(ClientTestBase):
     self.assertTrue(self.ctx.jobs_completed[7][3][0])
 
 
+class TestTruncate(unittest.TestCase):
+  def test_shorter_is_untouched(self) -> None:
+    self.assertEqual(truncate("short", 28), "short")
+
+  def test_cuts_with_ellipsis(self) -> None:
+    self.assertEqual(truncate("x"*40, 28), "x"*26 + "..")
+
+  def test_never_ends_on_a_space(self) -> None:
+    # "one two " would end on a space at the cut, so it is dropped.
+    self.assertEqual(truncate("one two three", 10), "one two..")
+
+
+class TestClassificationLabel(unittest.TestCase):
+  def test_labels(self) -> None:
+    self.assertEqual(classification_label(0b001), "Progression item")
+    self.assertEqual(classification_label(0b010), "Useful item")
+    self.assertEqual(classification_label(0b100), "Trap item")
+    self.assertEqual(classification_label(0), "Filler item")
+
+  def test_progression_wins_over_others(self) -> None:
+    self.assertEqual(classification_label(0b101), "Progression item")
+
+
 class TestSetThiefnet(ClientTestBase):
   async def asyncSetUp(self) -> None:
     await super().asyncSetUp()
     self.enter(1, 2)
     self.ctx.locations_info = {
       self.loc(thiefnet_location(i+1)): NetworkItem(
-        item_dict[ItemName.PARAGLIDER].code, self.loc(thiefnet_location(i+1)), 1
+        item_dict[ItemName.PARAGLIDER].code, self.loc(thiefnet_location(i+1)),
+        1, 0b001
       )
       for i in range(24)
     }
     self.ctx.checked_locations = {self.loc(thiefnet_location(2))}
-    self.texts = self.addr["text"]["powerups"][0]
+    self.pine.poke32(self.addr["string table"], STRING_TABLE)
+    self.pine.poke32(self.addr["string pair count"], 48)
+    for slot in range(24):
+      entry = self.addr["thiefnet costs"][slot] - 8
+      name_id, desc_id = 100 + 2*slot, 101 + 2*slot
+      self.pine.poke32(entry + 0x14, name_id)
+      self.pine.poke32(entry + 0x18, desc_id)
+      self.pine.poke32(STRING_TABLE + (2*slot)*8, name_id)
+      self.pine.poke32(STRING_TABLE + (2*slot+1)*8, desc_id)
 
-  def written_text(self, powerup: int) -> tuple[bytes, bytes]:
-    name, description = list(self.texts.values())[powerup]
-    return self.pine.peek_cstring(name), self.pine.peek_cstring(description)
+  def resolved(self, powerup: int, description: bool = False) -> bytes:
+    pointer = self.pine.peek32(
+      STRING_TABLE + (2*powerup + description) * 8 + 4
+    )
+    return self.pine.peek_cstring(pointer)
 
   async def test_sets_up_shop(self) -> None:
     self.slot_data["scout_thiefnet"] = False
     await set_thiefnet(self.ctx)
-    self.assertEqual(self.ctx.thiefnet_items, ["Tester's Paraglider"]*24)
+    # Own item: the table row drops the "Tester's" owner prefix; the
+    # description keeps it and adds the classification.
+    self.assertEqual(
+      self.ctx.thiefnet_items,
+      [("Paraglider", "Tester's Paraglider: Progression item")]*24
+    )
     self.assertEqual(
       self.ctx.thiefnet_purchases, PowerUps(size_destabilizer=True)
     )
@@ -1040,11 +1081,25 @@ class TestSetThiefnet(ClientTestBase):
       self.assertEqual(self.pine.peek32(address), 1)
     for i, cost in enumerate(self.slot_data["thiefnet_costs"]):
       self.assertEqual(self.pine.peek32(self.addr["thiefnet costs"][i]), cost)
-    for i in range(len(POWERUP_TEXT)):
-      self.assertEqual(
-        self.written_text(i), (f"Check #{i+1}".encode(), b"Tester's Paraglider")
-      )
+    self.assertEqual(
+      self.pine.peek_cstring(self.addr["thiefnet description format"]),
+      b"%.0s%s. %s"
+    )
+    self.assertEqual(self.resolved(0), b"Paraglider")
+    self.assertEqual(
+      self.resolved(0, True), b"Tester's Paraglider: Progression item"
+    )
     self.assertEqual(self.ctx.sent, [])
+
+  async def test_foreign_item_keeps_owner_prefix(self) -> None:
+    self.slot_data["scout_thiefnet"] = False
+    self.ctx.slot = 2  # the items belong to player 1, so they are foreign
+    await set_thiefnet(self.ctx)
+    self.assertEqual(
+      self.ctx.thiefnet_items[0],
+      ("Tester's Paraglider", "Tester's Paraglider: Progression item")
+    )
+    self.assertEqual(self.resolved(0), b"Tester's Paraglider")
 
   async def test_scouts(self) -> None:
     self.slot_data["scout_thiefnet"] = True
@@ -1059,9 +1114,9 @@ class TestSetThiefnet(ClientTestBase):
 
   async def test_names_cached(self) -> None:
     self.slot_data["scout_thiefnet"] = False
-    self.ctx.thiefnet_items = ["cached"]*24
+    self.ctx.thiefnet_items = [("row", "cached")]*24
     await set_thiefnet(self.ctx)
-    self.assertEqual(self.written_text(0)[1], b"cached")
+    self.assertEqual(self.resolved(0, True), b"cached")
 
 
 class TestInit(ClientTestBase):
@@ -1191,7 +1246,7 @@ class TestUpdate(ClientTestBase):
     self.slot_data["scout_thiefnet"] = False
     self.enter(1, 2)
     self.pine.poke32(self.addr["infobox string"], 305)
-    self.ctx.thiefnet_items = ["x"]*24
+    self.ctx.thiefnet_items = [("x", "y")]*24
     await self.tick()
     self.assertTrue(self.ctx.in_safehouse)
     for address in self.addr["thiefnet unlock"]:
