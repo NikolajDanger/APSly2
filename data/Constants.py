@@ -1287,6 +1287,61 @@ THIEFNET_DESCRIPTION_STRIDE = 0x100
 THIEFNET_TABLE_LIMIT = 28
 THIEFNET_DESCRIPTION_LIMIT = 60
 
+# ThiefNet icon themes: Archipelago-logo glyphs replacing the row icons,
+# installed by MenuIcons.py. Their free EE RAM is 0x430000-0x43ffff.
+GLYPH_SET = 0x86C9F0                  # UI glyph-set singleton
+# +0x50 = max glyph id, +0x54 = live glyph-table base, +0x80 = group count,
+# +0x84 = group-array base. A glyph's packet slot = [+0x54] - 0x24 + id*0x40.
+GLYPH_TABLE_ALT = 0x3E1C78            # a second holder of the glyph-table base
+MENU_ICON_ELEMS = 0x3F7AC0           # vanilla row-icon group's element array
+MENU_ICON_GROUP = 0x3E62D0           # the row-icon group (group 29) header
+MENU_ICON_PROTO_GROUP = 25           # a character group with flag-2 buffers
+MENU_ICON_ROW_GROUP = 29             # row-icon group index in the array
+MENU_ICON_POOL = 20                  # instance pool size per appended group
+MENU_ICON_FREE_TAG = 0x0000FFFF
+MENU_ICON_TABLE = 0x436000           # relocated glyph table
+MENU_ICON_GROUPS = 0x43A000          # relocated group array
+MENU_ICON_FOURTH_NODE = 0x438000
+MENU_ICON_FOURTH_ELEMS = 0x438800
+MENU_ICON_FOURTH_ARENA = 0x43B000
+MENU_ICON_FIFTH_NODE = 0x43F000
+MENU_ICON_FIFTH_ELEMS = 0x43F800
+MENU_ICON_FIFTH_ARENA = 0x43D000
+# (fill, silhouette) packet staging addresses per class (0x400 stride each)
+MENU_ICON_PACKETS = {
+  "progression": (0x431000, 0x431400),
+  "useful": (0x431800, 0x431C00),
+  "trap": (0x432000, 0x432400),
+  "filler": (0x433800, 0x433000),
+  "unknown": (0x434000, 0x434800),
+}
+# (fill / row glyph, silhouette glyph) per class
+MENU_ICON_GLYPHS = {
+  "progression": (0x31, 0x30),
+  "useful": (0x34, 0x33),
+  "trap": (0x37, 0x36),
+  "filler": (0x66, 0x68),
+  "unknown": (0x6A, 0x6C),
+}
+# class -> ThiefNet row char word; appended slots (>= 9) route via the chooser
+MENU_ICON_CHARS = {
+  "progression": 7, "useful": 8, "trap": 9, "filler": 15, "unknown": 16,
+}
+# vanilla character-portrait packet data (static ELF), for the theme-0 restore
+MENU_ICON_VANILLA_PACKETS = {
+  0x31: 0x3E4AF0, 0x34: 0x3E4E50, 0x37: 0x3E54C0,
+  0x30: 0x3E4980, 0x33: 0x3E4D30, 0x36: 0x3E5390,
+}
+# chooser patch (list builder 0x1dc040): a char word >= 9 selects element
+# char + 0x44f. (site, patched, original) instruction words for safe_patch.
+MENU_ICON_CHOOSER = [
+  (0x1DC080, 0x2464044F, 0x24040009),
+  (0x1DC084, 0x10000004, 0x50640004),
+  (0x1DC088, 0xAE040004, 0xAE170004),
+]
+MENU_ICON_DEFAULT_THEME = 2
+MENU_ICON_THEMES = (0, 1, 2, 3)
+
 # Each pedestal carries a bitmask of the characters allowed to use it
 # (1 Sly, 2 Bentley, 4 Murray). The episode 8 level script clears Sly's bit
 # once the Mega-Jump Job becomes available, to go with the jump pack he then

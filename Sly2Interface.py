@@ -13,6 +13,7 @@ from .pcsx2_interface.pine import (
   Pine, PineConnectionError, DuplicateConnectionError
 )
 from .LootInstall import LootInstaller
+from .MenuIcons import MenuIconInstaller
 from .data.Constants import (
   MENU_RETURN_DATA,
   ADDRESSES,
@@ -490,6 +491,7 @@ class Sly2Interface(GameInterface):
     super().__init__(logger)
     self.last_skip = time()
     self.loot_installer = LootInstaller(self, logger)
+    self.menu_icon_installer = MenuIconInstaller(self, logger)
     self._dag_key: Optional[tuple[int, int]] = None
     self._dag_nodes: list[int] = []
     self._dag_parents: dict[int, list[int]] = {}
@@ -1258,6 +1260,21 @@ class Sly2Interface(GameInterface):
 
   def poll_loot_textures(self) -> bool:
     return self.loot_installer.poll()
+
+  def install_menu_icons(self) -> None:
+    # The appended glyphs need the chooser code patch, so the whole feature
+    # waits for the cave.
+    if not self.cave_live():
+      return
+    self.menu_icon_installer.save_vanilla_chars()
+    self.menu_icon_installer.install_structure()
+    self.menu_icon_installer.install_chooser()
+
+  def apply_thiefnet_theme(self, theme: int) -> None:
+    self.menu_icon_installer.apply_theme(theme)
+
+  def set_thiefnet_row_chars(self, classes: Optional[list[str]]) -> None:
+    self.menu_icon_installer.set_row_chars(classes)
 
   def stop_sound(self) -> None:
     self._write32(self.addresses["sound id"], 0)

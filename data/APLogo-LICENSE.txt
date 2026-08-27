@@ -1,0 +1,7 @@
+The Archipelago Logo is © 2022 by Krista Corkos and Christopher Wilson and is
+licensed under Attribution-NonCommercial 4.0 International. To view a copy of
+this license, visit http://creativecommons.org/licenses/by-nc/4.0/
+
+The colored Archipelago icon is used here converted to in-game vector glyphs
+for the Sly 2 ThiefNet menu icons (data/MenuIcons.py, generated from
+build/menu_icons_assets/color-icon.svg by build/menu_icons.py).

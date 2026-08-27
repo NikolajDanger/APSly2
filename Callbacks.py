@@ -386,6 +386,15 @@ def classification_label(flags: int) -> str:
     return "Trap item"
   return "Filler item"
 
+def classification_key(flags: int) -> str:
+  if flags & 0b001:
+    return "progression"
+  if flags & 0b010:
+    return "useful"
+  if flags & 0b100:
+    return "trap"
+  return "filler"
+
 async def set_thiefnet(ctx: 'Sly2Context') -> None:
   """Sets the randomized ThiefNet items"""
   if ctx.slot_data is None:
@@ -397,6 +406,7 @@ async def set_thiefnet(ctx: 'Sly2Context') -> None:
   if ctx.thiefnet_items is None:
     info = ctx.locations_info
     ctx.thiefnet_items = []
+    ctx.thiefnet_classes = []
     for i in range(24):
       location_info = info[
         Locations.location_dict[thiefnet_location(i+1)].code
@@ -417,6 +427,7 @@ async def set_thiefnet(ctx: 'Sly2Context') -> None:
         f"{truncate(full_name, THIEFNET_DESCRIPTION_LIMIT)}: {classification}"
       )
       ctx.thiefnet_items.append((table_name, description))
+      ctx.thiefnet_classes.append(classification_key(location_info.flags))
 
   ctx.thiefnet_purchases = PowerUps(*[
     Locations.location_dict[thiefnet_location(i+1)].code
@@ -444,6 +455,23 @@ async def set_thiefnet(ctx: 'Sly2Context') -> None:
   for i, (table_name, description) in enumerate(ctx.thiefnet_items):
     ctx.game_interface.set_thiefnet_cost(i,ctx.slot_data["thiefnet_costs"][i])
     ctx.game_interface.set_thiefnet(i, table_name, description)
+
+  install_menu_icons(ctx)
+
+def install_menu_icons(ctx: 'Sly2Context') -> None:
+  """Install the ThiefNet icon-theme glyphs and apply the current theme."""
+  ctx.game_interface.install_menu_icons()
+  apply_menu_icons(ctx)
+
+def apply_menu_icons(ctx: 'Sly2Context') -> None:
+  """(Re)apply the selected icon theme and per-row icons. A no-op until the
+  glyph structure exists, so it is safe from a theme-switch command."""
+  interface = ctx.game_interface
+  if not interface.menu_icon_installer.installed():
+    return
+  interface.apply_thiefnet_theme(ctx.thiefnet_theme)
+  classes = None if ctx.thiefnet_theme == 0 else ctx.thiefnet_classes
+  interface.set_thiefnet_row_chars(classes)
 
 def unset_thiefnet(ctx: 'Sly2Context') -> None:
   """Returns powerups to the original state"""

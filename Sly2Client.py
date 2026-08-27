@@ -13,7 +13,8 @@ import Utils
 
 from .data import Locations, Items
 from .data.Constants import (
-  EPISODES, TASKS, ENEMIES, episode_key, episode_name
+  EPISODES, TASKS, ENEMIES, episode_key, episode_name,
+  MENU_ICON_DEFAULT_THEME, MENU_ICON_THEMES
 )
 from .data.Names import (
   ItemCategory,
@@ -31,7 +32,8 @@ from .Callbacks import (
   mark_dirty,
   compute_available_episodes,
   episode_loot,
-  loot_odds_row
+  loot_odds_row,
+  apply_menu_icons
 )
 
 # Child of CommonClient's "Client" logger so records propagate to the UI log
@@ -132,6 +134,21 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
         logger.info(
           f"Clockwerk parts needed to complete Clockwerk Hunt goal: {needed}"
         )
+
+  def _cmd_thiefnet_theme(self, theme: str = "") -> None:
+    """Set the ThiefNet icon theme: 0 vanilla, 1 plain logo, 2 class colors
+    (default), 3 alternative class colors."""
+    if not isinstance(self.ctx, Sly2Context):
+      return
+    if not theme.isdigit() or int(theme) not in MENU_ICON_THEMES:
+      choices = ", ".join(str(t) for t in MENU_ICON_THEMES)
+      logger.info(f"Usage: /thiefnet_theme <{choices}>")
+      return
+    self.ctx.thiefnet_theme = int(theme)
+    apply_menu_icons(self.ctx)
+    message = f"ThiefNet icon theme set to {theme}"
+    logger.info(message)
+    self.ctx.notification(message)
 
   def _episode_loot(
     self, loot_table: dict[str, list], i: int, j: int
@@ -335,6 +352,8 @@ class Sly2Context(CommonContext): # type: ignore[misc]
   available_episodes: Dict[Sly2Episode,int]
   all_bottles: Dict[Sly2Episode,int]
   thiefnet_items: Optional[list[tuple[str, str]]] = None
+  thiefnet_classes: Optional[list[str]] = None
+  thiefnet_theme: int = MENU_ICON_DEFAULT_THEME  # ThiefNet icon theme (0-3)
   powerups: PowerUps = PowerUps()
   thiefnet_purchases: PowerUps = PowerUps()
   jobs_completed: list[list[list[bool]]]
