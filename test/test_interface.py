@@ -28,7 +28,12 @@ from ..data.Constants import (
   TREASURE_VTABLE,
   TREASURE_PRICES,
   VAULT_MARKER_PATCH_SITE,
-  VAULT_MARKER_ORIG
+  VAULT_MARKER_ORIG,
+  CAVE_THIEFNET_COLORS,
+  THIEFNET_COLORS_SITE,
+  THIEFNET_COLORS_ORIG,
+  THIEFNET_TEXT_VANILLA,
+  MENU_ICON_TABLE
 )
 from ..Sly2Interface import (
   EE_RAM_START,
@@ -378,6 +383,73 @@ class TestVaultMarker(InterfaceTestBase):
     self.pine.clear_writes()
     self.interface.set_vault_marker()
     self.assertEqual(self.pine.writes, [])
+
+
+class TestThiefNetColors(InterfaceTestBase):
+  def _install(self) -> None:
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG)
+    self.interface.install_cave()
+    self.pine.poke32(THIEFNET_COLORS_SITE, THIEFNET_COLORS_ORIG)
+    self.interface.clear_cache()
+    self.pine.clear_writes()
+
+  def _colors(self) -> list[int]:
+    return [0x7F000000 | i for i in range(24)]
+
+  def test_set_writes_table_and_visible_slots(self) -> None:
+    self._install()
+    colors = self._colors()
+    self.interface.set_thiefnet_colors(colors)
+    table = self.addr["thiefnet color table"]
+    for i in range(24):
+      self.assertEqual(self.pine.peek32(table + 4*i), colors[i])
+    for i in range(24, 32):
+      self.assertEqual(self.pine.peek32(table + 4*i), THIEFNET_TEXT_VANILLA)
+    slots = MENU_ICON_TABLE + 0xF00
+    for i in range(6):
+      self.assertEqual(self.pine.peek32(slots + i*0x80), colors[i])
+
+  def test_set_redirects_through_cave(self) -> None:
+    self._install()
+    self.interface.set_thiefnet_colors(self._colors())
+    slot = self.addr["cave patches"]
+    redirect = 0x0C000000 | (CAVE_THIEFNET_COLORS >> 2)
+    self.assertEqual(self.pine.peek32(slot), THIEFNET_COLORS_SITE)
+    self.assertEqual(self.pine.peek32(slot + 4), redirect)
+    self.assertEqual(
+      self.pine.peek32(THIEFNET_COLORS_SITE), THIEFNET_COLORS_ORIG
+    )
+    self.assertFalse(self.pine.written(THIEFNET_COLORS_SITE))
+
+  def test_set_without_cave_does_nothing(self) -> None:
+    self.pine.poke32(THIEFNET_COLORS_SITE, THIEFNET_COLORS_ORIG)
+    self.pine.clear_writes()
+    self.interface.set_thiefnet_colors(self._colors())
+    self.assertEqual(self.pine.writes, [])
+
+  def test_clear_restores_patch_and_blue(self) -> None:
+    self._install()
+    self.interface.set_thiefnet_colors(self._colors())
+    # simulate the cave applying the redirect and clearing its request slot
+    self.pine.poke32(
+      THIEFNET_COLORS_SITE, 0x0C000000 | (CAVE_THIEFNET_COLORS >> 2)
+    )
+    self.pine.poke32(self.addr["cave patches"], 0)
+    self.interface.clear_cache()
+    self.pine.clear_writes()
+    self.interface.clear_thiefnet_colors()
+    slot = self.addr["cave patches"]
+    self.assertEqual(self.pine.peek32(slot), THIEFNET_COLORS_SITE)
+    self.assertEqual(self.pine.peek32(slot + 4), THIEFNET_COLORS_ORIG)
+    slots = MENU_ICON_TABLE + 0xF00
+    for i in range(6):
+      self.assertEqual(self.pine.peek32(slots + i*0x80), THIEFNET_TEXT_VANILLA)
+
+  def test_clear_when_never_set_queues_no_patch(self) -> None:
+    self._install()
+    self.interface.clear_thiefnet_colors()
+    slot = self.addr["cave patches"]
+    self.assertEqual(self.pine.peek32(slot), 0)
 
 
 class TestPowerUps(InterfaceTestBase):

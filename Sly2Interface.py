@@ -44,6 +44,11 @@ from .data.Constants import (
   CAVE_VAULT_MARKER,
   VAULT_MARKER_PATCH_SITE,
   VAULT_MARKER_ORIG,
+  CAVE_THIEFNET_COLORS,
+  THIEFNET_COLORS_SITE,
+  THIEFNET_COLORS_ORIG,
+  THIEFNET_TEXT_VANILLA,
+  MENU_ICON_TABLE,
   COIN_POP_INTERVAL,
   DEATH_INFO_TEMPLATE,
   THIEFNET_DESCRIPTION_FORMAT,
@@ -1353,6 +1358,7 @@ class Sly2Interface(GameInterface):
       self.addresses["vault marker table"],
       b"".join(a.to_bytes(4, "little") for a in self.addresses["vaults"])
     )
+    self._write_bytes(self.addresses["thiefnet color table"], bytes(0x80))
     self.safe_patch(
       self.addresses["cave hook"], CAVE_HOOK_ENTRY, CAVE_HOOK_ORIG
     )
@@ -1367,6 +1373,36 @@ class Sly2Interface(GameInterface):
       VAULT_MARKER_PATCH_SITE,
       0x0C000000 | (CAVE_VAULT_MARKER >> 2),
       VAULT_MARKER_ORIG,
+    )
+
+  def set_thiefnet_colors(self, colors: list[int]) -> None:
+    """Color the ThiefNet rows' name text. `colors` is one ABGR word per row.
+    The cave function keeps the visible slots synced on scroll from the table;
+    the initial visible rows are set here since it only fires on a scroll."""
+    if not self.cave_live():
+      return
+    padded = colors[:32] + [THIEFNET_TEXT_VANILLA] * (32 - len(colors))
+    table = self.addresses["thiefnet color table"]
+    self._batch_write32([(table + i*4, padded[i]) for i in range(32)])
+    self.safe_patch(
+      THIEFNET_COLORS_SITE,
+      0x0C000000 | (CAVE_THIEFNET_COLORS >> 2),
+      THIEFNET_COLORS_ORIG,
+    )
+    slots = MENU_ICON_TABLE + 0xF00
+    self._batch_write32([(slots + i*0x80, padded[i]) for i in range(6)])
+
+  def clear_thiefnet_colors(self) -> None:
+    """Undo set_thiefnet_colors: restore the scroll handler's own call and put
+    the visible rows' name text back to the vanilla blue."""
+    self.safe_patch(
+      THIEFNET_COLORS_SITE,
+      THIEFNET_COLORS_ORIG,
+      0x0C000000 | (CAVE_THIEFNET_COLORS >> 2),
+    )
+    slots = MENU_ICON_TABLE + 0xF00
+    self._batch_write32(
+      [(slots + i*0x80, THIEFNET_TEXT_VANILLA) for i in range(6)]
     )
 
   def kill_player(self, damage_type: int = 0x200) -> None:

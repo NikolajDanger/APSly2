@@ -216,3 +216,40 @@ vault_marker_opened:
 	lw    $v0, 0($v0)           # v0 = flag (1 = opened)
 	jr    $ra
 	nop
+
+# Extra function, not part of the per-frame routine. Replaces the ThiefNet
+# scroll handler's tail call `jal 0x1da9e8` (a0 = the menu object): it runs the
+# original function, then recolors the six visible rows' name text. The color
+# slots are per screen position, not per item, so on every scroll the client's
+# per-item color table is re-read and the visible slots rewritten, keeping the
+# names colored by item class as the list scrolls.
+thiefnet_colors:
+	lui   $k0, 0x0042
+	ori   $k0, $k0, 0xcfa0      # save area
+	sw    $ra, 0($k0)
+	sw    $a0, 4($k0)           # a0 = the menu object
+	jal   0x1da9e8             # the original tail call
+	nop
+	lui   $k0, 0x0042
+	ori   $k0, $k0, 0xcfa0
+	lw    $a0, 4($k0)
+	lw    $t0, 0x250($a0)       # t0 = scroll offset (first visible item)
+	lui   $t1, 0x0042
+	ori   $t1, $t1, 0xce80      # t1 = &color_table[0] (client-populated)
+	sll   $t2, $t0, 2
+	addu  $t1, $t1, $t2         # t1 = &color_table[scroll]
+	lui   $t2, 0x0043
+	ori   $t2, $t2, 0x6f00      # t2 = row 0's name-color slot (stride 0x80)
+	addiu $t3, $zero, 6         # six visible rows
+tncolors_loop:
+	lw    $t4, 0($t1)
+	sw    $t4, 0($t2)
+	addiu $t1, $t1, 4
+	addiu $t3, $t3, -1
+	bne   $t3, $zero, tncolors_loop
+	addiu $t2, $t2, 0x80
+	lui   $k0, 0x0042
+	ori   $k0, $k0, 0xcfa0
+	lw    $ra, 0($k0)
+	jr    $ra
+	nop

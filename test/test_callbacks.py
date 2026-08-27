@@ -8,6 +8,7 @@ from NetUtils import ClientStatus, NetworkItem
 from .. import Callbacks, Sly2Client
 from ..Callbacks import (
   activate_trap,
+  apply_thiefnet_text,
   check_clockla,
   check_jobs,
   compute_available_episodes,
@@ -46,7 +47,10 @@ from ..data.Constants import (
   LOOT_IDS,
   MEGA_JUMP_GADGET_ID,
   MEGA_JUMP_UNLOAD_CALL,
+  MENU_ICON_TABLE,
+  GLYPH_SET,
   PICKPOCKET_LOOT_TABLE_CHANCES,
+  THIEFNET_TEXT_COLORS,
   episode_key
 )
 from ..data.Items import Trap, item_dict
@@ -1813,3 +1817,46 @@ class TestTickLogging(TickHarness):
     line = next(r for r in logs.output if "Last 10 ticks" in r)
     self.assertIn("20 batches", line)
     self.assertNotIn("PINE", line)
+
+
+class TestApplyThiefnetText(ClientTestBase):
+  def _prime(self, installed: bool = True) -> None:
+    if installed:
+      self.pine.poke32(GLYPH_SET + 0x54, MENU_ICON_TABLE + 0x24)
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ENTRY)
+    self.ctx.thiefnet_classes = [
+      "progression", "useful", "trap", "filler"
+    ] * 6
+    self.interface.clear_cache()
+
+  def _calls(self) -> tuple:
+    return (
+      patch.object(self.interface, "set_thiefnet_colors"),
+      patch.object(self.interface, "clear_thiefnet_colors"),
+    )
+
+  def test_default_on_colors_by_class(self) -> None:
+    self._prime()
+    set_call, clear_call = self._calls()
+    with set_call as colored, clear_call as cleared:
+      apply_thiefnet_text(self.ctx)
+    expected = [THIEFNET_TEXT_COLORS[c] for c in self.ctx.thiefnet_classes]
+    colored.assert_called_once_with(expected)
+    cleared.assert_not_called()
+
+  def test_toggle_off_clears(self) -> None:
+    self._prime()
+    self.ctx.thiefnet_text_color = False
+    set_call, clear_call = self._calls()
+    with set_call as colored, clear_call as cleared:
+      apply_thiefnet_text(self.ctx)
+    colored.assert_not_called()
+    cleared.assert_called_once_with()
+
+  def test_not_installed_is_noop(self) -> None:
+    self._prime(installed=False)
+    set_call, clear_call = self._calls()
+    with set_call as colored, clear_call as cleared:
+      apply_thiefnet_text(self.ctx)
+    colored.assert_not_called()
+    cleared.assert_not_called()

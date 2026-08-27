@@ -48,6 +48,21 @@ class TestLinkToggles(CommandTestBase):
     self.assertFalse(self.ctx.ring_link_enabled)
 
 
+class TestThiefnetText(CommandTestBase):
+  async def test_toggles_and_notifies(self) -> None:
+    self.assertTrue(self.ctx.thiefnet_text_color)
+    with patch.object(Sly2Client, "apply_thiefnet_text") as apply:
+      self.cmd._cmd_thiefnet_text()
+    self.assertFalse(self.ctx.thiefnet_text_color)
+    apply.assert_called_once_with(self.ctx)
+    self.assertEqual(
+      list(self.ctx.notification_queue), ["ThiefNet text color turned off"]
+    )
+    with patch.object(Sly2Client, "apply_thiefnet_text"):
+      self.cmd._cmd_thiefnet_text()
+    self.assertTrue(self.ctx.thiefnet_text_color)
+
+
 class TestTrace(CommandTestBase):
   async def test_toggles_write_logger_level(self) -> None:
     writes = self.interface.write_logger

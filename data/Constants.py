@@ -721,6 +721,8 @@ ADDRESSES = {
     "vault marker table": 0x42CF60,
     # Generic call request: fn, a0..a3, result, completion counter.
     "cave call": 0x42CF80,
+    # 32 ABGR name colors, one per ThiefNet row, read by CAVE_THIEFNET_COLORS.
+    "thiefnet color table": 0x42CE80,
     "heap bottom": 0x2F6384,
     "loot pool": 0x3E0930,
     "loot pool last": 0x3E0934,
@@ -1400,11 +1402,28 @@ CAVE_BLOB = (
   "02000010240046af000040afe4ee070c2520600325204000beec070c25280000"+
   "42001a3c04cf5a3700005f8f2000448f2400458f144b0808000000003d00023c"+
   "604a438cffff6324801803004200023c60cf4234211043000000428c0000428c"+
-  "0800e00300000000"
+  "0800e0030000000042001a3ca0cf5a3700005faf040044af7a6a070c00000000"+
+  "42001a3ca0cf5a370400448f5002888c4200093c80ce29358050080021482a01"+
+  "43000a3c006f4a3506000b2400002c8d00004cad04002925ffff6b25fbff6015"+
+  "80004a2542001a3ca0cf5a3700005f8f0800e00300000000"
 )
 CAVE_VAULT_MARKER = 0x0042B1FC
 VAULT_MARKER_PATCH_SITE = 0x0022AACC
 VAULT_MARKER_ORIG = 0x0C076BAA
+# ThiefNet row-name text color. The scroll handler's tail call is redirected
+# to CAVE_THIEFNET_COLORS, which recolors the six visible rows from the
+# client-written table at ADDRESSES["thiefnet color table"] on every scroll.
+CAVE_THIEFNET_COLORS = 0x0042B228
+THIEFNET_COLORS_SITE = 0x001DBCF4
+THIEFNET_COLORS_ORIG = 0x0C076A7A
+# Per-class ThiefNet name colors (ABGR, alpha 0x7f) and the vanilla blue.
+THIEFNET_TEXT_COLORS = {
+  "progression": 0x7FAD7491,
+  "useful": 0x7FAD826B,
+  "trap": 0x7F5A61AD,
+  "filler": 0x7F6E9E6E,
+}
+THIEFNET_TEXT_VANILLA = 0x7F664C33
 # damage_info struct; +0x00/+0x04 skeleton, +0x08 entity and +0x0C damage
 # type are patched from the live character at kill time. +0x10 = -2000
 # (lethal), +0x20.. a location/dir, +0x44 = 8.

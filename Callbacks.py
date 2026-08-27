@@ -25,6 +25,7 @@ from .data.Constants import (
   ALARM_INTERVAL,
   THIEFNET_TABLE_LIMIT,
   THIEFNET_DESCRIPTION_LIMIT,
+  THIEFNET_TEXT_COLORS,
   episode_key,
   episode_name,
   episode_number
@@ -472,6 +473,22 @@ def apply_menu_icons(ctx: 'Sly2Context') -> None:
   interface.apply_thiefnet_theme(ctx.thiefnet_theme)
   classes = None if ctx.thiefnet_theme == 0 else ctx.thiefnet_classes
   interface.set_thiefnet_row_chars(classes)
+  apply_thiefnet_text(ctx)
+
+def apply_thiefnet_text(ctx: 'Sly2Context') -> None:
+  """(Re)apply the row-name text colors. The colors share the icon glyph
+  table, so this waits for the icon structure; it is independent of the icon
+  theme (vanilla icons can still carry colored text)."""
+  interface = ctx.game_interface
+  if not interface.menu_icon_installer.installed():
+    return
+  color = ctx.thiefnet_text_color and ctx.thiefnet_classes is not None
+  if color:
+    assert ctx.thiefnet_classes is not None
+    colors = [THIEFNET_TEXT_COLORS[cls] for cls in ctx.thiefnet_classes]
+    interface.set_thiefnet_colors(colors)
+  else:
+    interface.clear_thiefnet_colors()
 
 def unset_thiefnet(ctx: 'Sly2Context') -> None:
   """Returns powerups to the original state"""

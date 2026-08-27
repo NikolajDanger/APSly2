@@ -33,7 +33,8 @@ from .Callbacks import (
   compute_available_episodes,
   episode_loot,
   loot_odds_row,
-  apply_menu_icons
+  apply_menu_icons,
+  apply_thiefnet_text
 )
 
 # Child of CommonClient's "Client" logger so records propagate to the UI log
@@ -147,6 +148,17 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
     self.ctx.thiefnet_theme = int(theme)
     apply_menu_icons(self.ctx)
     message = f"ThiefNet icon theme set to {theme}"
+    logger.info(message)
+    self.ctx.notification(message)
+
+  def _cmd_thiefnet_text(self) -> None:
+    """Toggle coloring each ThiefNet row's text by item class."""
+    if not isinstance(self.ctx, Sly2Context):
+      return
+    self.ctx.thiefnet_text_color = not self.ctx.thiefnet_text_color
+    apply_thiefnet_text(self.ctx)
+    state = "on" if self.ctx.thiefnet_text_color else "off"
+    message = f"ThiefNet text color turned {state}"
     logger.info(message)
     self.ctx.notification(message)
 
@@ -354,6 +366,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
   thiefnet_items: Optional[list[tuple[str, str]]] = None
   thiefnet_classes: Optional[list[str]] = None
   thiefnet_theme: int = MENU_ICON_DEFAULT_THEME  # ThiefNet icon theme (0-3)
+  thiefnet_text_color: bool = True
   powerups: PowerUps = PowerUps()
   thiefnet_purchases: PowerUps = PowerUps()
   jobs_completed: list[list[list[bool]]]
