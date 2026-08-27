@@ -9,6 +9,7 @@ from .. import Callbacks, Sly2Client
 from ..Callbacks import (
   activate_trap,
   apply_thiefnet_text,
+  load_thiefnet_prefs,
   check_clockla,
   check_jobs,
   compute_available_episodes,
@@ -1860,3 +1861,31 @@ class TestApplyThiefnetText(ClientTestBase):
       apply_thiefnet_text(self.ctx)
     colored.assert_not_called()
     cleared.assert_not_called()
+
+
+class TestLoadThiefnetPrefs(ClientTestBase):
+  def test_unset_keeps_defaults(self) -> None:
+    self.pine.poke32(self.addr["thiefnet prefs"], 0)
+    self.interface.clear_cache()
+    load_thiefnet_prefs(self.ctx)
+    self.assertEqual(self.ctx.thiefnet_theme, 2)
+    self.assertTrue(self.ctx.thiefnet_text_color)
+    self.assertTrue(self.ctx.thiefnet_prefs_loaded)
+
+  def test_loads_saved_values(self) -> None:
+    self.interface.save_thiefnet_theme(0)
+    self.interface.save_thiefnet_text(False)
+    self.interface.clear_cache()
+    load_thiefnet_prefs(self.ctx)
+    self.assertEqual(self.ctx.thiefnet_theme, 0)
+    self.assertFalse(self.ctx.thiefnet_text_color)
+
+  def test_loads_only_once(self) -> None:
+    self.interface.save_thiefnet_theme(3)
+    self.interface.clear_cache()
+    load_thiefnet_prefs(self.ctx)
+    self.assertEqual(self.ctx.thiefnet_theme, 3)
+    self.interface.save_thiefnet_theme(1)
+    self.interface.clear_cache()
+    load_thiefnet_prefs(self.ctx)
+    self.assertEqual(self.ctx.thiefnet_theme, 3)

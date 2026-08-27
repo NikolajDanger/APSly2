@@ -452,6 +452,32 @@ class TestThiefNetColors(InterfaceTestBase):
     self.assertEqual(self.pine.peek32(slot), 0)
 
 
+class TestThiefnetPrefs(InterfaceTestBase):
+  def _addr(self) -> int:
+    return self.addr["thiefnet prefs"]
+
+  def test_unset_reads_none(self) -> None:
+    self.pine.poke32(self._addr(), 0)
+    self.assertEqual(self.interface.read_thiefnet_prefs(), (None, None))
+
+  def test_save_and_read_theme(self) -> None:
+    self.interface.save_thiefnet_theme(3)
+    self.assertEqual(self.pine.peek8(self._addr()), 0x83)
+    self.assertEqual(self.interface.read_thiefnet_prefs(), (3, None))
+
+  def test_save_and_read_text(self) -> None:
+    self.interface.save_thiefnet_text(True)
+    self.assertEqual(self.pine.peek8(self._addr() + 1), 0x81)
+    self.interface.save_thiefnet_text(False)
+    self.assertEqual(self.pine.peek8(self._addr() + 1), 0x80)
+    self.assertEqual(self.interface.read_thiefnet_prefs(), (None, False))
+
+  def test_both_prefs_independent(self) -> None:
+    self.interface.save_thiefnet_theme(2)
+    self.interface.save_thiefnet_text(True)
+    self.assertEqual(self.interface.read_thiefnet_prefs(), (2, True))
+
+
 class TestPowerUps(InterfaceTestBase):
   def test_round_trip_each_field(self) -> None:
     for field in PowerUps._fields:

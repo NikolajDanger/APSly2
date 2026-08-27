@@ -1294,6 +1294,22 @@ class Sly2Interface(GameInterface):
   def read_items_received(self) -> int:
     return self._read32(self.addresses["items received"])
 
+  def read_thiefnet_prefs(self) -> tuple[Optional[int], Optional[bool]]:
+    """Return the preferences for the ThiefNet theme: (icon theme, text
+    color). None when not set."""
+    word = self._read32(self.addresses["thiefnet prefs"])
+    theme_byte = word & 0xFF
+    text_byte = (word >> 8) & 0xFF
+    theme = (theme_byte & 0x7F) if theme_byte & 0x80 else None
+    text = bool(text_byte & 0x01) if text_byte & 0x80 else None
+    return theme, text
+
+  def save_thiefnet_theme(self, theme: int) -> None:
+    self._write8(self.addresses["thiefnet prefs"], 0x80 | (theme & 0x7F))
+
+  def save_thiefnet_text(self, on: bool) -> None:
+    self._write8(self.addresses["thiefnet prefs"] + 1, 0x80 | int(on))
+
   # =====================================================
   # Deathlink
   # =====================================================

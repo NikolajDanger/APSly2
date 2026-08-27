@@ -7,6 +7,7 @@ LICENSE
 requirements.txt
 Sly 2.yaml
 Sly_Addresses.xlsx
+savefile_data.txt
 ruff.toml
 test
 e2e

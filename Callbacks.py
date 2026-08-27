@@ -26,6 +26,7 @@ from .data.Constants import (
   THIEFNET_TABLE_LIMIT,
   THIEFNET_DESCRIPTION_LIMIT,
   THIEFNET_TEXT_COLORS,
+  MENU_ICON_THEMES,
   episode_key,
   episode_name,
   episode_number
@@ -457,7 +458,21 @@ async def set_thiefnet(ctx: 'Sly2Context') -> None:
     ctx.game_interface.set_thiefnet_cost(i,ctx.slot_data["thiefnet_costs"][i])
     ctx.game_interface.set_thiefnet(i, table_name, description)
 
+  load_thiefnet_prefs(ctx)
   install_menu_icons(ctx)
+
+def load_thiefnet_prefs(ctx: 'Sly2Context') -> None:
+  """Once per session, take the icon theme and text-color toggle from the
+  save file when the player has set them there, overriding the session
+  defaults before the shop is drawn."""
+  if ctx.thiefnet_prefs_loaded:
+    return
+  ctx.thiefnet_prefs_loaded = True
+  theme, text = ctx.game_interface.read_thiefnet_prefs()
+  if theme is not None and theme in MENU_ICON_THEMES:
+    ctx.thiefnet_theme = theme
+  if text is not None:
+    ctx.thiefnet_text_color = text
 
 def install_menu_icons(ctx: 'Sly2Context') -> None:
   """Install the ThiefNet icon-theme glyphs and apply the current theme."""

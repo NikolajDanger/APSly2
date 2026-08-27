@@ -146,6 +146,7 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
       logger.info(f"Usage: /thiefnet_theme <{choices}>")
       return
     self.ctx.thiefnet_theme = int(theme)
+    self.ctx.game_interface.save_thiefnet_theme(self.ctx.thiefnet_theme)
     apply_menu_icons(self.ctx)
     message = f"ThiefNet icon theme set to {theme}"
     logger.info(message)
@@ -156,6 +157,7 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
     if not isinstance(self.ctx, Sly2Context):
       return
     self.ctx.thiefnet_text_color = not self.ctx.thiefnet_text_color
+    self.ctx.game_interface.save_thiefnet_text(self.ctx.thiefnet_text_color)
     apply_thiefnet_text(self.ctx)
     state = "on" if self.ctx.thiefnet_text_color else "off"
     message = f"ThiefNet text color turned {state}"
@@ -367,6 +369,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
   thiefnet_classes: Optional[list[str]] = None
   thiefnet_theme: int = MENU_ICON_DEFAULT_THEME  # ThiefNet icon theme (0-3)
   thiefnet_text_color: bool = True
+  thiefnet_prefs_loaded: bool = False
   powerups: PowerUps = PowerUps()
   thiefnet_purchases: PowerUps = PowerUps()
   jobs_completed: list[list[list[bool]]]
@@ -417,6 +420,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     self.vaults = [False for _ in EPISODES]
     self.powerups = PowerUps()
     self.thiefnet_purchases = PowerUps()
+    self.thiefnet_prefs_loaded = False
     self.notified_items = 0
     self.clockwerk_parts_count = 0
     self.locations_checked = set()

@@ -699,6 +699,9 @@ ADDRESSES = {
     "camera focus": 0x2DE258,
     "fade type": 0x443798,
     "items received": 0x3D57FC,
+    # Unused savefile data. Byte 0 = ThiefNet theme, byte 1 = text color;
+    # in each, bit 7 = "set by the player", low bits = the value.
+    "thiefnet prefs": 0x3D9AF8,
     "coins": 0x3D4B00,
     "gadgets": 0x3D4AF8,
     "active character": 0x3D4A6C,
