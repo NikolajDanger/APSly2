@@ -748,6 +748,7 @@ ADDRESSES = {
     # Where we're putting the custom thiefnet strings.
     "thiefnet name buffer": 0x42D000,
     "thiefnet description buffer": 0x42E000,
+    "infobox buffer": 0x42FC00,
     "frame counter": 0x2F67D0,
     "input": 0x2E0CB4,
     "skip cutscene": 0x2F6810,
@@ -996,7 +997,6 @@ ADDRESSES = {
       for i in range(8)
     ],
     "text": {
-      "infobox": [0x14,0x14,0x1c,0x24,0x24,0x1c,0x1c,0x14],
       "Press START (new)": 0x4b3970,
       "Press START (resume)": 0x4b39a0,
       "Episode 1": 0x4a3fe0,
@@ -1289,6 +1289,7 @@ THIEFNET_DESCRIPTION_FORMAT = "%.0s%s. %s"
 THIEFNET_DESCRIPTION_FORMAT_VANILLA = "%s: %s. %s"
 THIEFNET_NAME_STRIDE = 0x40
 THIEFNET_DESCRIPTION_STRIDE = 0x100
+INFOBOX_BUFFER_SIZE = 0x100
 THIEFNET_TABLE_LIMIT = 28
 THIEFNET_DESCRIPTION_LIMIT = 60
 

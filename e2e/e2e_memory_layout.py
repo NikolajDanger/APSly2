@@ -147,7 +147,6 @@ class HubChecks(HubTestMixin):
     table = self.raw32(self.addr["string table"])
     self.assertTrue(in_ee_ram(table))
     expected = {
-      "infobox": "DO NOT LOCALIZE",
       "right back": "RIGHT BACK",
       "this powerup.": ""
     }

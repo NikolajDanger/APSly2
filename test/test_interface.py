@@ -55,6 +55,7 @@ from .client_base import (
   job_status,
   make_guard_list,
   set_active_character,
+  infobox_pointer,
   set_infobox_pointers,
   set_job_mission,
   set_job_status,
@@ -603,14 +604,14 @@ class TestText(InterfaceTestBase):
     for episode in (1, 3):
       self.pine.poke32(self.addr["world id"], episode)
       set_string_table(self.pine, self.addr, episode)
-      self.interface.set_text("infobox", f"ep{episode}")
-      buffer = string_buffer(self.pine, self.addr, "infobox", episode)
+      self.interface.set_text("right back", f"ep{episode}")
+      buffer = string_buffer(self.pine, self.addr, "right back", episode)
       self.assertEqual(self.pine.peek_cstring(buffer), f"ep{episode}".encode())
 
   def test_unresolved_pointer_refused(self) -> None:
     self.pine.poke32(self.addr["world id"], 1)
     with self.assertLogs("Sly2Test", "WARNING"):
-      self.interface.set_text("infobox", "x")
+      self.interface.set_text("right back", "x")
     self.assertEqual(self.pine.writes, [])
 
 
@@ -1439,8 +1440,9 @@ class TestInfobox(InterfaceTestBase):
     self.assertEqual(self.interface.current_infobox(), 42)
 
   def test_set_infobox_writes_text_and_state(self) -> None:
-    self.interface.set_infobox("hello")
-    buffer = string_buffer(self.pine, self.addr, "infobox", 1)
+    self.assertTrue(self.interface.set_infobox("hello"))
+    buffer = infobox_pointer(self.pine)
+    self.assertEqual(buffer, self.addr["infobox buffer"])
     self.assertEqual(self.pine.peek_cstring(buffer), b" "*10 + b"hello")
     self.assertEqual(self.pine.peek32(self.addr["infobox string"]), 1)
     self.assertEqual(self.pine.peek32(self.infobox_ptr() + 0x64), 2)

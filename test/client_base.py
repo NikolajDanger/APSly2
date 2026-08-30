@@ -12,7 +12,9 @@ from .. import Sly2World
 from ..data.Items import item_dict
 from ..data.Locations import location_dict
 from ..Sly2Client import Sly2Context
-from ..Sly2Interface import Sly2Episode, Sly2Interface
+from ..Sly2Interface import (
+  INFOBOX_CLIENT_STRING, Sly2Episode, Sly2Interface
+)
 from .fake_pine import FakePine
 
 GAME_ID = "SCUS-97316"
@@ -112,12 +114,24 @@ def set_active_character(
   return CHARACTER
 
 
+INFOBOX_PAIR = 63
+
+
 def set_string_table(pine: FakePine, addr: dict, episode: int) -> None:
-  """Point the string table entries used by set_text at writable buffers."""
+  """Point the string table entries used by set_text at writable buffers
+  and give the infobox string id a pair the client can repoint."""
   pine.poke32(addr["string table"], STRING_TABLE)
-  for i, name in enumerate(("infobox", "right back", "this powerup.")):
+  for i, name in enumerate(("right back", "this powerup.")):
     offset = addr["text"][name][episode-1]
     pine.poke32(STRING_TABLE + offset, STRING_BUFFERS + i*0x100)
+  pine.poke32(addr["string pair count"], INFOBOX_PAIR + 1)
+  pine.poke32(STRING_TABLE + INFOBOX_PAIR*8, INFOBOX_CLIENT_STRING)
+  pine.poke32(STRING_TABLE + INFOBOX_PAIR*8 + 4, STRING_BUFFERS + 0x200)
+
+
+def infobox_pointer(pine: FakePine) -> int:
+  """Where the game would read the infobox text from"""
+  return pine.peek32(STRING_TABLE + INFOBOX_PAIR*8 + 4)
 
 
 def string_buffer(pine: FakePine, addr: dict, name: str, episode: int) -> int:

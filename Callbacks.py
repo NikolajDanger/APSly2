@@ -741,7 +741,7 @@ async def handle_notifications(ctx: 'Sly2Context') -> None:
   if (
     (ctx.showing_notification and time() - ctx.notification_timestamp < 10) or
     ((not ctx.showing_notification) and showing and not ours) or
-    game.in_cutscene()
+    game.in_cutscene() or game.is_loading()
   ):
     return
 
@@ -750,7 +750,7 @@ async def handle_notifications(ctx: 'Sly2Context') -> None:
   game.disable_infobox()
   ctx.showing_notification = False
   if (
-    len(ctx.notification_queue) > 0 and game.in_hub() and
+    len(ctx.notification_queue) > 0 and
     game.set_infobox(ctx.notification_queue[0])
   ):
     ctx.notification_queue.popleft()

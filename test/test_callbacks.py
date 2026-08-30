@@ -89,6 +89,7 @@ from .client_base import (
   job_status,
   make_guard_list,
   set_active_character,
+  infobox_pointer,
   set_infobox_pointers,
   set_job_status,
   set_parents,
@@ -691,9 +692,7 @@ class TestHandleNotifications(ClientTestBase):
       await handle_notifications(self.ctx)
 
   def shown_text(self) -> bytes:
-    return self.pine.peek_cstring(
-      string_buffer(self.pine, self.addr, "infobox", 1)
-    )
+    return self.pine.peek_cstring(infobox_pointer(self.pine))
 
   async def test_shows_queued_notification(self) -> None:
     await self.run_at(1000.0)
@@ -724,12 +723,29 @@ class TestHandleNotifications(ClientTestBase):
     await self.run_at(1000.0)
     self.assertEqual(len(self.ctx.notification_queue), 1)
 
-  async def test_only_in_hub(self) -> None:
+  async def test_shows_outside_hub(self) -> None:
     self.enter(1, 3)
+    await self.run_at(1000.0)
+    self.assertTrue(self.ctx.showing_notification)
+    self.assertEqual(self.shown_text(), b" "*10 + b"hello")
+    self.assertEqual(self.pine.peek32(self.infobox + 0x64), 2)
+
+  async def test_waits_for_infobox_object(self) -> None:
+    self.pine.poke32(self.addr["infobox"], 0)
     await self.run_at(1000.0)
     self.assertFalse(self.ctx.showing_notification)
     self.assertEqual(len(self.ctx.notification_queue), 1)
-    self.assertEqual(self.pine.peek32(self.infobox + 0x64), 1)
+
+  async def test_waits_for_string_id(self) -> None:
+    self.pine.poke32(self.addr["string pair count"], 0)
+    await self.run_at(1000.0)
+    self.assertFalse(self.ctx.showing_notification)
+    self.assertEqual(len(self.ctx.notification_queue), 1)
+
+  async def test_not_while_loading(self) -> None:
+    self.pine.poke32(self.addr["loading"], 2)
+    await self.run_at(1000.0)
+    self.assertEqual(len(self.ctx.notification_queue), 1)
 
   async def test_closes_hung_bar_with_client_string(self) -> None:
     self.ctx.notification_queue.clear()

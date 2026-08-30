@@ -56,7 +56,8 @@ from .data.Constants import (
   THIEFNET_DESCRIPTION_FORMAT,
   THIEFNET_DESCRIPTION_FORMAT_VANILLA,
   THIEFNET_NAME_STRIDE,
-  THIEFNET_DESCRIPTION_STRIDE
+  THIEFNET_DESCRIPTION_STRIDE,
+  INFOBOX_BUFFER_SIZE
 )
 
 class Sly2Episode(IntEnum):
@@ -1234,8 +1235,15 @@ class Sly2Interface(GameInterface):
       return False
 
     infobox_pointer = self._read32(self.addresses["infobox"])
+    pair = self._string_pair(INFOBOX_CLIENT_STRING)
+    if infobox_pointer == 0 or pair is None:
+      return False
+
+    buffer = self.addresses["infobox buffer"]
+    encoded = self._encode_text(" "*10+text)[:INFOBOX_BUFFER_SIZE-1]+b"\0"
     self._write32(self.addresses["infobox scrolling"],2)
-    self.set_text("infobox"," "*10+text)
+    self._write_bytes(buffer, encoded)
+    self._write32(pair, buffer)
     self._write32(self.addresses["infobox string"],INFOBOX_CLIENT_STRING)
     self._write32(infobox_pointer+0x64,2)
     # Seconds; the game closes the bar itself when they run out, so a bar
