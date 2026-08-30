@@ -1,10 +1,13 @@
-"""Fixtures for the end-to-end suite, which talks to a PCSX2 that is already
-running Sly 2 over PINE. Nothing here launches an emulator: when none is
-answering, every test skips. The suite is further gated on SLY2_E2E=1 so it
-can never run as part of a blanket Archipelago test run."""
+"""Fixtures for the end-to-end suite, which talks to Sly 2 in PCSX2 over
+PINE. A running PCSX2 is reused as is; otherwise, when SLY2_E2E_ISO is set,
+one is launched under a throwaway config directory whose memory cards are
+fresh copies of the blank e2e card, so the checked-in savestates always
+meet the card they were captured with. The suite is gated on SLY2_E2E=1 so
+it can never run as part of a blanket Archipelago test run."""
 
 import atexit
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -21,10 +24,15 @@ GAME_ID = "SCUS-97316"
 E2E_ROOT = Path(__file__).parent
 STATES_DIR = E2E_ROOT / "states"
 
+MEMCARD = E2E_ROOT / "memcard.ps2"
+
 ENABLED = os.environ.get("SLY2_E2E", "") not in ("", "0")
 SCRATCH_SLOT = int(os.environ.get("SLY2_E2E_SLOT", "99"))
+CONFIG_DIR = Path(
+  os.environ.get("XDG_CONFIG_HOME", "~/.config")
+).expanduser() / "PCSX2"
 SSTATES_DIR = Path(
-  os.environ.get("SLY2_E2E_SSTATES", "~/.config/PCSX2/sstates")
+  os.environ.get("SLY2_E2E_SSTATES", CONFIG_DIR / "sstates")
 ).expanduser()
 STATE_PREFIX = os.environ.get("SLY2_E2E_GAME", "SCUS-97316 (07652DD9)")
 PINE_SLOT = int(os.environ.get("SLY2_E2E_PINE_SLOT", str(DEFAULT_SLOT)))
@@ -47,7 +55,7 @@ BACKUP_SUFFIX = ".sly2-e2e-backup"
 
 
 def slot_path(slot: int) -> Path:
-  return SSTATES_DIR / f"{STATE_PREFIX}.{slot:02d}.p2s"
+  return emulator.sstates / f"{STATE_PREFIX}.{slot:02d}.p2s"
 
 
 def state_path(name: str) -> Path:
@@ -65,9 +73,15 @@ class ScratchSlot:
         "set SLY2_E2E_SLOT above 10"
       )
     self.slot = slot
-    self.path = slot_path(slot)
-    self.backup = self.path.with_name(self.path.name + ".backup")
     self.claimed = False
+
+  @property
+  def path(self) -> Path:
+    return slot_path(self.slot)
+
+  @property
+  def backup(self) -> Path:
+    return self.path.with_name(self.path.name + ".backup")
 
   def claim(self) -> None:
     if self.claimed:
@@ -109,9 +123,6 @@ class ScratchSlot:
     raise TimeoutError(f"PCSX2 did not finish writing {self.path}")
 
 
-scratch = ScratchSlot(SCRATCH_SLOT)
-
-
 class Emulator:
   """A PCSX2 the suite started itself, shut down again at exit. Only used
   when SLY2_E2E_ISO is set and nothing answers on PINE."""
@@ -119,6 +130,33 @@ class Emulator:
   def __init__(self) -> None:
     self.process: Optional[subprocess.Popen] = None
     self.log: Optional[str] = None
+    self.config: Optional[Path] = None
+    self.sstates = SSTATES_DIR
+
+  def make_config(self) -> Path:
+    """A copy of the user's PCSX2 config with its own savestates and
+    memory cards; everything else is shared through symlinks"""
+    root = Path(tempfile.mkdtemp(prefix="sly2-e2e-config-"))
+    config = root / "PCSX2"
+    config.mkdir()
+    for entry in CONFIG_DIR.iterdir():
+      if entry.name in ("inis", "gamesettings"):
+        shutil.copytree(entry, config / entry.name)
+      elif entry.name not in ("memcards", "sstates", "logs"):
+        (config / entry.name).symlink_to(entry)
+    (config / "sstates").mkdir()
+    (config / "memcards").mkdir()
+    for i in (1, 2):
+      shutil.copyfile(MEMCARD, config / "memcards" / f"Mcd00{i}.ps2")
+    ini = config / "inis" / "PCSX2.ini"
+    text = ini.read_text()
+    for i in (1, 2):
+      text = re.sub(
+        rf"^Slot{i}_Filename = .*$", f"Slot{i}_Filename = Mcd00{i}.ps2",
+        text, flags=re.MULTILINE
+      )
+    ini.write_text(text)
+    return root
 
   @staticmethod
   def already_running() -> bool:
@@ -147,11 +185,15 @@ class Emulator:
       prefix="sly2-e2e-pcsx2-", suffix=".log", delete=False
     )
     self.log = log.name
+    if self.config is None:
+      self.config = self.make_config()
+      self.sstates = self.config / "PCSX2" / "sstates"
     self.process = subprocess.Popen(
       [PCSX2, "-batch", "-earlyconsolelog", "-fastboot", ISO],
-      stdout=log, stderr=subprocess.STDOUT
+      stdout=log, stderr=subprocess.STDOUT,
+      env={**os.environ, "XDG_CONFIG_HOME": str(self.config)}
     )
-    print(f"PCSX2 log: {self.log}")
+    print(f"PCSX2 log: {self.log}, config: {self.config}")
     atexit.register(self.shutdown)
     deadline = time.monotonic() + LAUNCH_TIMEOUT
     while time.monotonic() < deadline:
@@ -177,9 +219,13 @@ class Emulator:
     except subprocess.TimeoutExpired:
       self.process.kill()
       self.process.wait()
+    if self.config is not None:
+      shutil.rmtree(self.config, ignore_errors=True)
+      self.config = None
 
 
 emulator = Emulator()
+scratch = ScratchSlot(SCRATCH_SLOT)
 
 
 def connect() -> Pine:
@@ -192,6 +238,11 @@ def connect() -> Pine:
     if not ISO:
       raise unittest.SkipTest(f"PCSX2 is not answering on PINE: {error}")
     pine = emulator.launch()
+  else:
+    print(
+      "Reusing the running PCSX2 and its memory card; the savestates "
+      "expect the blank e2e card and may complain about it"
+    )
   if pine.get_emu_status() != Pine.EmuStatus.RUNNING:
     raise unittest.SkipTest("PCSX2 is not running a game")
   game_id = pine.get_game_id()

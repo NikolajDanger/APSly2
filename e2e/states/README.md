@@ -4,6 +4,11 @@ PCSX2 savestates loaded by the end-to-end suite (`e2e/`). Captured with `python 
 
 - PCSX2 `2.6.3`, game `SCUS-97316 (07652DD9)`.
 - The sentinel word `0x466FF0` is zeroed before capture.
+- **Memory card:** every state is captured against the blank
+  `e2e/memcard.ps2`, which the harness copies fresh into its throwaway
+  config. PCSX2 ejects the cards after each state load, and re-scanning a
+  card that doesn't match the state traps the game. So capture only with
+  that card inserted, and never save the game onto it.
 
 | State | Episode / map | Contents |
 |---|---|---|
