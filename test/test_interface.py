@@ -14,6 +14,7 @@ from ..data.Constants import (
   LOOT_PRICES,
   MEGA_JUMP_GADGET_ID,
   MEGA_JUMP_UNLOAD_CALL,
+  MENU_ICON_CAVE,
   PEDESTAL_VTABLE,
   INTERACTABLE_NEXT,
   PEDESTAL_USERS,
@@ -33,9 +34,10 @@ from ..data.Constants import (
   THIEFNET_COLORS_SITE,
   THIEFNET_COLORS_ORIG,
   THIEFNET_TEXT_VANILLA,
-  MENU_ICON_TABLE
+  THIEFNET_NAME_COLOR
 )
 from ..Sly2Interface import (
+  RECENT_WRITES,
   EE_RAM_START,
   MAX_GUARDS,
   CycleCounts,
@@ -211,9 +213,43 @@ class TestMemoryGuards(InterfaceTestBase):
     self.assertEqual(self.pine.writes, [])
 
 
+class TestCrashReport(InterfaceTestBase):
+  def test_lists_recent_writes_with_site_and_clears(self) -> None:
+    self.interface._write32(0x200000, 0x1234)
+    self.interface._write_bytes(0x200010, bytes(range(40)))
+    self.interface._batch_write32([(0x200100 + 4 * i, i) for i in range(6)])
+    lines = self.interface.crash_report()
+    self.assertEqual(len(lines), 3)
+    self.assertIn("test_lists_recent_writes_with_site_and_clears w32 "
+                  "0x00200000 = 0x1234", lines[0])
+    self.assertIn("wbytes 0x00200010 = 000102030405060708090a0b0c0d0e0f... "
+                  "(40 bytes)", lines[1])
+    self.assertIn("bw32 0x00200100, 0x00200104, 0x00200108, 0x0020010c, ... "
+                  "(6 words) = [0x0, 0x1, 0x2, 0x3, ...]", lines[2])
+    self.assertEqual(self.interface.crash_report(), [])
+
+  def test_keeps_only_the_newest(self) -> None:
+    for i in range(RECENT_WRITES + 10):
+      self.interface._write32(0x200000 + 4 * i, i)
+    lines = self.interface.crash_report()
+    self.assertEqual(len(lines), RECENT_WRITES)
+    self.assertIn("0x00200028", lines[0])
+
+
 class TestCave(InterfaceTestBase):
   def _prime_hook(self) -> None:
     self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG)
+
+  def test_stale_cave_replacement_is_logged(self) -> None:
+    self._prime_hook()
+    self.pine.poke_bytes(self.addr["cave"], b"\x11" * 16)
+    with self.assertLogs(self.interface.logger, "DEBUG") as logs:
+      self.interface.install_cave()
+    self.assertTrue(any("old code cave" in r for r in logs.output))
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG)
+    self.interface.clear_cache()
+    with self.assertNoLogs(self.interface.logger, "DEBUG"):
+      self.interface.install_cave()
 
   def test_install_writes_cave_and_hook(self) -> None:
     self._prime_hook()
@@ -247,6 +283,18 @@ class TestCave(InterfaceTestBase):
       "bw32", self.addr["cave hook"], CAVE_HOOK_ENTRY.to_bytes(4, "little")
     ))
 
+  def test_install_resets_menu_icon_arm_state(self) -> None:
+    # install_cave zeroes the cave's armed flag; if the installer's flags
+    # don't follow, a same-episode map change never re-wires ThiefNet.
+    self._prime_hook()
+    installer = self.interface.menu_icon_installer
+    installer.built_for = 0x5B0F20
+    installer.armed = True
+    self.interface.install_cave()
+    self.assertIsNone(installer.built_for)
+    self.assertFalse(installer.armed)
+    self.assertEqual(self.pine.peek32(MENU_ICON_CAVE), 0)
+
   def test_code_patch_goes_through_cave(self) -> None:
     self._prime_hook()
     self.interface.install_cave()
@@ -270,7 +318,7 @@ class TestCave(InterfaceTestBase):
     self.assertEqual(self.pine.peek32(0x200000), 0xBB)
     self.assertFalse(self.pine.written(self.addr["cave patches"]))
 
-  def test_code_patch_direct_when_slots_full(self) -> None:
+  def test_code_patch_deferred_when_slots_full(self) -> None:
     self._prime_hook()
     self.interface.install_cave()
     slots = self.addr["cave patches"]
@@ -279,7 +327,16 @@ class TestCave(InterfaceTestBase):
     self.interface.clear_cache()
     self.pine.poke32(0x200000, 0xAA)
     self.interface.safe_patch(0x200000, 0xBB, 0xAA)
-    self.assertEqual(self.pine.peek32(0x200000), 0xBB)
+    # Writing it directly would fault the recompiler; it is held back instead.
+    self.assertEqual(self.pine.peek32(0x200000), 0xAA)
+    self.assertFalse(self.pine.written(0x200000))
+    # Retried once a slot drains.
+    self.pine.poke32(slots, 0)
+    self.interface.clear_cache()
+    self.interface.flush_patches()
+    self.assertEqual(self.pine.peek32(slots), 0x200000)
+    self.assertEqual(self.pine.peek32(slots + 4), 0xBB)
+    self.assertEqual(self.pine.peek32(0x200000), 0xAA)
 
   def test_install_refuses_wrong_hook(self) -> None:
     hook = self.addr["cave hook"]
@@ -405,7 +462,7 @@ class TestThiefNetColors(InterfaceTestBase):
       self.assertEqual(self.pine.peek32(table + 4*i), colors[i])
     for i in range(24, 32):
       self.assertEqual(self.pine.peek32(table + 4*i), THIEFNET_TEXT_VANILLA)
-    slots = MENU_ICON_TABLE + 0xF00
+    slots = THIEFNET_NAME_COLOR
     for i in range(6):
       self.assertEqual(self.pine.peek32(slots + i*0x80), colors[i])
 
@@ -441,7 +498,7 @@ class TestThiefNetColors(InterfaceTestBase):
     slot = self.addr["cave patches"]
     self.assertEqual(self.pine.peek32(slot), THIEFNET_COLORS_SITE)
     self.assertEqual(self.pine.peek32(slot + 4), THIEFNET_COLORS_ORIG)
-    slots = MENU_ICON_TABLE + 0xF00
+    slots = THIEFNET_NAME_COLOR
     for i in range(6):
       self.assertEqual(self.pine.peek32(slots + i*0x80), THIEFNET_TEXT_VANILLA)
 

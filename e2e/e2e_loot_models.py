@@ -5,7 +5,7 @@ go through the game's loader and get bound."""
 import struct
 import time
 
-from ..data.LootModels import LOOT_MODELS
+from ..data.LootModels import LOOT_MODELS, TEXTURES
 from ..LootInstall import GLOBALS, PART_SIZE, dma_tags
 from .harness import E2ETestBase
 
@@ -91,3 +91,22 @@ class TestLootModels(E2ETestBase):
 
     self.assertEqual(self.interface.install_loot_models(installed), [])
     self.assertEqual(self.counts(), [NATIVE_PARTS + parts] * 4)
+
+  def test_same_tick_completion_binds_the_loaded_records(self) -> None:
+    # The call can finish within the tick that issued it; the poll must not
+    # read the template rows from the tick cache.
+    self.assertEqual(self.interface.install_loot_models([GOLD_BAR]), [GOLD_BAR])
+    pending = self.interface.loot_installer.pending
+    assert pending is not None
+    table = pending.calls[0].table
+    for _ in range(60):
+      if not self.interface.poll_loot_textures():
+        break
+      time.sleep(0.05)
+    else:
+      self.fail("texture upload never completed")
+    placed = self.pine.read_int32(table + 0x20) & 0x3FFF
+    gold_bar = self.parts(NATIVE_PARTS)[0]
+    self.assertEqual(self.tex0(gold_bar[4], 0xA4)[0], placed)
+    self.assertNotEqual(placed, TEXTURES[0x3D06][0][8] & 0x3FFF)
+    self.assertNotEqual(placed, 0)

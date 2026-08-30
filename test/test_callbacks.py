@@ -1,3 +1,4 @@
+import asyncio
 import json
 import unittest
 from types import SimpleNamespace
@@ -30,6 +31,7 @@ from ..Callbacks import (
   loot_odds_row,
   pay_out_coins,
   reset_traps,
+  scout_thiefnet,
   set_jobs,
   set_thiefnet,
   truncate,
@@ -48,9 +50,9 @@ from ..data.Constants import (
   LOOT_IDS,
   MEGA_JUMP_GADGET_ID,
   MEGA_JUMP_UNLOAD_CALL,
-  MENU_ICON_TABLE,
-  GLYPH_SET,
+  GLYPH_SET_PTR,
   PICKPOCKET_LOOT_TABLE_CHANCES,
+  THIEFNET_SETTLED,
   THIEFNET_TEXT_COLORS,
   episode_key
 )
@@ -75,6 +77,7 @@ from ..Sly2Client import (
   _handle_game_not_ready,
   _handle_game_ready,
   _handle_loading,
+  _record_tick,
   _sync_tick,
   update_connection_status
 )
@@ -1106,9 +1109,25 @@ class TestSetThiefnet(ClientTestBase):
     )
     self.assertEqual(self.resolved(0), b"Tester's Paraglider")
 
-  async def test_scouts(self) -> None:
+  def _open_thiefnet(self, settled: bool = True) -> None:
+    """Prime the glyph set (ThiefNet open) and the settle signal."""
+    self.pine.poke32(GLYPH_SET_PTR, 0x86C9F0)
+    self.pine.poke32(0x86C9F0 + 0x50, 0x64)
+    self.pine.poke32(0x86C9F0 + 0x54, 0x3E21A0)
+    self.pine.poke32(THIEFNET_SETTLED, 0x457 if settled else 0xFFFFFFFF)
+    self.interface.clear_cache()
+
+  async def test_scouts_only_once_the_menu_is_open_and_settled(self) -> None:
     self.slot_data["scout_thiefnet"] = True
     await set_thiefnet(self.ctx)
+    self.assertEqual(self.ctx.sent_cmds("LocationScouts"), [])  # not open
+    await scout_thiefnet(self.ctx)
+    self.assertEqual(self.ctx.sent_cmds("LocationScouts"), [])  # still closed
+    self._open_thiefnet(settled=False)
+    await scout_thiefnet(self.ctx)
+    self.assertEqual(self.ctx.sent_cmds("LocationScouts"), [])  # animating
+    self._open_thiefnet(settled=True)
+    await scout_thiefnet(self.ctx)
     scouts = self.ctx.sent_cmds("LocationScouts")
     self.assertEqual(len(scouts), 1)
     self.assertEqual(
@@ -1116,6 +1135,15 @@ class TestSetThiefnet(ClientTestBase):
       {self.loc(thiefnet_location(i+1)) for i in range(24)}
     )
     self.assertEqual(scouts[0]["create_as_hint"], 2)
+    # once a session
+    await scout_thiefnet(self.ctx)
+    self.assertEqual(len(self.ctx.sent_cmds("LocationScouts")), 1)
+
+  async def test_no_scout_when_option_off(self) -> None:
+    self.slot_data["scout_thiefnet"] = False
+    self._open_thiefnet(settled=True)
+    await scout_thiefnet(self.ctx)
+    self.assertEqual(self.ctx.sent_cmds("LocationScouts"), [])
 
   async def test_names_cached(self) -> None:
     self.slot_data["scout_thiefnet"] = False
@@ -1155,6 +1183,19 @@ class TestInit(ClientTestBase):
     await init(self.ctx, False)
     self.assertEqual(self.ctx.sent, [])
     self.assertEqual(self.pine.peek32(self.guards[0] + 0x800 + 0xA0), 0)
+
+  async def test_guards_left_alone_on_map_change_within_episode(
+    self
+  ) -> None:
+    await init(self.ctx, True)
+    for episode, map_id, despawned in ((1, 3, 0), (2, 4, 1)):
+      for guard in self.guards:
+        self.pine.poke32(guard + 0x800 + 0xA0, 0)
+      self.interface.clear_cache()
+      self.enter(episode, map_id)
+      await init(self.ctx, True)
+      for guard in self.guards:
+        self.assertEqual(self.pine.peek32(guard + 0x800 + 0xA0), despawned)
 
   async def test_guards_left_alone_without_pickpocketing(self) -> None:
     self.slot_data["include_pickpocketing"] = False
@@ -1669,12 +1710,12 @@ class TestConnectionMachine(ClientTestBase):
     self.interface.current_game = None
     with (
       patch.object(self.pine, "connect", side_effect=PineConnectionError),
-      patch.object(Sly2Client.asyncio, "sleep") as sleep_mock,
+      patch.object(Sly2Client, "_wait_or_exit") as wait_mock,
       self.assertLogs("Client.Sly2", "INFO") as logs
     ):
       for _ in range(5):
         await _handle_game_not_ready(self.ctx)
-    waits = [c.args[0] for c in sleep_mock.call_args_list]
+    waits = [c.args[1] for c in wait_mock.call_args_list]
     self.assertEqual(waits, [3, 3, 10, 30, 30])
     retry_lines = [r for r in logs.output if "Could not connect" in r]
     self.assertEqual(len(retry_lines), 3)
@@ -1684,13 +1725,13 @@ class TestConnectionMachine(ClientTestBase):
     self.interface.current_game = None
     self.ctx.connection_retry_attempts = 3
     with (
-      patch.object(Sly2Client.asyncio, "sleep") as sleep_mock,
+      patch.object(Sly2Client, "_wait_or_exit") as wait_mock,
       self.assertLogs("Client.Sly2", "INFO") as logs
     ):
       await _handle_game_not_ready(self.ctx)
       await _handle_game_not_ready(self.ctx)
     self.assertEqual(self.ctx.connection_retry_attempts, 0)
-    self.assertEqual([c.args[0] for c in sleep_mock.call_args_list], [3, 3])
+    self.assertEqual([c.args[1] for c in wait_mock.call_args_list], [3, 3])
     waiting = [r for r in logs.output if "waiting for Sly 2" in r]
     self.assertEqual(len(waiting), 1)
 
@@ -1699,15 +1740,20 @@ class TestConnectionMachine(ClientTestBase):
     self.interface.current_game = None
     with (
       patch.object(self.pine, "connect", side_effect=PineConnectionError),
-      patch.object(Sly2Client.asyncio, "sleep"),
+      patch.object(Sly2Client, "_wait_or_exit"),
       self.assertLogs("Client.Sly2", "INFO")
     ):
       for _ in range(3):
         await _handle_game_not_ready(self.ctx)
     self.assertEqual(self.ctx.connection_retry_attempts, 3)
-    with patch.object(Sly2Client.asyncio, "sleep") as sleep_mock:
+    with patch.object(Sly2Client, "_wait_or_exit") as wait_mock:
       await _handle_game_not_ready(self.ctx)
-    sleep_mock.assert_not_called()
+    wait_mock.assert_not_called()
+
+  async def test_wait_or_exit_wakes_on_close(self) -> None:
+    self.ctx.exit_event.set()
+    # a long retry wait returns at once when the client is closing
+    await asyncio.wait_for(Sly2Client._wait_or_exit(self.ctx, 999), 1)
     with self.assertLogs("Client.Sly2", "INFO"):
       update_connection_status(self.ctx, True)
     self.assertEqual(self.ctx.connection_retry_attempts, 0)
@@ -1718,26 +1764,79 @@ class TestConnectionMachine(ClientTestBase):
       patch.object(
         Sly2Client, "_handle_game_ready", side_effect=ConnectionError
       ),
-      patch.object(Sly2Client.asyncio, "sleep") as sleep_mock,
+      patch.object(Sly2Client, "_wait_or_exit") as wait_mock,
       self.assertLogs("Client.Sly2", "INFO")
     ):
       await _sync_tick(self.ctx)
     self.assertIsNone(self.interface.current_game)
-    sleep_mock.assert_called_once_with(1)
+    wait_mock.assert_called_once_with(self.ctx, 1)
+
+  async def test_lost_emulator_reports_writes_and_core_dump(self) -> None:
+    self.interface._write32(0x200000, 7)
+    line = "Sun 2026-08-30 11:03:40 CEST 43511 1000 984 SIGABRT pcsx2-qt"
+    with (
+      patch.object(Sly2Client.shutil, "which", return_value="/usr/bin/x"),
+      patch.object(Sly2Client, "_coredump_line", return_value=line),
+      patch.object(Sly2Client, "_wait_or_exit"),
+      self.assertLogs("Client.Sly2", "INFO") as logs
+    ):
+      task = Sly2Client._report_lost_emulator(self.ctx)
+      assert task is not None
+      await task
+    self.assertTrue(any(
+      "Lost the emulator" in r and "w32 0x00200000 = 0x7" in r
+      for r in logs.output
+    ))
+    self.assertTrue(any(f"PCSX2 crashed: {line}" in r for r in logs.output))
+    # Nothing was written since: a reconnect loop stays quiet.
+    with self.assertNoLogs("Client.Sly2", "INFO"):
+      self.assertIsNone(Sly2Client._report_lost_emulator(self.ctx))
+
+  async def test_no_coredump_search_without_coredumpctl(self) -> None:
+    self.interface._write32(0x200000, 7)
+    with (
+      patch.object(Sly2Client.shutil, "which", return_value=None),
+      self.assertLogs("Client.Sly2", "WARNING") as logs
+    ):
+      task = Sly2Client._report_lost_emulator(self.ctx)
+      assert task is not None
+      await task
+    self.assertTrue(any("Lost the emulator" in r for r in logs.output))
+    self.assertFalse(any("core dump" in r for r in logs.output))
+
+  async def test_coredump_line_picks_the_newest_pcsx2_entry(self) -> None:
+    output = (
+      "Sat 2026-08-30 10:00:00 CEST 1 1000 984 SIGSEGV present /usr/bin/foo\n"
+      "Sat 2026-08-30 11:03:40 CEST 43511 1000 984 SIGABRT inaccessible "
+      "/usr/bin/pcsx2-qt -\n"
+    )
+    with (
+      patch.object(Sly2Client.shutil, "which", return_value="/usr/bin/x"),
+      patch.object(
+        Sly2Client.subprocess, "run",
+        return_value=SimpleNamespace(stdout=output)
+      ) as run
+    ):
+      found = Sly2Client._coredump_line(1788080620.0)
+    assert found is not None
+    self.assertIn("43511", found)
+    self.assertIn("--since=", run.call_args.args[0][-1])
+    with patch.object(Sly2Client.shutil, "which", return_value=None):
+      self.assertIsNone(Sly2Client._coredump_line(0.0))
 
   async def test_sync_tick_runtime_error(self) -> None:
     with (
       patch.object(
         Sly2Client, "_handle_game_ready", side_effect=RuntimeError("boom")
       ),
-      patch.object(Sly2Client.asyncio, "sleep") as sleep_mock,
+      patch.object(Sly2Client, "_wait_or_exit") as wait_mock,
       self.assertLogs("Client.Sly2", "ERROR") as logs
     ):
       await _sync_tick(self.ctx)
     self.assertEqual(len(logs.output), 1)
     self.assertIn("boom", logs.output[0])
     self.assertNotIn("Traceback", logs.output[0])
-    sleep_mock.assert_called_once_with(3)
+    wait_mock.assert_called_once_with(self.ctx, 3)
 
 
 class TestTickLogging(TickHarness):
@@ -1763,7 +1862,7 @@ class TestTickLogging(TickHarness):
     self.place(1, 2)
     await self.settle()
     self.pine.poke32(self.addr["map id"], 3)
-    with self.assertLogs("Client.Sly2", "INFO") as logs:
+    with self.assertLogs("Client.Sly2", "DEBUG") as logs:
       await self.tick()
     self.assertTrue(
       any("Entered The Black Chateau (map 3)" in r for r in logs.output)
@@ -1806,24 +1905,73 @@ class TestTickLogging(TickHarness):
     self.assertIn("1 new location check(s)", line)
     self.assertIn(vault_location(EpisodeName.THE_BLACK_CHATEAU), line)
 
+  async def test_slow_tick_lists_attributed_ops(self) -> None:
+    self.place(1, 2)
+    await self.settle()
+    self.ctx.tick_stats.clear()
+    self.ctx.tick_timings = {"loot_install": 0.38, "thiefnet": 0.03}
+    with self.assertLogs("Client.Sly2", "DEBUG") as logs:
+      _record_tick(self.ctx, 0.42)
+    self.assertTrue(any(
+      "Slow tick: 420.0ms (loot_install: 380ms | thiefnet: 30ms)" in r
+      for r in logs.output
+    ))
+    self.assertFalse(any("UNATTRIBUTED" in r for r in logs.output))
+
+  async def test_slow_tick_flags_large_unattributed(self) -> None:
+    self.place(1, 2)
+    await self.settle()
+    self.ctx.tick_stats.clear()
+    self.ctx.tick_timings = {}
+    with self.assertLogs("Client.Sly2", "DEBUG") as logs:
+      _record_tick(self.ctx, 0.05)
+    self.assertTrue(any("Slow tick: 50.0ms" in r for r in logs.output))
+    self.assertTrue(any(
+      "**** 50ms OF TICK UNATTRIBUTED ****" in r for r in logs.output
+    ))
+
+  async def test_time_op_accumulates_across_calls(self) -> None:
+    self.ctx.tick_timings = {}
+    with self.ctx.time_op("thing"):
+      pass
+    with self.ctx.time_op("thing"):
+      pass
+    self.assertIn("thing", self.ctx.tick_timings)
+    self.assertGreaterEqual(self.ctx.tick_timings["thing"], 0.0)
+
+  async def test_send_msgs_is_attributed(self) -> None:
+    self.ctx.tick_timings = {}
+    await self.ctx.send_msgs([{"cmd": "Sync"}])
+    self.assertIn("send_msgs", self.ctx.tick_timings)
+    self.assertEqual(self.ctx.sent[-1], {"cmd": "Sync"})
+
+  async def test_fast_tick_not_flagged_slow(self) -> None:
+    self.place(1, 2)
+    await self.settle()
+    self.ctx.tick_stats.clear()
+    with self.assertNoLogs("Client.Sly2", "INFO"):
+      _record_tick(self.ctx, 0.001)
+
   async def test_cycle_summary_every_tenth_tick(self) -> None:
     self.place(1, 2)
     await self.settle()
     self.ctx.tick_stats.clear()
-    with self.assertNoLogs("Client.Sly2", "DEBUG"):
-      for _ in range(9):
+    with patch.object(Sly2Client, "TICK_LOG_INTERVAL", 10):
+      with self.assertNoLogs("Client.Sly2", "DEBUG"):
+        for _ in range(9):
+          await self.tick()
+      with self.assertLogs("Client.Sly2", "DEBUG") as logs:
         await self.tick()
-    with self.assertLogs("Client.Sly2", "DEBUG") as logs:
-      await self.tick()
     line = next(r for r in logs.output if "Last 10 ticks" in r)
     self.assertIn("20 batches", line)
     self.assertNotIn("PINE", line)
 
 
 class TestApplyThiefnetText(ClientTestBase):
-  def _prime(self, installed: bool = True) -> None:
-    if installed:
-      self.pine.poke32(GLYPH_SET + 0x54, MENU_ICON_TABLE + 0x24)
+  def _prime(self, built: bool = True) -> None:
+    self.pine.poke32(GLYPH_SET_PTR, 0x86C9F0)
+    if built:
+      self.interface.menu_icon_installer.built_for = 0x86C9F0
     self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ENTRY)
     self.ctx.thiefnet_classes = [
       "progression", "useful", "trap", "filler"
@@ -1854,8 +2002,8 @@ class TestApplyThiefnetText(ClientTestBase):
     colored.assert_not_called()
     cleared.assert_called_once_with()
 
-  def test_not_installed_is_noop(self) -> None:
-    self._prime(installed=False)
+  def test_not_built_is_noop(self) -> None:
+    self._prime(built=False)
     set_call, clear_call = self._calls()
     with set_call as colored, clear_call as cleared:
       apply_thiefnet_text(self.ctx)

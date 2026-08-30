@@ -9,12 +9,15 @@ from logging import Logger
 from typing import TYPE_CHECKING, Optional
 
 from .data.Constants import (
-  GLYPH_SET, GLYPH_TABLE_ALT, MENU_ICON_CHARS, MENU_ICON_CHOOSER,
+  GLYPH_SET_PTR, MENU_ICON_CAVE, MENU_ICON_CHAR_TABLE, MENU_ICON_CHARS,
+  MENU_ICON_CHOOSER,
   MENU_ICON_ELEMS, MENU_ICON_FIFTH_ARENA, MENU_ICON_FIFTH_ELEMS,
   MENU_ICON_FIFTH_NODE, MENU_ICON_FOURTH_ARENA, MENU_ICON_FOURTH_ELEMS,
   MENU_ICON_FOURTH_NODE, MENU_ICON_FREE_TAG, MENU_ICON_GLYPHS,
-  MENU_ICON_GROUP, MENU_ICON_GROUPS, MENU_ICON_PACKETS, MENU_ICON_POOL,
-  MENU_ICON_PROTO_GROUP, MENU_ICON_TABLE, MENU_ICON_VANILLA_PACKETS,
+  MENU_ICON_GROUPS, MENU_ICON_PACKETS, MENU_ICON_POOL,
+  MENU_ICON_PROTO_GROUP, MENU_ICON_ROW_GROUP, MENU_ICON_TABLE,
+  MENU_ICON_VANILLA_PACKETS,
+  THIEFNET_SETTLED,
 )
 from .data.MenuIcons import THEMES, decode
 
@@ -33,6 +36,11 @@ class MenuIconInstaller:
     self.interface = interface
     self.logger = logger
     self.vanilla_chars: Optional[list[int]] = None
+    self.vanilla_table_base: Optional[int] = None
+    self.built_for: Optional[int] = None
+    self.armed = False
+    self.group_count = 0
+    self.max_id = 0
 
   @property
   def addresses(self) -> dict:
@@ -62,46 +70,95 @@ class MenuIconInstaller:
   def write_many(self, operations: list[tuple[int, int]]) -> None:
     self.interface._batch_write32(operations)
 
+  def _glyph_set(self) -> int:
+    """The live glyph-set object, which is allocated per level load, so its
+    address differs per episode."""
+    return self.read32(GLYPH_SET_PTR)
+
   def _table_base(self) -> int:
-    return self.read32(GLYPH_SET + 0x54)
+    return self.read32(self._glyph_set() + 0x54)
 
   def _slot(self, glyph: int) -> int:
-    """Address of the pointer to this glyph's vector data, in the live
-    (relocated) table."""
-    return self._table_base() - 0x24 + glyph * 0x40
+    """Address of the glyph's vector-data pointer, always in the free-RAM
+    copy, so it doesn't depend on the live glyph set being wired yet."""
+    return MENU_ICON_TABLE + glyph * 0x40
 
   def installed(self) -> bool:
     return self._table_base() == MENU_ICON_TABLE + 0x24
 
-  def install_structure(self) -> None:
-    """Install the relocated glyph table + group array with the appended
-    filler and unknown glyphs. Must run only once per map (guarded above)."""
-    if self.installed():
+  def built(self) -> bool:
+    """The free-RAM structures exist for the open glyph set; the cave wires
+    them in at settle (installed())."""
+    return self.built_for == self._glyph_set()
+
+  def structure_ready(self) -> bool:
+    """Whether the glyph set holds a real table. It is only populated while a
+    menu is open; reshaping it in the bare safehouse writes into unmapped or
+    live memory and crashes the game."""
+    glyph_set = self._glyph_set()
+    if not (0x100000 <= glyph_set < 0x2000000 and glyph_set % 4 == 0):
+      return False
+    base = self.read32(glyph_set + 0x54)
+    return (
+      base % 4 == 0 and 0x100000 <= base < 0x2000000
+      and self.read32(glyph_set + 0x50) < 0x1000
+    )
+
+  def menu_settled(self) -> bool:
+    """Whether the open animation (~2s) has finished, which the row element
+    ids signal by turning from 0xffffffff into real ids. Relocating the glyph
+    table before then moves the row draw-pool and drops the selection box,
+    which only renders from the vanilla table."""
+    return self.read32(THIEFNET_SETTLED) != 0xFFFFFFFF
+
+  def build_structure(self) -> None:
+    """Build the relocated glyph table and group array, with the appended
+    filler and unknown glyphs. Writes only client-owned RAM, so it can run
+    during the open animation; the cave copies the finalized group array over
+    it and wires the glyph set at settle (build/cave.s)."""
+    glyph_set = self._glyph_set()
+    if self.built_for == glyph_set:
       return
-    self._relocate_table()
+    self.armed = False
+    base = self.read32(glyph_set + 0x54)
+    self.vanilla_table_base = base
+    self.write_bytes(
+      MENU_ICON_TABLE, self.read_bytes(base - 0x24, TABLE_ENTRIES * 0x40 + 0x24)
+    )
+    self.group_count = self.read32(glyph_set + 0x80)
+    self.write_bytes(
+      MENU_ICON_GROUPS,
+      self.read_bytes(self.read32(glyph_set + 0x84), self.group_count * 0x30)
+    )
     self._copy_node(MENU_ICON_FOURTH_NODE, FOURTH_GLYPH)
     self._copy_node(MENU_ICON_FIFTH_NODE, FIFTH_GLYPH)
-    # Append both elements before the group array is relocated (which happens
-    # inside the first _new_glyph), so the one relocation copies them both in.
+    row_group = MENU_ICON_GROUPS + MENU_ICON_ROW_GROUP * 0x30
     self._append_element(
-      MENU_ICON_GROUP, MENU_ICON_FOURTH_ELEMS, MENU_ICON_FOURTH_NODE,
-      FOURTH_ELEM
+      row_group, MENU_ICON_FOURTH_ELEMS, MENU_ICON_FOURTH_NODE, FOURTH_ELEM
     )
     self._append_element(
-      MENU_ICON_GROUP, MENU_ICON_FIFTH_ELEMS, MENU_ICON_FIFTH_NODE, FIFTH_ELEM
+      row_group, MENU_ICON_FIFTH_ELEMS, MENU_ICON_FIFTH_NODE, FIFTH_ELEM
     )
+    self.max_id = FOURTH_GLYPH
     fill, sil = MENU_ICON_PACKETS["filler"]
     self._new_glyph(FOURTH_GLYPH, fill, sil, [MENU_ICON_FOURTH_ARENA])
     fill, sil = MENU_ICON_PACKETS["unknown"]
     self._new_glyph(FIFTH_GLYPH, fill, sil, [MENU_ICON_FIFTH_ARENA])
+    self.built_for = glyph_set
 
-  def _relocate_table(self) -> None:
-    base = self._table_base()
-    buffer = self.read_bytes(base - 0x24, TABLE_ENTRIES * 0x40 + 0x24)
-    self.write_bytes(MENU_ICON_TABLE, buffer)
-    self.write32(GLYPH_SET + 0x50, FOURTH_GLYPH)
-    self.write32(GLYPH_SET + 0x54, MENU_ICON_TABLE + 0x24)
-    self.write32(GLYPH_TABLE_ALT, MENU_ICON_TABLE + 0x24)
+  def reset(self) -> None:
+    """Forget the built and armed state. install_cave zeroes the cave's armed
+    flag, and if these don't follow, a map change that reuses the glyph-set
+    address never re-wires."""
+    self.built_for = None
+    self.armed = False
+
+  def arm(self) -> None:
+    """Let the cave wire the glyph set at settle. Theme and row icons are
+    already in free RAM, so nothing flashes."""
+    self.write32(MENU_ICON_CAVE, 1)
+    self.write32(MENU_ICON_CAVE + 4, self.vanilla_table_base or 0)
+    self.armed = True
 
   def _copy_node(self, dest: int, glyph: int) -> None:
     """Copy a character row's node chain to dest, retargeted to draw glyph."""
@@ -147,11 +204,8 @@ class MenuIconInstaller:
       arena[0] = (address + n + 0xF) & ~0xF
       return address
 
-    count = self.read32(GLYPH_SET + 0x80)
-    old = self.read32(GLYPH_SET + 0x84)
-    if old != MENU_ICON_GROUPS:
-      self.write_bytes(MENU_ICON_GROUPS, self.read_bytes(old, count * 0x30))
-    proto_address = self.read32(GLYPH_SET + 0x84) + proto * 0x30
+    count = self.group_count
+    proto_address = MENU_ICON_GROUPS + proto * 0x30
     flag = self.read32(self.read32(proto_address + 8))
     size = flag * 0x70
     template = self._free_template(proto_address, size)
@@ -189,8 +243,7 @@ class MenuIconInstaller:
     group[4:8] = struct.pack("<I", element_array)
     group[8:12] = struct.pack("<I", pool)
     self.write_bytes(new_group, bytes(group))
-    self.write32(GLYPH_SET + 0x84, MENU_ICON_GROUPS)
-    self.write32(GLYPH_SET + 0x80, count + 1)
+    self.group_count = count + 1
     return count
 
   def _new_glyph(
@@ -224,9 +277,7 @@ class MenuIconInstaller:
     row[0:4] = struct.pack("<I", fill)
     row[0x34:0x38] = struct.pack("<I", group)
     self.write_bytes(self._slot(glyph), bytes(row))
-    self.write32(
-      GLYPH_SET + 0x50, max(self.read32(GLYPH_SET + 0x50), sil_holder)
-    )
+    self.max_id = max(self.max_id, sil_holder)
 
   def install_chooser(self) -> None:
     if not self.interface.cave_live():
@@ -262,3 +313,8 @@ class MenuIconInstaller:
     else:
       chars = [MENU_ICON_CHARS[cls] for cls in classes]
     self.write_many([(costs[i] - 4, chars[i]) for i in range(24)])
+    # The cave blanks the live chars during the open animation and restores
+    # these at the wire.
+    self.write_many(
+      [(MENU_ICON_CHAR_TABLE + i * 4, chars[i]) for i in range(24)]
+    )

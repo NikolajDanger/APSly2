@@ -106,7 +106,8 @@ async def handle_safehouse(
     ctx.game_interface.logger.debug(
       "Entered safehouse, applying ThiefNet shop"
     )
-    await set_thiefnet(ctx)
+    with ctx.time_op("thiefnet"):
+      await set_thiefnet(ctx)
     set_prices(ctx)
   elif ctx.in_hub and not in_hub:
     ctx.in_hub = False
@@ -116,6 +117,12 @@ async def handle_safehouse(
     ctx.episode_hint_shown = False
     ctx.game_interface.logger.debug("Left safehouse, restoring powerups")
     unset_thiefnet(ctx)
+
+  # Both functions are run every safehouse tick, because they don't do
+  # anything until ThiefNet is opened.
+  if in_safehouse:
+    install_menu_icons(ctx)
+    await scout_thiefnet(ctx)
 
   if in_hub:
     ctx.in_hub = True
@@ -144,7 +151,8 @@ def handle_episode_state(ctx: 'Sly2Context', in_hub: bool) -> None:
     set_pickpocketing(ctx)
     if ctx.slot_data["randomize_loot"]:
       set_loot_table(ctx)
-      install_loot_models(ctx)
+      with ctx.time_op("loot_install"):
+        install_loot_models(ctx)
     ctx.loot_dirty = False
   ctx.game_interface.poll_loot_textures()
 
@@ -324,15 +332,22 @@ async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
 
     if ctx.slot_data["randomize_loot"]:
       set_loot_table(ctx)
-      install_loot_models(ctx)
+      with ctx.time_op("loot_install"):
+        install_loot_models(ctx)
     ctx.loot_dirty = False
 
     set_prices(ctx)
 
     # Replace guards that spawned before the client wrote the loot config so
     # they re-roll their pockets from the randomized table and loot chance.
-    if ctx.slot_data["include_pickpocketing"]:
+    # The loot config persists across an episode's maps, and mission maps
+    # don't stream guards back in, so despawn only once per episode.
+    if (
+      ctx.slot_data["include_pickpocketing"] and
+      ctx.current_episode != ctx.guards_despawned_episode
+    ):
       ctx.game_interface.despawn_guards()
+      ctx.guards_despawned_episode = ctx.current_episode
 
     fix_jobs(ctx)
     ctx.game_interface.disarm_stale_triggers()
@@ -437,16 +452,6 @@ async def set_thiefnet(ctx: 'Sly2Context') -> None:
     for i in range(24)
   ])
 
-  if ctx.slot_data["scout_thiefnet"]:
-    await ctx.send_msgs([{
-      "cmd": "LocationScouts",
-      "locations": [
-        Locations.location_dict[thiefnet_location(i+1)].code
-        for i in range(24)
-      ],
-      "create_as_hint": 2
-    }])
-
   # Set which items should be available to purchase and unlock all from the
   # start
   ctx.game_interface.load_powerups(ctx.thiefnet_purchases)
@@ -474,16 +479,41 @@ def load_thiefnet_prefs(ctx: 'Sly2Context') -> None:
   if text is not None:
     ctx.thiefnet_text_color = text
 
+async def scout_thiefnet(ctx: 'Sly2Context') -> None:
+  """Scout every ThiefNet location, assuming the option has been set in the
+  yaml. Only scouts once ThiefNet has been opened."""
+  if (ctx.thiefnet_scouted or ctx.slot_data is None
+      or not ctx.slot_data["scout_thiefnet"]):
+    return
+  installer = ctx.game_interface.menu_icon_installer
+  if not installer.structure_ready() or not installer.menu_settled():
+    return
+  ctx.thiefnet_scouted = True
+  await ctx.send_msgs([{
+    "cmd": "LocationScouts",
+    "locations": [
+      Locations.location_dict[thiefnet_location(i+1)].code
+      for i in range(24)
+    ],
+    "create_as_hint": 2
+  }])
+
 def install_menu_icons(ctx: 'Sly2Context') -> None:
-  """Install the ThiefNet icon-theme glyphs and apply the current theme."""
+  """Build the ThiefNet icon structures, apply the theme and arm the cave.
+  Only applies and arms once per open, since re-applying would overwrite the
+  colors the cave syncs on scroll."""
+  installer = ctx.game_interface.menu_icon_installer
   ctx.game_interface.install_menu_icons()
-  apply_menu_icons(ctx)
+  if installer.built() and not installer.armed:
+    with ctx.time_op("menu_icons"):
+      apply_menu_icons(ctx)
+    ctx.game_interface.arm_menu_icons()
 
 def apply_menu_icons(ctx: 'Sly2Context') -> None:
   """(Re)apply the selected icon theme and per-row icons. A no-op until the
-  glyph structure exists, so it is safe from a theme-switch command."""
+  glyph structures are built, so it is safe from a theme-switch command."""
   interface = ctx.game_interface
-  if not interface.menu_icon_installer.installed():
+  if not interface.menu_icon_installer.built():
     return
   interface.apply_thiefnet_theme(ctx.thiefnet_theme)
   classes = None if ctx.thiefnet_theme == 0 else ctx.thiefnet_classes
@@ -492,10 +522,10 @@ def apply_menu_icons(ctx: 'Sly2Context') -> None:
 
 def apply_thiefnet_text(ctx: 'Sly2Context') -> None:
   """(Re)apply the row-name text colors. The colors share the icon glyph
-  table, so this waits for the icon structure; it is independent of the icon
+  table, so this waits for the icon structures; it is independent of the icon
   theme (vanilla icons can still carry colored text)."""
   interface = ctx.game_interface
-  if not interface.menu_icon_installer.installed():
+  if not interface.menu_icon_installer.built():
     return
   color = ctx.thiefnet_text_color and ctx.thiefnet_classes is not None
   if color:

@@ -3,23 +3,26 @@ import unittest
 
 from ..data.Constants import (
   CAVE_HOOK_ORIG,
-  GLYPH_SET,
+  GLYPH_SET_PTR,
+  MENU_ICON_CAVE,
   MENU_ICON_CHARS,
   MENU_ICON_CHOOSER,
   MENU_ICON_ELEMS,
   MENU_ICON_FIFTH_ELEMS,
   MENU_ICON_FOURTH_ELEMS,
   MENU_ICON_GLYPHS,
-  MENU_ICON_GROUP,
   MENU_ICON_GROUPS,
+  MENU_ICON_ROW_GROUP,
   MENU_ICON_PACKETS,
   MENU_ICON_TABLE,
   MENU_ICON_VANILLA_PACKETS,
+  THIEFNET_SETTLED,
 )
 from ..data.MenuIcons import THEMES, decode
 from ..MenuIcons import MenuIconInstaller
 from .client_base import InterfaceTestBase
 
+GLYPH_SET = 0x86C9F0              # a stand-in glyph-set object for the fake
 VANILLA_BASE = 0x3E21A0            # [GLYPH_SET+0x54] before relocation
 VANILLA_GROUPS = 0x3E5D60          # [GLYPH_SET+0x84] before relocation
 PROTO_ELEMS = 0x500000
@@ -56,6 +59,7 @@ class MenuIconTestBase(InterfaceTestBase):
 
   def _prime_glyphs(self) -> None:
     """Writing a small glyph set to memory for testing."""
+    self.pine.poke32(GLYPH_SET_PTR, GLYPH_SET)
     self.pine.poke32(GLYPH_SET + 0x50, 0x64)
     self.pine.poke32(GLYPH_SET + 0x54, VANILLA_BASE)
     self.pine.poke32(GLYPH_SET + 0x80, 30)
@@ -67,26 +71,22 @@ class MenuIconTestBase(InterfaceTestBase):
     self.pine.poke32(PROTO_POOL + 0, 2)            # flag (2 sub-buffers)
     self.pine.poke32(PROTO_POOL + 4, PROTO_BUFFER)
     self.pine.poke32(PROTO_ELEMS + 4, PROTO_NODE)
-    # the row-icon group (29) == MENU_ICON_GROUP, with a few elements
-    self.pine.poke16(MENU_ICON_GROUP, 9)
-    self.pine.poke32(MENU_ICON_GROUP + 4, PROTO_ELEMS)
+    # the row-icon group (29) in the vanilla array, with a few elements
+    row_group = VANILLA_GROUPS + MENU_ICON_ROW_GROUP * 0x30
+    self.pine.poke16(row_group, 9)
+    self.pine.poke32(row_group + 4, PROTO_ELEMS)
     # Sly's node pointer for _copy_node
     self.pine.poke32(MENU_ICON_ELEMS + 0x18 + 4, PROTO_NODE)
 
 
 class TestMenuIconStructure(MenuIconTestBase):
-  def test_install_relocates_and_appends(self) -> None:
+  def test_build_lays_out_free_ram(self) -> None:
     self._prime_glyphs()
-    self.assertFalse(self._installer().installed())
-    self._installer().install_structure()
-    self.assertTrue(self._installer().installed())
-    self.assertEqual(
-      self.pine.peek32(GLYPH_SET + 0x54), MENU_ICON_TABLE + 0x24
-    )
-    # two appended groups (filler + unknown)
-    self.assertEqual(self.pine.peek32(GLYPH_SET + 0x80), 32)
-    self.assertEqual(self.pine.peek32(GLYPH_SET + 0x84), MENU_ICON_GROUPS)
-    # the appended element ids
+    inst = self._installer()
+    self.assertFalse(inst.built())
+    inst.build_structure()
+    self.assertTrue(inst.built())
+    # the appended element ids in the copied row-group element array
     self.assertEqual(
       self.pine.peek32(MENU_ICON_FOURTH_ELEMS + 9 * 0x18 + 0x14), 0x45E
     )
@@ -96,21 +96,81 @@ class TestMenuIconStructure(MenuIconTestBase):
     # the appended filler row glyph points at its fill staging packet
     fill = MENU_ICON_PACKETS["filler"][0]
     self.assertEqual(self.pine.peek32(MENU_ICON_TABLE + 0x66 * 0x40), fill)
+    # the row group is appended in the COPY; the live header is left untouched
+    row_copy = MENU_ICON_GROUPS + MENU_ICON_ROW_GROUP * 0x30
+    self.assertEqual(self.pine.peek16(row_copy), 11)
+    self.assertEqual(self.pine.peek32(row_copy + 4), MENU_ICON_FIFTH_ELEMS)
+    self.assertEqual(
+      self.pine.peek16(VANILLA_GROUPS + MENU_ICON_ROW_GROUP * 0x30), 9
+    )
+    # the wiring values the cave will apply at settle
+    self.assertEqual(inst.group_count, 32)
+    self.assertEqual(inst.max_id, 0x6c)
 
-  def test_install_is_idempotent(self) -> None:
+  def test_arm_writes_cave_params(self) -> None:
     self._prime_glyphs()
-    self._installer().install_structure()
+    inst = self._installer()
+    inst.build_structure()
+    inst.arm()
+    self.assertEqual(self.pine.peek32(MENU_ICON_CAVE), 1)
+    self.assertEqual(self.pine.peek32(MENU_ICON_CAVE + 4), VANILLA_BASE)
+    self.assertTrue(inst.armed)
+
+  def test_rebuild_disarms(self) -> None:
+    # armed persists across opens of the same glyph set; only a new glyph set
+    # (a new episode) disarms.
+    self._prime_glyphs()
+    inst = self._installer()
+    inst.build_structure()
+    inst.arm()
+    self.assertTrue(inst.armed)
+    inst.built_for = 0xDEAD
+    inst.build_structure()
+    self.assertTrue(inst.built())
+    self.assertFalse(inst.armed)
+
+  def test_build_is_idempotent(self) -> None:
+    self._prime_glyphs()
+    inst = self._installer()
+    inst.build_structure()
     self.pine.clear_writes()
-    self._installer().install_structure()
+    inst.build_structure()
     self.assertEqual(self.pine.writes, [])
+
+  def test_structure_ready_only_with_a_valid_glyph_set(self) -> None:
+    self.assertFalse(self._installer().structure_ready())  # bare safehouse
+    self._prime_glyphs()
+    self.assertTrue(self._installer().structure_ready())   # ThiefNet open
+
+  def test_menu_settled_only_after_the_open_animation(self) -> None:
+    self.pine.poke32(THIEFNET_SETTLED, 0xFFFFFFFF)
+    self.assertFalse(self._installer().menu_settled())     # animating
+    self.pine.poke32(THIEFNET_SETTLED, 0x457)
+    self.assertTrue(self._installer().menu_settled())      # settled
+
+  def test_build_skipped_when_structure_not_ready(self) -> None:
+    self._install_cave()
+    # No _prime_glyphs: the glyph set is empty, as in the bare safehouse.
+    self.interface.install_menu_icons()
+    self.assertFalse(self._installer().built())
+    self.assertFalse(self.pine.written(MENU_ICON_TABLE))
+
+  def test_build_runs_during_the_open_animation(self) -> None:
+    self._install_cave()
+    self._prime_glyphs()
+    self.pine.poke32(THIEFNET_SETTLED, 0xFFFFFFFF)
+    # The build only writes free RAM, so it runs while the menu is still
+    # animating; the cave does the settle-only wiring.
+    self.interface.install_menu_icons()
+    self.assertTrue(self.pine.written(MENU_ICON_TABLE))
+    self.assertTrue(self._installer().built())
 
 
 class TestMenuIconTheme(MenuIconTestBase):
   def _slot(self, glyph: int) -> int:
-    return VANILLA_BASE - 0x24 + glyph * 0x40
+    return MENU_ICON_TABLE + glyph * 0x40
 
   def test_apply_theme_writes_packets_and_repoints(self) -> None:
-    self.pine.poke32(GLYPH_SET + 0x54, VANILLA_BASE)
     self.interface.apply_thiefnet_theme(2)
     for cls, (fill_glyph, sil_glyph) in MENU_ICON_GLYPHS.items():
       fill_address, sil_address = MENU_ICON_PACKETS[cls]
@@ -122,7 +182,6 @@ class TestMenuIconTheme(MenuIconTestBase):
       )
 
   def test_theme_zero_restores_vanilla_packets(self) -> None:
-    self.pine.poke32(GLYPH_SET + 0x54, VANILLA_BASE)
     self.interface.apply_thiefnet_theme(0)
     for glyph, packet in MENU_ICON_VANILLA_PACKETS.items():
       self.assertEqual(self.pine.peek32(self._slot(glyph)), packet)

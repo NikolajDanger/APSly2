@@ -13,7 +13,7 @@ Each gadget and chapter of each episode is shuffled into the item pool, and opti
 In order to play the Sly 2 Archipelago randomizer, you need:
 
 - [Archipelago Multiworld Randomizer](https://github.com/ArchipelagoMW/Archipelago/releases).
-- [The Sly 2 apworld](https://github.com/NikolajDanger/APSly2/releases).
+- [The Sly 2 apworld](https://github.com/NikolajDanger/APSly2/releases/latest).
 - [PCSX2](https://pcsx2.net/downloads/). Must be v1.7 or higher.
 - A Sly 2 US ISO (`SCUS-97316`).
 
@@ -21,6 +21,8 @@ In order to play the Sly 2 Archipelago randomizer, you need:
 Enable PINE in PCSX2
 - In PCSX2, under `Tools`, check `Show Advanced Settings`.
 - In PCSX2, `System -> Settings -> Advanced -> PINE Settings`, check `Enable` and ensure `Slot` is set to `28011`.
+
+It is also recommended to check `Tools -> Enable File Logging` in PCSX2. If the emulator ever crashes while the client is connected, its log (in PCSX2's `logs` folder) then records why.
 
 ### Generating and hosting a multiworld
 Refer to [the official guide](https://archipelago.gg/tutorial/Archipelago/setup_en) on how to set up your game. Be aware that Sly 2 is not in core, so you cannot generate a game on the website.
@@ -54,6 +56,9 @@ Before asking for help in the Discord channel:
 - Make sure nothing else (like another Archipelago client) is connected to PCSX2's PINE slot; PCSX2 only answers one client at a time.
 
 If all these fail, please ask for help in the [Discord channel](https://discord.com/channels/731205301247803413/1359447263981600788).
+
+### PCSX2 crashed while the client was connected
+Please report it in the Discord channel with the client log (`logs/Sly 2 Client_<date>.txt` in your Archipelago folder), which lists the last memory writes before the emulator stopped answering, and PCSX2's own log if you have file logging enabled (see [PCSX2 Settings](#pcsx2-settings)).
 
 ### There's no "save and quit" option in the pause menu
 You can save the game manually in Options.

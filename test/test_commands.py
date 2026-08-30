@@ -1,4 +1,3 @@
-import logging
 from typing import Any
 from unittest.mock import patch
 
@@ -61,19 +60,6 @@ class TestThiefnetText(CommandTestBase):
     with patch.object(Sly2Client, "apply_thiefnet_text"):
       self.cmd._cmd_thiefnet_text()
     self.assertTrue(self.ctx.thiefnet_text_color)
-
-
-class TestTrace(CommandTestBase):
-  async def test_toggles_write_logger_level(self) -> None:
-    writes = self.interface.write_logger
-    self.assertFalse(writes.isEnabledFor(logging.DEBUG))
-    self.cmd._cmd_trace()
-    self.assertTrue(writes.isEnabledFor(logging.DEBUG))
-    self.assertEqual(
-      list(self.ctx.notification_queue), ["Write tracing enabled"]
-    )
-    self.cmd._cmd_trace()
-    self.assertFalse(writes.isEnabledFor(logging.DEBUG))
 
 
 class TestNotification(CommandTestBase):

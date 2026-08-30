@@ -13,4 +13,5 @@ PCSX2 savestates loaded by the end-to-end suite (`e2e/`). Captured with `python 
 | `episode_menu` | 0 / 1 (episode select) | Reached from `title` with `unlock_episodes` + `to_episode_menu`. The menu init resets the unlock byte to 1; the `Episode N` labels hold their vanilla strings. |
 | `ep1_safehouse` | 1 / 2 (inside the Paris safehouse) | Same game as `ep1_hub`, just walked into the safehouse. |
 | `ep1_thiefnet` | 1 / 2 (ThiefNet open) | As above with the ThiefNet shop list open. |
+| `ep6_thiefnet` | 6 / 27 (ThiefNet open) | The safehouse in episode 6 with the ThiefNet shop list open. The glyph-set object sits at a different address than ep1 (0x5112b0 vs 0x86c9f0), so it exercises the per-episode `GLYPH_SET_PTR` menu-icon path. |
 | `ep8_pack` | 8 / 38 (Anatomy for Disaster hub) | The Mega-Jump job (DAG node 80) available, next to a treasure pedestal, every gadget but Mega Jump owned, bindings full, 99 coins. Reached by poking the DAG rather than playing the jobs, so the DAG in this state is inconsistent (statuses do not follow the real job chain); use it for the pack and pedestal checks, not for job logic. |

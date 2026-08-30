@@ -9,7 +9,7 @@ from typing import Callable
 
 from ..data.Constants import (
   CAVE_THIEFNET_COLORS,
-  MENU_ICON_TABLE,
+  THIEFNET_NAME_COLOR,
   THIEFNET_COLORS_ORIG,
   THIEFNET_COLORS_SITE,
   THIEFNET_TEXT_COLORS,
@@ -62,7 +62,7 @@ class TestThiefnetText(E2ETestBase):
   def test_visible_rows_colored(self) -> None:
     self.interface.set_thiefnet_colors(self.colors)
     self.interface.clear_cache()
-    slots = MENU_ICON_TABLE + 0xF00
+    slots = THIEFNET_NAME_COLOR
     for i in range(6):
       self.assertEqual(
         self.pine.read_int32(slots + i*0x80), self.colors[i]
@@ -79,7 +79,7 @@ class TestThiefnetText(E2ETestBase):
       lambda: self.pine.read_int32(THIEFNET_COLORS_SITE) == THIEFNET_COLORS_ORIG
     ))
     self.interface.clear_cache()
-    slots = MENU_ICON_TABLE + 0xF00
+    slots = THIEFNET_NAME_COLOR
     for i in range(6):
       self.assertEqual(
         self.pine.read_int32(slots + i*0x80), THIEFNET_TEXT_VANILLA

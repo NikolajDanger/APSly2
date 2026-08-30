@@ -70,6 +70,142 @@ _start:
 	sw    $ra, 0($k0)
 	sw    $a0, 0x20($k0)        # A0_SAVE: the update method's object
 	sw    $a1, 0x24($k0)        # A1_SAVE
+# menu icons: finish the ThiefNet icon install in the frame the shop
+# settles, and undo its one global once the shop closes. The client builds
+# everything into free RAM during the open animation and arms this through
+# the params at 0x0042CFB0 (+0 armed, +4 vanilla glyph-table base). The
+# group array is only laid out at settle, so the cave copies the finalized
+# groups over the client's copy, re-appends the row group's two elements
+# and wires the glyph set. On close it restores GLYPH_TABLE_ALT, which
+# other menus read. 0x3DA160 is zero once ThiefNet closes, unlike the glyph
+# set and settle marker, which stay stale; every glyph-set dereference is
+# guarded.
+menu_icons:
+	lui   $k1, 0x003d
+	ori   $k1, $k1, 0xa160      # ThiefNet UI control block
+	lw    $t9, 0($k1)
+	beq   $t9, $zero, mi_teardown  # ThiefNet closed: restore the global
+	nop
+	lui   $k0, 0x0042
+	ori   $k0, $k0, 0xcfb0      # menu-icon params
+	lw    $k1, 0($k0)
+	beq   $k1, $zero, patches   # not armed
+	nop
+	lui   $k1, 0x003d
+	ori   $k1, $k1, 0xa174      # GLYPH_SET_PTR
+	lw    $a0, 0($k1)           # a0 = live glyph set
+	lui   $t0, 0x0010
+	sltu  $t1, $a0, $t0
+	bne   $t1, $zero, patches   # a0 < 0x00100000: not a real pointer
+	nop
+	lui   $t0, 0x0200
+	sltu  $t1, $a0, $t0
+	beq   $t1, $zero, patches   # a0 >= 0x02000000: not a real pointer
+	nop
+	lui   $k1, 0x003d
+	ori   $k1, $k1, 0xa1a0      # THIEFNET_SETTLED
+	lw    $k1, 0($k1)
+	addiu $t0, $zero, -1
+	beq   $k1, $t0, mi_blank     # still animating: blank rows so no vanilla
+	nop                        # portraits flash before the themed wire
+	lw    $k1, 0x54($a0)        # live glyph-table base
+	beq   $k1, $zero, patches   # not ready
+	nop
+	lui   $t0, 0x0043
+	ori   $t0, $t0, 0x6024      # MENU_ICON_TABLE + 0x24
+	beq   $k1, $t0, patches     # already wired this open
+	nop
+	lw    $t1, 0x84($a0)        # src = live group array
+	lw    $t2, 0x80($a0)        # group count
+	sltiu $t0, $t2, 0x100
+	beq   $t0, $zero, patches   # implausible count: bail
+	nop
+	sll   $t3, $t2, 5
+	sll   $t4, $t2, 4
+	addu  $t3, $t3, $t4         # size = count * 0x30
+	lui   $t4, 0x0043
+	ori   $t4, $t4, 0xa000      # dest = MENU_ICON_GROUPS
+	addu  $t5, $zero, $zero
+mi_copy:
+	addu  $t6, $t1, $t5
+	lw    $t7, 0($t6)
+	addu  $t8, $t4, $t5
+	sw    $t7, 0($t8)
+	addiu $t5, $t5, 4
+	bne   $t5, $t3, mi_copy
+	nop
+	lui   $t4, 0x0043
+	ori   $t4, $t4, 0xa570      # row group in the copy (0x43a000 + 29*0x30)
+	lhu   $t5, 0($t4)
+	addiu $t5, $t5, 2
+	sh    $t5, 0($t4)
+	lui   $t5, 0x0043
+	ori   $t5, $t5, 0xf800      # MENU_ICON_FIFTH_ELEMS
+	sw    $t5, 4($t4)
+	addiu $t5, $zero, 0x6c
+	sw    $t5, 0x50($a0)        # max glyph id
+	lui   $t5, 0x0043
+	ori   $t5, $t5, 0x6024
+	sw    $t5, 0x54($a0)        # live glyph-table base
+	lw    $t5, 0x80($a0)
+	addiu $t5, $t5, 2
+	sw    $t5, 0x80($a0)        # group count + 2
+	lui   $t5, 0x0043
+	ori   $t5, $t5, 0xa000
+	sw    $t5, 0x84($a0)        # group-array base
+	lui   $t4, 0x003e
+	ori   $t4, $t4, 0x1c78      # GLYPH_TABLE_ALT
+	lui   $t5, 0x0043
+	ori   $t5, $t5, 0x6024
+	sw    $t5, 0($t4)           # GLYPH_TABLE_ALT = relocated
+	lui   $t0, 0x002b
+	ori   $t0, $t0, 0xcde4      # ThiefNet row 0 char word (0x2BCDE4, stride 0x20)
+	lui   $t1, 0x0043
+	ori   $t1, $t1, 0x5000      # MENU_ICON_CHAR_TABLE (client-staged real chars)
+	addiu $t2, $zero, 24
+mi_chars:
+	lw    $t3, 0($t1)
+	sw    $t3, 0($t0)           # restore the real char word at the wire
+	addiu $t0, $t0, 0x20
+	addiu $t1, $t1, 4
+	addiu $t2, $t2, -1
+	bne   $t2, $zero, mi_chars
+	nop
+	b     patches
+	nop
+mi_blank:
+	lui   $t0, 0x002b
+	ori   $t0, $t0, 0xcde4      # ThiefNet row 0 char word
+	addiu $t1, $zero, 15        # filler char: its glyph's group isn't built yet,
+	addiu $t2, $zero, 24        # so the row draws blank instead of a portrait
+mi_blank_loop:
+	sw    $t1, 0($t0)
+	addiu $t0, $t0, 0x20
+	addiu $t2, $t2, -1
+	bne   $t2, $zero, mi_blank_loop
+	nop
+	b     patches
+	nop
+mi_teardown:
+	lui   $t7, 0x003d
+	ori   $t7, $t7, 0xa1a0      # THIEFNET_SETTLED stays settled on close;
+	addiu $t8, $zero, -1        # reset it so a reopen waits for its own settle
+	sw    $t8, 0($t7)           # instead of wiring before the row pool exists
+	                            # and dropping the selection box
+	lui   $t4, 0x003e
+	ori   $t4, $t4, 0x1c78      # GLYPH_TABLE_ALT
+	lw    $t5, 0($t4)
+	lui   $t6, 0x0043
+	ori   $t6, $t6, 0x6024
+	bne   $t5, $t6, patches     # not our relocated base: nothing to restore
+	nop
+	lui   $k0, 0x0042
+	ori   $k0, $k0, 0xcfb0      # menu-icon params
+	lw    $t5, 4($k0)           # vanilla glyph-table base
+	beq   $t5, $zero, patches
+	nop
+	sw    $t5, 0($t4)           # GLYPH_TABLE_ALT = vanilla
+patches:
 	lui   $k0, 0x0042
 	ori   $k0, $k0, 0xcf40      # k0 = 0x0042CF40 (PATCH slot 0)
 	lw    $k1, 0($k0)
@@ -238,8 +374,9 @@ thiefnet_colors:
 	ori   $t1, $t1, 0xce80      # t1 = &color_table[0] (client-populated)
 	sll   $t2, $t0, 2
 	addu  $t1, $t1, $t2         # t1 = &color_table[scroll]
-	lui   $t2, 0x0043
-	ori   $t2, $t2, 0x6f00      # t2 = row 0's name-color slot (stride 0x80)
+	lui   $t2, 0x003e
+	ori   $t2, $t2, 0x307c      # t2 = row 0's name-color slot (stride 0x80),
+	                            # THIEFNET_NAME_COLOR (the vanilla row pool)
 	addiu $t3, $zero, 6         # six visible rows
 tncolors_loop:
 	lw    $t4, 0($t1)

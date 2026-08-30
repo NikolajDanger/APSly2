@@ -204,12 +204,29 @@ class Pine:
     return self.from_bytes(self._send_request(request)[-size:])
 
   def read_bytes(self, address: int, length: int) -> bytes:
-    chunks = self._chunks(address, length)
-    values = self.batch_read(chunks)
-    return b''.join(
-      value.to_bytes(size, "little")
-      for (size, _), value in zip(chunks, values)
+    # One request with a 5-byte read command per 8 bytes (an opcode and an
+    # address), plus a 4/2/1-byte tail. The commands are filled in column by
+    # column, which takes the same few slice assignments however many there
+    # are, and the reply is exactly the bytes asked for, in order.
+    read64 = self._READ_COMMAND[self.DataSize.INT64]
+    n8 = length >> 3
+    body = bytearray(5 * n8)
+    if n8:
+      body[0::5] = bytes([read64]) * n8
+      addrs = struct.pack("<%dI" % n8, *range(address, address + (n8 << 3), 8))
+      for k in range(4):
+        body[1 + k::5] = addrs[k::4]
+    offset = n8 << 3
+    for size in (self.DataSize.INT32, self.DataSize.INT16, self.DataSize.INT8):
+      if length - offset >= size:
+        body += struct.pack(
+          "<BI", self._READ_COMMAND[size], address + offset
+        )
+        offset += size
+    response = self._send_request(
+      struct.pack("<I", len(body) + 4) + bytes(body)
     )
+    return response[5:5 + length]
 
   def read_string(self, address: int, max_length: int) -> str:
     data = self.read_bytes(address, max_length)
@@ -237,29 +254,43 @@ class Pine:
     self._send_request(request + data)
 
   def write_bytes(self, address: int, data: bytes) -> None:
-    self.batch_write([
-      (size, chunk, data[chunk-address:chunk-address+size])
-      for size, chunk in self._chunks(address, len(data))
-    ])
+    # As read_bytes, but each command is 13 bytes, carrying its 8 data bytes
+    # after the address. Those get filled in column by column too.
+    write64 = self._WRITE_COMMAND[self.DataSize.INT64]
+    length = len(data)
+    n8 = length >> 3
+    body = bytearray(13 * n8)
+    if n8:
+      body[0::13] = bytes([write64]) * n8
+      addrs = struct.pack("<%dI" % n8, *range(address, address + (n8 << 3), 8))
+      for k in range(4):
+        body[1 + k::13] = addrs[k::4]
+      head = data[:n8 << 3]
+      for k in range(8):
+        body[5 + k::13] = head[k::8]
+    offset = n8 << 3
+    for size in (self.DataSize.INT32, self.DataSize.INT16, self.DataSize.INT8):
+      if length - offset >= size:
+        body += struct.pack(
+          "<BI", self._WRITE_COMMAND[size], address + offset
+        ) + data[offset:offset + size]
+        offset += size
+    self._send_request(struct.pack("<I", len(body) + 4) + bytes(body))
 
   def write_string(self, address: int, value: str) -> None:
     self.write_bytes(address, value.encode("ascii") + b'\x00')
 
   @classmethod
-  def _largest_size(cls, remaining: int) -> DataSize:
-    for size in reversed(cls.DataSize):
-      if remaining >= size:
-        return size
-    raise ValueError("No data left to transfer")
-
-  @classmethod
   def _chunks(cls, address: int, length: int) -> list[tuple[DataSize, int]]:
-    chunks = []
-    offset = 0
-    while offset < length:
-      size = cls._largest_size(length - offset)
-      chunks.append((size, address + offset))
-      offset += size
+    # As many 8-byte chunks as fit, then a 4/2/1-byte tail. One
+    # comprehension, since a bulk transfer is tens of thousands of chunks.
+    n8 = length >> 3
+    chunks = [(cls.DataSize.INT64, address + (i << 3)) for i in range(n8)]
+    offset = n8 << 3
+    for size in (cls.DataSize.INT32, cls.DataSize.INT16, cls.DataSize.INT8):
+      if length - offset >= size:
+        chunks.append((size, address + offset))
+        offset += size
     return chunks
 
   def batch_read(self, reads: list[tuple[DataSize, int]]) -> list[int]:

@@ -9,7 +9,7 @@ import time
 from typing import Callable
 
 from ..data.Constants import (
-  GLYPH_SET,
+  GLYPH_SET_PTR,
   MENU_ICON_CHARS,
   MENU_ICON_CHOOSER,
   MENU_ICON_GLYPHS,
@@ -32,8 +32,15 @@ class TestMenuIcons(E2ETestBase):
     super().setUp()
     self.interface.install_cave()
     self._wait(self.interface.cave_live)
+    # ThiefNet is already open and settled here, so the cave must wire
+    # without another settle.
+    installer = self.interface.menu_icon_installer
     self.interface.install_menu_icons()
-    self._wait(self.interface.menu_icon_installer.installed)
+    self.assertTrue(self._wait(installer.built))
+    self.interface.apply_thiefnet_theme(1)
+    self.interface.set_thiefnet_row_chars(None)
+    self.interface.arm_menu_icons()
+    self.assertTrue(self._wait(installer.installed))
 
   def tearDown(self) -> None:
     self.reload()
@@ -47,17 +54,23 @@ class TestMenuIcons(E2ETestBase):
       time.sleep(0.05)
     return False
 
+  def _glyph_set(self) -> int:
+    return self.pine.read_int32(GLYPH_SET_PTR)
+
   def _slot(self, glyph: int) -> int:
-    base = self.pine.read_int32(GLYPH_SET + 0x54)
+    base = self.pine.read_int32(self._glyph_set() + 0x54)
     return base - 0x24 + glyph * 0x40
 
   def test_structure_installed(self) -> None:
     self.interface.clear_cache()
     self.assertTrue(self.interface.menu_icon_installer.installed())
+    glyph_set = self._glyph_set()
     self.assertEqual(
-      self.pine.read_int32(GLYPH_SET + 0x54), MENU_ICON_TABLE + 0x24
+      self.pine.read_int32(glyph_set + 0x54), MENU_ICON_TABLE + 0x24
     )
-    self.assertEqual(self.pine.read_int32(GLYPH_SET + 0x84), MENU_ICON_GROUPS)
+    self.assertEqual(
+      self.pine.read_int32(glyph_set + 0x84), MENU_ICON_GROUPS
+    )
 
   def test_appended_elements_present(self) -> None:
     self.interface.clear_cache()

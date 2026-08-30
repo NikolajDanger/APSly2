@@ -1,11 +1,15 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Generator
 import argparse
 from collections import deque
-from time import time
+from time import time, perf_counter
+from contextlib import contextmanager
 import asyncio
 import logging
 import multiprocessing
+import shutil
+import subprocess
 import traceback
+from datetime import datetime
 
 from CommonClient import get_base_parser, server_loop, gui_enabled
 import NetUtils
@@ -42,7 +46,12 @@ from .Callbacks import (
 logger = logging.getLogger("Client.Sly2")
 
 RETRY_WAITS = (3, 3, 10, 30)
-TICK_LOG_INTERVAL = 10
+TICK_LOG_INTERVAL = 100
+# A slow tick is logged on its own; the batched summary's min/avg/max hides
+# lone spikes.
+SLOW_TICK_MS = 16 # A tick is slow if it lasts longer than a frame
+COREDUMP_WINDOW = 10
+COREDUMP_RECHECK = 5
 
 # Load Universal Tracker
 tracker_loaded: bool = False
@@ -71,17 +80,6 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
       )
       state = 'enabled' if self.ctx.death_link_enabled else 'disabled'
       message = f"Deathlink {state}"
-      logger.info(message)
-      self.ctx.notification(message)
-
-  def _cmd_trace(self) -> None:
-    """Toggle logging every memory write to the log file, for diagnosing
-    crashes. Off by default; produces a lot of output when enabled."""
-    if isinstance(self.ctx, Sly2Context):
-      enabled = not self.ctx.game_interface.write_logger.isEnabledFor(
-        logging.DEBUG)
-      self.ctx.game_interface.set_write_trace(enabled)
-      message = f"Write tracing {'enabled' if enabled else 'disabled'}"
       logger.info(message)
       self.ctx.notification(message)
 
@@ -333,6 +331,9 @@ class Sly2Context(CommonContext): # type: ignore[misc]
   slot_data: Optional[dict[str, Utils.Any]] = None
   last_error_message: Optional[str] = None
   tick_stats: list[tuple[float, CycleCounts]]
+  # Seconds spent in each named operation this tick. An operation is never
+  # tagged inside another tagged one, so the times don't overlap.
+  tick_timings: dict[str, float]
   notification_queue: deque[str]
   notification_timestamp: float = 0
   showing_notification: bool = False
@@ -352,6 +353,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
   current_episode: Optional[Sly2Episode] = None
   current_map: Optional[int] = None
   episode_sent: Optional[Sly2Episode] = None
+  guards_despawned_episode: Optional[Sly2Episode] = None
   bottles_text: Optional[int] = None
   bottle_flags: list[int]
   job_statuses: list[int]
@@ -370,6 +372,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
   thiefnet_theme: int = MENU_ICON_DEFAULT_THEME  # ThiefNet icon theme (0-3)
   thiefnet_text_color: bool = True
   thiefnet_prefs_loaded: bool = False
+  thiefnet_scouted: bool = False
   powerups: PowerUps = PowerUps()
   thiefnet_purchases: PowerUps = PowerUps()
   jobs_completed: list[list[list[bool]]]
@@ -398,7 +401,26 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     self.trap_cursor = 0
     self.trap_baseline_pending = False
     self.tick_stats = []
+    self.tick_timings = {}
     self.reset_world_state()
+
+  @contextmanager
+  def time_op(self, name: str) -> Generator[None, None, None]:
+    """Add the block's time to `name` for this tick. Do not nest tagged
+    blocks (see tick_timings)."""
+    start = perf_counter()
+    try:
+      yield
+    finally:
+      self.tick_timings[name] = (
+        self.tick_timings.get(name, 0.0) + perf_counter() - start
+      )
+
+  async def send_msgs(self, msgs: list[Any]) -> None:
+    # Making sure server round trips are tracked, in the case a slow
+    # connection causes lag.
+    with self.time_op("send_msgs"):
+      await super().send_msgs(msgs)
 
   def reset_world_state(self) -> None:
     """Clear per-slot caches so reconnecting to a different slot without
@@ -421,6 +443,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     self.powerups = PowerUps()
     self.thiefnet_purchases = PowerUps()
     self.thiefnet_prefs_loaded = False
+    self.thiefnet_scouted = False
     self.notified_items = 0
     self.clockwerk_parts_count = 0
     self.locations_checked = set()
@@ -428,6 +451,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     self.goal_sent = False
     self.current_map = None
     self.episode_sent = None
+    self.guards_despawned_episode = None
     self.active_traps.clear()
     self.bottle_flags = []
     self.job_statuses = []
@@ -662,6 +686,14 @@ async def pcsx2_sync_task(ctx: Sly2Context) -> None:
     await _sync_tick(ctx)
   logger.info("Sly 2 Connector stopped")
 
+async def _wait_or_exit(ctx: Sly2Context, wait: float) -> None:
+  """Sleep, but wake at once when the client closes, so a long retry wait
+  doesn't delay shutdown."""
+  try:
+    await asyncio.wait_for(ctx.exit_event.wait(), wait)
+  except asyncio.TimeoutError:
+    pass
+
 async def _sync_tick(ctx: Sly2Context) -> None:
   try:
     is_connected = ctx.game_interface.get_connection_state()
@@ -672,20 +704,67 @@ async def _sync_tick(ctx: Sly2Context) -> None:
       await _handle_game_not_ready(ctx)
   except ConnectionError:
     logger.debug("Tick aborted by connection error", exc_info=True)
+    _report_lost_emulator(ctx)
     ctx.game_interface.disconnect_from_game()
-    await asyncio.sleep(1)
+    await _wait_or_exit(ctx, 1)
   except Exception as e:
     if isinstance(e, RuntimeError):
       logger.error(str(e))
     else:
       logger.error(traceback.format_exc())
-    await asyncio.sleep(3)
+    await _wait_or_exit(ctx, 3)
+
+def _report_lost_emulator(ctx: Sly2Context) -> Optional["asyncio.Task[None]"]:
+  """Log the last writes before PCSX2 stopped answering, then look for a core
+  dump now and again once systemd has had time to record it."""
+  writes = ctx.game_interface.crash_report()
+  if not writes:
+    return None
+  lost_at = time()
+  logger.warning(
+    "Lost the emulator; the last writes before that were:\n"
+    + "\n".join(writes)
+  )
+
+  async def check() -> None:
+    if shutil.which("coredumpctl") is None:
+      return
+    for delay in (0, COREDUMP_RECHECK):
+      await _wait_or_exit(ctx, delay)
+      if ctx.exit_event.is_set():
+        return
+      found = await asyncio.to_thread(_coredump_line, lost_at)
+      if found:
+        logger.warning(f"PCSX2 crashed: {found}")
+        return
+    logger.info("No PCSX2 core dump found; it may have been closed")
+
+  return asyncio.create_task(check())
+
+def _coredump_line(lost_at: float) -> Optional[str]:
+  """The newest pcsx2 entry in `coredumpctl` since shortly before the
+  emulator was lost, on systems that have it"""
+  if shutil.which("coredumpctl") is None:
+    return None
+  since = datetime.fromtimestamp(lost_at - COREDUMP_WINDOW)
+  try:
+    output = subprocess.run(
+      ["coredumpctl", "list", "--no-pager", "-q",
+       f"--since={since:%Y-%m-%d %H:%M:%S}"],
+      capture_output=True, text=True, timeout=10
+    ).stdout
+  except (OSError, subprocess.SubprocessError):
+    return None
+  lines = [line for line in output.splitlines() if "pcsx2" in line]
+  return lines[-1].strip() if lines else None
 
 async def _handle_game_ready(ctx: Sly2Context) -> None:
   started = time()
+  ctx.tick_timings.clear()
   ctx.game_interface.clear_cache()
   ctx.game_interface.prefetch_tick_state()
 
+  ctx.game_interface.flush_patches()
   ctx.game_interface.skip_cutscene()
   # ctx.game_interface.skip_dialogue()
 
@@ -744,7 +823,7 @@ async def _handle_map_change(ctx: Sly2Context, ap_connected: bool) -> None:
     return
 
   if map_changed:
-    logger.info(f"Entered {_map_description(current_episode, current_map)}")
+    logger.debug(f"Entered {_map_description(current_episode, current_map)}")
   ctx.current_episode = current_episode
   ctx.current_map = current_map
   ctx.is_connected_to_server = ap_connected
@@ -752,17 +831,31 @@ async def _handle_map_change(ctx: Sly2Context, ap_connected: bool) -> None:
   await init(ctx, ap_connected)
 
 def _record_tick(ctx: Sly2Context, elapsed: float) -> None:
-  ctx.tick_stats.append((elapsed, ctx.game_interface.take_cycle_counts()))
+  counts = ctx.game_interface.take_cycle_counts()
+  if elapsed * 1000 >= SLOW_TICK_MS:
+    ops = sorted(ctx.tick_timings.items(), key=lambda item: -item[1])
+    parts = " | ".join(f"{name}: {t*1000:.0f}ms" for name, t in ops)
+    line = f"Slow tick: {elapsed*1000:.1f}ms"
+    if parts:
+      line += f" ({parts})"
+    logger.debug(line)
+    unattributed = elapsed - sum(t for _, t in ops)
+    if unattributed * 1000 >= SLOW_TICK_MS:
+      logger.debug(f"**** {unattributed*1000:.0f}ms OF TICK UNATTRIBUTED ****")
+  ctx.tick_stats.append((elapsed, counts))
   if len(ctx.tick_stats) < TICK_LOG_INTERVAL:
     return
 
   times = [t for t, _ in ctx.tick_stats]
   counts = [c for _, c in ctx.tick_stats]
   totals = CycleCounts(*(sum(column) for column in zip(*counts)))
+  low = min(times) * 1000
+  average = sum(times) * 1000 / len(times)
+  high = max(times) * 1000
   message = (
     f"Last {len(times)} ticks: {totals.batches} batches "
     f"({totals.writes} writes/{totals.reads} reads), tick time "
-    f"{min(times):.3f}/{sum(times)/len(times):.3f}/{max(times):.3f}s"
+    f"(min/avg/max) {low:.2f}/{average:.2f}/{high:.2f}ms"
   )
   if totals.pine_reads or totals.pine_writes:
     message += (
@@ -807,13 +900,13 @@ async def _handle_game_not_ready(ctx: Sly2Context) -> None:
     )
     wait = RETRY_WAITS[ctx.connection_retry_attempts - 1]
     message = (
-      f"Could not connect to PCSX2, retrying every {wait} seconds. Check "
+      f"Could not connect to PCSX2, trying again in {wait} seconds. Check "
       "that PCSX2 is running and PINE is enabled on port 28011."
     )
   if ctx.last_connect_message != message:
     logger.info(message)
     ctx.last_connect_message = message
-  await asyncio.sleep(wait)
+  await _wait_or_exit(ctx, wait)
 
 def launch_client() -> None:
   Utils.init_logging("Sly 2 Client")

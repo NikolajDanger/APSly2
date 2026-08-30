@@ -145,7 +145,9 @@ class RecordingContext(Sly2Context):
     self.deaths: list[str] = []
 
   async def send_msgs(self, msgs: list[Any]) -> None:
-    self.sent.extend(msgs)
+    # Keeps the real send_msgs' timing attribution without a socket.
+    with self.time_op("send_msgs"):
+      self.sent.extend(msgs)
 
   async def send_death(self, death_text: str = "") -> None:
     self.deaths.append(death_text)

@@ -20,8 +20,11 @@ OUTLINE_FLAGS = 0x49
 HIDDEN_FLAG = 0x800
 POOL_CAPACITY = 64
 VRAM_BLOCKS = 0x4000
-TEXTURE_VRAM_START = 0x1800
 VRAM_PAGE = 0x80
+# The game's texture loader folds a block that reaches the end of VRAM back
+# to block 0, which renders as garbage, so the last page is never free.
+USABLE_VRAM = VRAM_BLOCKS - VRAM_PAGE
+TEXTURE_VRAM_START = 0x1800
 ALLOCATOR_SIZE = 0x40
 GLOBALS = (
   "texture table count", "texture table", "clut table count", "clut table",
@@ -44,14 +47,39 @@ class Pool(NamedTuple):
   bounds_outline: bytes
 
 
-class TextureLoad(NamedTuple):
-  restore: list[tuple[int, int]]
+class Group(NamedTuple):
+  run: tuple[int, int]
+  tex_ids: list[int]
+  clut_ids: list[int]
+
+
+class GroupCall(NamedTuple):
+  allocator: int
   table: int
   clut_table: int
-  ids: list[int]
+  registry: int
+  tex_ids: list[int]
   clut_ids: list[int]
-  calls: int
-  patches: list[tuple[int, int, int, int]]
+
+
+class Upload:
+  # An upload takes one call to the game's texture loader per VRAM run, and
+  # the cave runs one call per frame, so poll issues them one at a time. The
+  # TEX0 patches need every texture's final block, so they wait for the last.
+  def __init__(
+    self, calls: list[GroupCall],
+    patches: list[tuple[int, int, int, int]],
+    records: dict[str, dict[int, tuple[int, ...]]],
+    restore: list[tuple[int, int]]
+  ) -> None:
+    self.calls = calls
+    self.patches = patches
+    self.records = records
+    self.restore = restore
+    self.index = 0
+    self.count = 0
+    self.tex: dict[int, tuple[int, ...]] = {}
+    self.clut: dict[int, tuple[int, ...]] = {}
 
 
 def align(value: int, to: int = 16) -> int:
@@ -125,7 +153,7 @@ class LootInstaller:
   def __init__(self, interface: "Sly2Interface", logger: Logger) -> None:
     self.interface = interface
     self.logger = logger
-    self.pending: TextureLoad | None = None
+    self.pending: Upload | None = None
 
   @property
   def addresses(self) -> dict:
@@ -289,14 +317,26 @@ class LootInstaller:
       used[start:start + clut_blocks(words)] = b"\1" * clut_blocks(words)
     runs = []
     start = None
-    for block in range(TEXTURE_VRAM_START, VRAM_BLOCKS + 1):
-      free = block < VRAM_BLOCKS and not used[block]
+    for block in range(TEXTURE_VRAM_START, USABLE_VRAM + 1):
+      free = block < USABLE_VRAM and not used[block]
       if free and start is None:
         start = block
       elif not free and start is not None:
         runs.append((start, block - start))
         start = None
     return sorted(runs, key=lambda run: -run[1])
+
+  def used_blocks(
+    self, records: dict[str, dict[int, tuple[int, ...]]]
+  ) -> int:
+    used = bytearray(VRAM_BLOCKS)
+    for words in records["tex"].values():
+      start = words[8] & 0x3FFF
+      used[start:start + texture_blocks(words)] = b"\1" * texture_blocks(words)
+    for words in records["clut"].values():
+      start = (words[7] >> 5) & 0x3FFF
+      used[start:start + clut_blocks(words)] = b"\1" * clut_blocks(words)
+    return sum(used)
 
   # =====================================================
   # Install
@@ -326,7 +366,7 @@ class LootInstaller:
     uploads = self.plan_uploads(wanted, records)
     if uploads is None:
       return []
-    wanted, tex_ids, clut_ids, vram = uploads
+    wanted, groups = uploads
     pool = self.grow_pool(pool)
     patches = []
     installed = []
@@ -336,22 +376,21 @@ class LootInstaller:
       pool = pool._replace(parts=parts)
       patches += part_patches
       installed.append(loot_id)
-    self.bind_textures(patches, records, tex_ids, clut_ids, vram)
-    self.logger.info(
+    uploaded = sum(len(g.tex_ids) for g in groups)
+    self.bind_textures(patches, records, groups)
+    self.logger.debug(
       f"Installed loot models {[hex(i) for i in installed]}"
-      + (f", uploading {len(tex_ids)} texture(s)" if tex_ids else "")
+      + (f", uploading {uploaded} texture(s)" if uploaded else "")
+      + f" ({self.used_blocks(records)} VRAM blocks in use)"
     )
     return installed
 
   def plan_uploads(
     self, wanted: list[int], records: dict[str, dict[int, tuple[int, ...]]]
-  ) -> tuple[list[int], list[int], list[int], int] | None:
-    # If the loot texture doesn't fit, we give up on drawing it completely
-    runs = self.free_vram(records)
-    room = runs[0] if runs else (0, 0)
+  ) -> tuple[list[int], list[Group]] | None:
     tex_ids: list[int] = []
     clut_ids: list[int] = []
-    blocks = 0
+    groups: list[Group] = []
     kept = []
     for loot_id in wanted:
       new_tex = []
@@ -371,22 +410,66 @@ class LootInstaller:
       ):
         self.logger.warning(f"No texture data for loot {loot_id:#x}")
         continue
-      need = (
-        sum(texture_blocks(TEXTURES[i][0]) for i in new_tex) +
-        sum(clut_blocks(CLUTS[i][0]) for i in new_clut)
-      )
-      if blocks + need + VRAM_PAGE > room[1]:
+      packed = self.plan_groups(tex_ids + new_tex, clut_ids + new_clut, records)
+      if packed is None:
         self.logger.warning(
           f"No VRAM for the textures of loot {loot_id:#x}; left invisible"
         )
         continue
-      blocks += need
       tex_ids += new_tex
       clut_ids += new_clut
+      groups = packed
       kept.append(loot_id)
     if not kept:
       return None
-    return kept, tex_ids, clut_ids, room[0]
+    return kept, groups
+
+  def plan_groups(
+    self, tex_ids: list[int], clut_ids: list[int],
+    records: dict[str, dict[int, tuple[int, ...]]]
+  ) -> list[Group] | None:
+    # Biggest first, one loader call per free run.
+    bins: list[tuple[tuple[int, int], list[int], list[int]]] = [
+      (run, [], []) for run in self.free_vram(records)
+    ]
+    for tex_id in sorted(
+      tex_ids, key=lambda t: -texture_blocks(TEXTURES[t][0])
+    ):
+      for run, gtex, gclut in bins:
+        if self.run_fits(run, gclut, gtex + [tex_id]):
+          gtex.append(tex_id)
+          break
+      else:
+        return None
+    for clut_id in clut_ids:
+      for run, gtex, gclut in bins:
+        if self.run_fits(run, gclut + [clut_id], gtex):
+          gclut.append(clut_id)
+          break
+      else:
+        return None
+    return [
+      Group(run, gtex, gclut) for run, gtex, gclut in bins if gtex or gclut
+    ]
+
+  def run_fits(
+    self, run: tuple[int, int], clut_ids: list[int], tex_ids: list[int]
+  ) -> bool:
+    # Mirrors the game's texture loader: cluts first, then textures in table
+    # order, each snapped to the next 0x80-block page if it would straddle one.
+    end = run[0] + run[1]
+    top = run[0]
+    sizes = [clut_blocks(CLUTS[c][0]) for c in clut_ids] + [
+      texture_blocks(TEXTURES[t][0]) for t in tex_ids
+    ]
+    for size in sizes:
+      boundary = (top // VRAM_PAGE + 1) * VRAM_PAGE
+      if boundary < top + size:
+        top = boundary
+      if top + size > end:
+        return False
+      top += size
+    return True
 
   def install_model(
     self, pool: Pool, model: LootModel
@@ -466,8 +549,7 @@ class LootInstaller:
 
   def bind_textures(
     self, patches: list[tuple[int, int, int, int]],
-    records: dict[str, dict[int, tuple[int, ...]]], tex_ids: list[int],
-    clut_ids: list[int], vram: int
+    records: dict[str, dict[int, tuple[int, ...]]], groups: list[Group]
   ) -> None:
     now = [
       p for p in patches
@@ -475,8 +557,16 @@ class LootInstaller:
     ]
     self.patch_tex0(now, records["tex"], records["clut"])
     later = [p for p in patches if p not in now]
-    if not later:
+    if not later or not groups:
       return
+    calls = [self.prepare_group(group) for group in groups]
+    globals_ = [self.addresses[name] for name in GLOBALS]
+    restore = list(zip(globals_, self.read_many(globals_)))
+    self.pending = Upload(calls, later, records, restore)
+    self.issue_group(calls[0])
+
+  def prepare_group(self, group: Group) -> GroupCall:
+    tex_ids, clut_ids = group.tex_ids, group.clut_ids
     table_size = len(tex_ids) * TEXTURE_RECORD_SIZE
     clut_table_size = len(clut_ids) * CLUT_RECORD_SIZE
     slots = align(4 * (len(tex_ids) + len(clut_ids) + 1))
@@ -491,9 +581,12 @@ class LootInstaller:
     clut_table = table + align(table_size)
     slot_base = clut_table + align(clut_table_size)
     address = slot_base + slots
+    # Cap the allocator at the run's end rather than the end of VRAM, so an
+    # overrun stops the loader instead of folding to block 0.
     self.write_bytes(
-      block, struct.pack("<3I", TEXTURE_VRAM_START, vram, VRAM_BLOCKS) +
-      bytes(ALLOCATOR_SIZE - 12)
+      block, struct.pack(
+        "<3I", TEXTURE_VRAM_START, group.run[0], group.run[0] + group.run[1]
+      ) + bytes(ALLOCATOR_SIZE - 12)
     )
     self.write_bytes(slot_base, bytes(slots))
     rows = b""
@@ -516,17 +609,21 @@ class LootInstaller:
       rows += struct.pack("<8I", *row)
       address += align(len(clut_data))
     self.write_bytes(clut_table, rows)
-    globals_ = [self.addresses[name] for name in GLOBALS]
-    restore = list(zip(globals_, self.read_many(globals_)))
-    self.write_many(list(zip(globals_, [
-      len(tex_ids), table, len(clut_ids), clut_table, slot_base - 4,
-      slot_base - 4, len(tex_ids), len(clut_ids)
-    ])))
-    calls = self.interface.call_count()
-    self.interface.call_function(self.addresses["texture loader"], [block])
-    self.pending = TextureLoad(
-      restore, table, clut_table, tex_ids, clut_ids, calls, later
+    return GroupCall(
+      block, table, clut_table, slot_base - 4, list(tex_ids), list(clut_ids)
     )
+
+  def issue_group(self, call: GroupCall) -> None:
+    assert self.pending is not None
+    globals_ = [self.addresses[name] for name in GLOBALS]
+    self.write_many(list(zip(globals_, [
+      len(call.tex_ids), call.table, len(call.clut_ids), call.clut_table,
+      call.registry, call.registry, len(call.tex_ids), len(call.clut_ids)
+    ])))
+    self.pending.count = self.interface.call_count()
+    self.interface.call_function(self.addresses["texture loader"], [
+      call.allocator
+    ])
 
   def patch_tex0(
     self, patches: list[tuple[int, int, int, int]],
@@ -544,25 +641,46 @@ class LootInstaller:
     """Returns true if the texture upload is underway"""
     if self.pending is None:
       return False
-    if self.interface.call_count() == self.pending.calls:
+    upload = self.pending
+    if self.interface.call_count() == upload.count:
       return True
-    load = self.pending
+    call = upload.calls[upload.index]
+    # The call can complete within the tick that issued it, leaving the
+    # template rows in the tick cache.
+    self.interface.invalidate(
+      call.table, len(call.tex_ids) * TEXTURE_RECORD_SIZE
+    )
+    self.interface.invalidate(
+      call.clut_table, len(call.clut_ids) * CLUT_RECORD_SIZE
+    )
+    for k, tex_id in enumerate(call.tex_ids):
+      upload.tex[tex_id] = struct.unpack("<10I", self.read_bytes(
+        call.table + k * TEXTURE_RECORD_SIZE, TEXTURE_RECORD_SIZE
+      ))
+    for k, clut_id in enumerate(call.clut_ids):
+      upload.clut[clut_id] = struct.unpack("<8I", self.read_bytes(
+        call.clut_table + k * CLUT_RECORD_SIZE, CLUT_RECORD_SIZE
+      ))
+    upload.index += 1
+    if upload.index < len(upload.calls):
+      self.issue_group(upload.calls[upload.index])
+      return True
     self.pending = None
-    tex = {}
-    for k, tex_id in enumerate(load.ids):
-      tex[tex_id] = struct.unpack("<10I", self.read_bytes(
-        load.table + k * TEXTURE_RECORD_SIZE, TEXTURE_RECORD_SIZE
-      ))
-    clut = {}
-    for k, clut_id in enumerate(load.clut_ids):
-      clut[clut_id] = struct.unpack("<8I", self.read_bytes(
-        load.clut_table + k * CLUT_RECORD_SIZE, CLUT_RECORD_SIZE
-      ))
-    self.patch_tex0(load.patches, tex, clut)
-    self.write_many(load.restore)
-    self.logger.info(
+    self.write_many(upload.restore)
+    tex = {**upload.records["tex"], **upload.tex}
+    clut = {**upload.records["clut"], **upload.clut}
+    wrapped = {i for i, w in upload.tex.items() if (w[8] & 0x3FFF) == 0}
+    if wrapped:
+      self.logger.warning(
+        f"Loot texture(s) {[hex(i) for i in wrapped]} landed on VRAM block 0; "
+        "leaving them unbound"
+      )
+    self.patch_tex0(
+      [p for p in upload.patches if p[2] not in wrapped], tex, clut
+    )
+    self.logger.debug(
       f"Loot textures placed at VRAM blocks "
-      f"{[hex(w[8] & 0x3FFF) for w in tex.values()]}"
+      f"{[hex(w[8] & 0x3FFF) for w in upload.tex.values()]}"
     )
     return False
 

@@ -1,11 +1,12 @@
 from enum import IntEnum
 from typing import (
-  Optional, NamedTuple, Tuple, Dict, List, Iterator, Generator
+  Optional, NamedTuple, Tuple, Dict, List, Iterator, Generator, Deque
 )
 import struct
 import sys
 from contextlib import contextmanager
-from logging import Logger, DEBUG, CRITICAL, getLogger
+from logging import Logger
+from collections import deque
 from time import time
 import traceback
 
@@ -48,7 +49,8 @@ from .data.Constants import (
   THIEFNET_COLORS_SITE,
   THIEFNET_COLORS_ORIG,
   THIEFNET_TEXT_VANILLA,
-  MENU_ICON_TABLE,
+  THIEFNET_NAME_COLOR,
+  MENU_ICON_CAVE,
   COIN_POP_INTERVAL,
   DEATH_INFO_TEMPLATE,
   THIEFNET_DESCRIPTION_FORMAT,
@@ -117,6 +119,7 @@ class PowerUps(NamedTuple):
 # faults inside the emulator itself, so a single bad pointer takes it down
 EE_RAM_START = 0x0010_0000
 EE_RAM_END = 0x0200_0000
+RECENT_WRITES = 64
 
 # No map holds anywhere near this many guards at once; a list longer than this
 # is a walk that wandered into freed memory.
@@ -157,12 +160,12 @@ class GameInterface():
     self._pending_patches: List[Tuple[int, int, int]] = []
     self._defer_patches = False
     self.reported_duplicate = False
-    # Own logger so /trace can enable write logging by setting its level to
-    # DEBUG. It propagates to the root file handler regardless of the root
-    # level, so the writes reach the log file even when the client is at
-    # INFO. Muted by default to keep it out of normal play logs.
-    self.write_logger = getLogger("Sly2Writes")
-    self.write_logger.setLevel(CRITICAL)
+    # Dumped when the emulator stops answering. An abort caused by a write can
+    # surface a few requests later, so a window is kept rather than just the
+    # last write.
+    self.recent_writes: Deque[tuple[float, str, str, object, object]] = (
+      deque(maxlen=RECENT_WRITES)
+    )
     # Values fetched for the current tick, keyed by (address, size) in the
     # 8/4/2/1-byte chunks PINE transfers. Reads are served from here when
     # present, so one batch read at the top of a tick replaces the scattered
@@ -207,12 +210,16 @@ class GameInterface():
     for (size, address), value in zip(chunks, values):
       self._cache[(address, size)] = value.to_bytes(size, "little")
 
-  def _cache_store(self, address: int, data: bytes) -> None:
-    end = address + len(data)
+  def invalidate(self, address: int, n: int) -> None:
+    """Drop the tick cache for a range the game itself rewrites"""
+    end = address + n
     for key in [
       k for k in self._cache if k[0] < end and address < k[0] + k[1]
     ]:
       del self._cache[key]
+
+  def _cache_store(self, address: int, data: bytes) -> None:
+    self.invalidate(address, len(data))
     for size, chunk in Pine._chunks(address, len(data)):
       self._cache[(chunk, size)] = data[chunk-address:chunk-address+size]
 
@@ -257,27 +264,51 @@ class GameInterface():
       values.update(zip(missing, read(missing)))
     return [values[a] for a in addresses]
 
-  def set_write_trace(self, enabled: bool) -> None:
-    self.write_logger.setLevel(DEBUG if enabled else CRITICAL)
-
   def _log_write(
     self, kind: str, address: int | list[int], value: object
   ) -> None:
     # Called exactly when a write is actually issued to PINE.
+    # sys._getframe(2) is the method that issued the write, past this
+    # helper and the _write primitive, so the report names the actual site.
     if isinstance(address, list):
       self.cycle_pine_writes += len(address)
     else:
       self.cycle_pine_writes += 1
-    if not self.write_logger.isEnabledFor(DEBUG):
-      return
-    # sys._getframe(2) is the method that issued the write, past this
-    # helper and the _write primitive, so the log names the actual site.
-    if isinstance(address, list):
-      where = f"[{', '.join(f'{a:#010x}' for a in address)}]"
-    else:
-      where = f"{address:#010x}"
-    self.write_logger.debug(
-      f"{sys._getframe(2).f_code.co_name} {kind} {where} = {value}")
+    self.recent_writes.append(
+      (time(), sys._getframe(2).f_code.co_name, kind, address, value)
+    )
+
+  def crash_report(self) -> list[str]:
+    """Recent writes, oldest first. Clears the window so a reconnect loop
+    reports each loss once."""
+    now = time()
+    lines = []
+    for at, site, kind, address, value in self.recent_writes:
+      if isinstance(address, list):
+        where = ", ".join(f"{a:#010x}" for a in address[:4])
+        if len(address) > 4:
+          where += f", ... ({len(address)} words)"
+      else:
+        where = f"{address:#010x}"
+      lines.append(
+        f"  -{now - at:6.3f}s {site} {kind} {where} = "
+        f"{self._format_value(value)}"
+      )
+    self.recent_writes.clear()
+    return lines
+
+  @staticmethod
+  def _format_value(value: object) -> str:
+    if isinstance(value, list):
+      shown = ", ".join(
+        f"{v:#x}" if isinstance(v, int) else repr(v) for v in value[:4]
+      )
+      return f"[{shown}{', ...' if len(value) > 4 else ''}]"
+    if isinstance(value, str) and len(value) > 32:
+      return f"{value[:32]}... ({len(value) // 2} bytes)"
+    if isinstance(value, int):
+      return f"{value:#x}"
+    return repr(value)
 
   def _writable(self, address: int, size: int = 4) -> bool:
     # Every write path checks writability exactly once per operation, so
@@ -291,7 +322,8 @@ class GameInterface():
       self.reported_bad_writes.add(caller.name)
       self.logger.warning(
         f"Refused write to invalid address {address:#010x} from "
-        f"{caller.name} (line {caller.lineno})"
+        f"{caller.name} (line {caller.lineno}). "
+        "Please tell Nikolaj in the discord channel."
       )
     return False
 
@@ -397,18 +429,28 @@ class GameInterface():
       if word == value:
         continue
       if word == expected:
-        operations.append((address, value))
+        operations.append((address, value, expected))
       elif address not in self.refused_patches:
         self.refused_patches.add(address)
         self.logger.warning(
           f"Refused patch at {address:#010x}: found {word:#010x}, "
-          f"expected {expected:#010x}"
+          f"expected {expected:#010x}. "
+          "Please tell Nikolaj in the discord channel."
         )
     if operations:
-      self._write_patches(operations)
+      # Patches that found no free cave slot are retried next tick.
+      self._pending_patches.extend(self._write_patches(operations))
 
-  def _write_patches(self, operations: list[tuple[int, int]]) -> None:
-    self._batch_write32(operations)
+  def flush_patches(self) -> None:
+    """Retry any patches deferred because the cave's slots were full."""
+    if not self._defer_patches:
+      self._flush_patches()
+
+  def _write_patches(
+    self, operations: list[tuple[int, int, int]]
+  ) -> list[tuple[int, int, int]]:
+    self._batch_write32([(a, v) for a, v, _ in operations])
+    return []
 
   def _batch_write32(self, operations: list[tuple[int, int]]) -> None:
     valid = []
@@ -1208,6 +1250,8 @@ class Sly2Interface(GameInterface):
     # Scrolling 3 is the game's own scroll-out; it resets the string id
     # and scrolling when it finishes, which a bare state write never did.
     infobox_pointer = self._read32(self.addresses["infobox"])
+    if infobox_pointer == 0:
+      return
     if self._read32(infobox_pointer+0x64) != 1:
       self._write32(infobox_pointer+0x64,1)
       self._write32(self.addresses["infobox scrolling"],3)
@@ -1254,6 +1298,9 @@ class Sly2Interface(GameInterface):
     slot = self.addresses["cave call"]
     padded = (arguments + [0] * 4)[:4]
     self._batch_write32([(slot + 4 + 4*i, a) for i, a in enumerate(padded)])
+    # The cave clears the request once it runs, which the tick cache can't
+    # see; a second call in the same tick would otherwise be skipped.
+    self.invalidate(slot, 4)
     self._write32(slot, function)
     return True
 
@@ -1267,13 +1314,21 @@ class Sly2Interface(GameInterface):
     return self.loot_installer.poll()
 
   def install_menu_icons(self) -> None:
-    # The appended glyphs need the chooser code patch, so the whole feature
-    # waits for the cave.
+    # Needs the cave for the chooser patch, and ThiefNet open for the glyph
+    # set (reshaping it otherwise crashes the game). The build writes only
+    # free RAM, so it runs during the open animation; the cave wires it in at
+    # settle (build/cave.s).
+    installer = self.menu_icon_installer
     if not self.cave_live():
       return
-    self.menu_icon_installer.save_vanilla_chars()
-    self.menu_icon_installer.install_structure()
-    self.menu_icon_installer.install_chooser()
+    if not installer.structure_ready():
+      return
+    installer.save_vanilla_chars()
+    installer.build_structure()
+    installer.install_chooser()
+
+  def arm_menu_icons(self) -> None:
+    self.menu_icon_installer.arm()
 
   def apply_thiefnet_theme(self, theme: int) -> None:
     self.menu_icon_installer.apply_theme(theme)
@@ -1321,35 +1376,42 @@ class Sly2Interface(GameInterface):
 
     return self._read32(active_character + 0xe2c)
 
-  def _write_patches(self, operations: list[tuple[int, int]]) -> None:
-    """Instruction patches go through the cave once it is hooked, so the
-    EE thread stores them itself. PCSX2 caches native translations of game
-    code and write-protects their pages; a write from PINE's thread into
-    one flushes translations the EE thread may be executing right then,
-    which can abort the emulator (see CAVE_BLOB). Data patches (the hook
-    itself) and, without the cave or a free request slot, code patches are
-    written directly."""
+  def _write_patches(
+    self, operations: list[tuple[int, int, int]]
+  ) -> list[tuple[int, int, int]]:
+    """Instruction patches go through the cave once it is hooked: PCSX2
+    write-protects pages holding recompiled code, and a PINE-thread write
+    there can abort the emulator (see CAVE_BLOB). Data patches, and code
+    patches before the cave is up, are written directly. Code patches that
+    find no free slot are returned for a retry next tick."""
     text_end = self.addresses["text end"]
     code = [op for op in operations if op[0] < text_end]
     direct = [op for op in operations if op[0] >= text_end]
     if direct:
-      self._batch_write32(direct)
+      self._batch_write32([(a, v) for a, v, _ in direct])
     if not code:
-      return
-    requests = []
-    if self.cave_live():
-      slots = self.addresses["cave patches"]
-      pending = self._batch_read32(
-        [slots + 8*i for i in range(CAVE_PATCH_SLOTS)]
+      return []
+    if not self.cave_live():
+      # Logged so a crash report can be matched to it (see CAVE_BLOB).
+      self.logger.info(
+        "Writing code patches directly (cave not live): "
+        + ", ".join(f"{a:#010x}" for a, _, _ in code)
       )
-      free = [slots + 8*i for i, a in enumerate(pending) if a == 0]
-      while code and free:
-        address, value = code.pop(0)
-        slot = free.pop(0)
-        requests += [(slot + 4, value), (slot, address)]
-    if code:
-      self.logger.debug(f"Writing {len(code)} code patch(es) directly")
-    self._batch_write32(requests + code)
+      self._batch_write32([(a, v) for a, v, _ in code])
+      return []
+    slots = self.addresses["cave patches"]
+    pending = self._batch_read32(
+      [slots + 8*i for i in range(CAVE_PATCH_SLOTS)]
+    )
+    free = [slots + 8*i for i, a in enumerate(pending) if a == 0]
+    requests = []
+    while code and free:
+      address, value, _ = code.pop(0)
+      slot = free.pop(0)
+      requests += [(slot + 4, value), (slot, address)]
+    if requests:
+      self._batch_write32(requests)
+    return code
 
   def install_cave(self) -> None:
     """Install the code cave and hook it in as the per-frame update method
@@ -1360,7 +1422,10 @@ class Sly2Interface(GameInterface):
     # Once the cave runs, its page holds recompiled code and a PINE write
     # there races the recompiler (see CAVE_BLOB), so only write it when it
     # is actually missing.
-    if self._read_bytes(cave, len(blob)) != blob:
+    current = self._read_bytes(cave, len(blob))
+    if current != blob:
+      if any(current):
+        self.logger.debug("Replacing an old code cave left in memory")
       self._write_bytes(cave, blob)
     for name in ("death flag", "coin pops", "coin amount", "coin timer",
                  "sound id", "sound interval", "sound timer", "cave call"):
@@ -1375,6 +1440,8 @@ class Sly2Interface(GameInterface):
       b"".join(a.to_bytes(4, "little") for a in self.addresses["vaults"])
     )
     self._write_bytes(self.addresses["thiefnet color table"], bytes(0x80))
+    self._write_bytes(MENU_ICON_CAVE, bytes(8))
+    self.menu_icon_installer.reset()
     self.safe_patch(
       self.addresses["cave hook"], CAVE_HOOK_ENTRY, CAVE_HOOK_ORIG
     )
@@ -1405,7 +1472,7 @@ class Sly2Interface(GameInterface):
       0x0C000000 | (CAVE_THIEFNET_COLORS >> 2),
       THIEFNET_COLORS_ORIG,
     )
-    slots = MENU_ICON_TABLE + 0xF00
+    slots = THIEFNET_NAME_COLOR
     self._batch_write32([(slots + i*0x80, padded[i]) for i in range(6)])
 
   def clear_thiefnet_colors(self) -> None:
@@ -1416,7 +1483,7 @@ class Sly2Interface(GameInterface):
       THIEFNET_COLORS_ORIG,
       0x0C000000 | (CAVE_THIEFNET_COLORS >> 2),
     )
-    slots = MENU_ICON_TABLE + 0xF00
+    slots = THIEFNET_NAME_COLOR
     self._batch_write32(
       [(slots + i*0x80, THIEFNET_TEXT_VANILLA) for i in range(6)]
     )
@@ -1528,7 +1595,7 @@ class Sly2Interface(GameInterface):
     gadget_power = self._read32(active_character + 0x12fc)
     if gadget_power != 0:
       self._write32(gadget_power, value)
-      self.logger.debug(f"New gadget value: {self._read32(gadget_power)}")
+      self.logger.debug(f"New gadget power value: {self._read32(gadget_power)}")
 
   def set_clock_speed(self, speed: float) -> None:
     self._write_float(self.addresses["clock speed"], speed)

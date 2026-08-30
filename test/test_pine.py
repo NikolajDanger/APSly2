@@ -77,6 +77,41 @@ class TestPineRequests(unittest.TestCase):
       self.pine.requests, [(len(body) + 4).to_bytes(4, "little") + body]
     )
 
+  def test_write_bytes_multiple_int64_chunks(self) -> None:
+    self.pine.write_bytes(0x200000, bytes(range(20)))
+    body = (
+      bytes([self.cmd.WRITE64]) + (0x200000).to_bytes(4, "little") +
+      bytes(range(0, 8)) +
+      bytes([self.cmd.WRITE64]) + (0x200008).to_bytes(4, "little") +
+      bytes(range(8, 16)) +
+      bytes([self.cmd.WRITE32]) + (0x200010).to_bytes(4, "little") +
+      bytes(range(16, 20))
+    )
+    self.assertEqual(
+      self.pine.requests, [(len(body) + 4).to_bytes(4, "little") + body]
+    )
+
+  def test_read_bytes_multiple_int64_chunks(self) -> None:
+    self.pine.replies = [bytes(range(20))]
+    self.assertEqual(self.pine.read_bytes(0x200000, 20), bytes(range(20)))
+    body = (
+      bytes([self.cmd.READ64]) + (0x200000).to_bytes(4, "little") +
+      bytes([self.cmd.READ64]) + (0x200008).to_bytes(4, "little") +
+      bytes([self.cmd.READ32]) + (0x200010).to_bytes(4, "little")
+    )
+    self.assertEqual(
+      self.pine.requests, [(len(body) + 4).to_bytes(4, "little") + body]
+    )
+
+  def test_read_write_bytes_roundtrip_all_lengths(self) -> None:
+    # A wrong stride would only show up at some lengths.
+    for length in range(0, 40):
+      data = bytes((i * 7 + 1) & 0xFF for i in range(length))
+      self.pine.requests.clear()
+      self.pine.write_bytes(0x200000, data)
+      self.pine.replies = [data]
+      self.assertEqual(self.pine.read_bytes(0x200000, length), data)
+
   def test_reads_decode_little_endian(self) -> None:
     self.pine.replies = [b"\x44\x33\x22\x11", b"\xff"]
     self.assertEqual(self.pine.read_int32(0x200000), 0x11223344)

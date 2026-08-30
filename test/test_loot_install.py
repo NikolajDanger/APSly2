@@ -4,12 +4,18 @@ from ..data.Constants import CAVE_HOOK_ENTRY
 from ..data.LootModels import LOOT_MODELS, decode
 from ..LootInstall import (
   BOUNDS_SIZE,
+  CLUT_RECORD_SIZE,
   GLOBALS,
+  LootInstaller,
   OUTLINE_FLAGS,
   PART_SIZE,
   POOL_CAPACITY,
   RECORD_SIZE,
+  TEXTURE_RECORD_SIZE,
   TYPE_ROW_SIZE,
+  USABLE_VRAM,
+  VRAM_BLOCKS,
+  VRAM_PAGE,
   dma_tags,
   projection_block,
   rebase_destinations,
@@ -32,6 +38,14 @@ GOLD_BAR, DIAMOND, BRONZE_COMB = 0x46E, 0x472, 0x45A
 PROJECTION = struct.pack("<4I", 0x4B007A9F, 0x44AA0002, 0x453B8000, 0x4B009A9F)
 REST_GLOBALS = [0, 0, 0, 0, 0, 0, 0xD5, 0x1A0]
 DIAMOND_TBP, DIAMOND_CBPS = 0x1D75, (0x1D2F, 0x1D2E)
+GOLD_COMB, GOLD_MEDAL = 0x45C, 0x468
+JEWEL_ATLAS, MEDAL_ATLAS, ONE_BLOCK_CLUT = 0x3CEB, 0x3CF9, 0x4122
+
+
+def fake_tex(start: int, blocks: int) -> tuple[int, ...]:
+  # A resident texture record just complete enough for free_vram: it reads
+  # the block span (word 3) and TBP (word 8).
+  return (0, 0, 0, blocks << 16, 0, 0, 0, 0, start, 0)
 
 
 def entry(part_id: int, matrix: int, flags: int, dl: int, off: int) -> bytes:
@@ -205,10 +219,11 @@ class TestLootInstall(LootInstallTestBase):
     slot = self.addr["cave call"]
     self.assertEqual(self.pine.peek32(slot), self.addr["texture loader"])
     allocator = self.pine.peek32(slot + 4)
-    self.assertEqual(
-      struct.unpack("<3I", self.pine.peek_bytes(allocator, 12))[::2],
-      (0x1800, 0x4000)
+    minimum, _, limit = struct.unpack(
+      "<3I", self.pine.peek_bytes(allocator, 12)
     )
+    self.assertEqual(minimum, 0x1800)
+    self.assertLessEqual(limit, USABLE_VRAM)
     counts, table, clut_counts, clut_table, *_ = self.globals_()
     self.assertEqual((counts, clut_counts), (1, 2))
     self.assertEqual(self.pine.peek32(table), 1)
@@ -248,3 +263,154 @@ class TestLootInstall(LootInstallTestBase):
     self.interface.clear_cache()
     self.assertEqual(self.interface.install_loot_models([GOLD_BAR]), [])
     self.assertEqual(self.counts(), [2] * 4)
+
+
+class TestLootPacking(LootInstallTestBase):
+  @property
+  def installer(self) -> LootInstaller:
+    return self.interface.loot_installer
+
+  def snap(self, top: int, blocks: int) -> int:
+    boundary = (top // VRAM_PAGE + 1) * VRAM_PAGE
+    return boundary if boundary < top + blocks else top
+
+  def run_loader(self, same_tick: bool = False) -> None:
+    """Stand in for the game's texture loader: cluts then textures in table
+    order, page-snapped, folding a block at the limit back to block 0.
+    `same_tick` leaves the tick cache as the install left it."""
+    counts, table, clut_counts, clut_table, *_ = self.globals_()
+    allocator = self.pine.peek32(self.addr["cave call"] + 4)
+    top = self.pine.peek32(allocator + 4)
+    limit = self.pine.peek32(allocator + 8)
+    for k in range(clut_counts):
+      record = clut_table + k * CLUT_RECORD_SIZE
+      blocks = max(self.pine.peek32(record + 8) >> 16, 1)
+      top = self.snap(top, blocks)
+      self.pine.poke32(record + 0x1C, (1 << 29) | ((top & 0x3FFF) << 5))
+      top += blocks
+    for k in range(counts):
+      blocks = self.pine.peek32(table + k * TEXTURE_RECORD_SIZE + 0xC) >> 16
+      top = self.snap(top, blocks)
+      self.assertLessEqual(top, limit)
+      self.pine.poke32(
+        table + k * TEXTURE_RECORD_SIZE + 0x20, 0x55408000 | (top & 0x3FFF)
+      )
+      top += blocks
+    slot = self.addr["cave call"]
+    self.pine.poke32(slot, 0)
+    self.pine.poke32(slot + 0x18, self.pine.peek32(slot + 0x18) + 1)
+    if not same_tick:
+      self.interface.clear_cache()
+
+  def drive_loader(self, same_tick: bool = False) -> int:
+    calls = 0
+    while self.installer.pending is not None:
+      self.run_loader(same_tick)
+      calls += 1
+      self.interface.poll_loot_textures()
+    return calls
+
+  def foreign_tex0s(self) -> list[tuple[int, int]]:
+    out = []
+    for manager in MANAGERS:
+      for part in self.entries(manager):
+        if part[0] == NATIVE_PART or part[3] == OUTLINE_FLAGS or not part[5]:
+          continue
+        out += [self.tex0(part[4], offset) for offset in (0xA4, 0x138)]
+    return out
+
+  def add_loot(self, rows: list[tuple[int, int]]) -> None:
+    base = self.pine.peek32(MANAGERS[0] + 0x23C)
+    self.pine.poke32(MANAGERS[0] + 0x23C, base + len(rows))
+    for i, (loot_id, part_id) in enumerate(rows, base):
+      self.pine.poke32(TYPE_TABLE + i * TYPE_ROW_SIZE, loot_id)
+      self.pine.poke32(TYPE_TABLE + i * TYPE_ROW_SIZE + 0x20, part_id)
+
+  def fill_vram(self, spans: list[tuple[int, int]]) -> None:
+    records = self.addr["texture records"][0] + 0x2000
+    for k, (start, blocks) in enumerate(spans):
+      self.pine.poke_bytes(records + k * 0x28, struct.pack(
+        "<10I", 0x9000 + k, 1, 0x800080, (blocks << 16) | 0x214, 0x2000,
+        0x1F00000, 0x200, 0, 0x55400000 | start, 0
+      ))
+    self.interface.clear_cache()
+
+  def test_run_fits_accounts_for_page_alignment(self) -> None:
+    inst = self.installer
+    # Four 32-block textures fill a 128-block page exactly.
+    self.assertTrue(inst.run_fits((0x3F80, 0x80), [], [MEDAL_ATLAS] * 4))
+    # One 1-block clut ahead of them shifts the last past the end of VRAM.
+    self.assertFalse(
+      inst.run_fits((0x3F80, 0x80), [ONE_BLOCK_CLUT], [MEDAL_ATLAS] * 4)
+    )
+
+  def test_run_fits_rejects_when_a_block_would_cross_the_end(self) -> None:
+    inst = self.installer
+    # Two 32-block textures reach 0x4000 exactly - allowed.
+    self.assertTrue(inst.run_fits((0x3FC0, 0x40), [], [MEDAL_ATLAS] * 2))
+    # A clut nudges the second so it would straddle 0x4000 (the block-0 wrap).
+    self.assertFalse(
+      inst.run_fits((0x3FC0, 0x40), [ONE_BLOCK_CLUT], [MEDAL_ATLAS] * 2)
+    )
+
+  def test_plan_groups_splits_across_runs(self) -> None:
+    inst = self.installer
+    records: dict = {
+      "tex": {
+        1: fake_tex(0x1800, 0x2600), 2: fake_tex(0x3E40, 0xC0),
+        3: fake_tex(0x3F40, 0x40),
+      },
+      "clut": {},
+    }
+    groups = inst.plan_groups([JEWEL_ATLAS, MEDAL_ATLAS], [], records)
+    assert groups is not None
+    self.assertEqual(len(groups), 2)
+    self.assertEqual(
+      sorted(t for g in groups for t in g.tex_ids),
+      sorted([MEDAL_ATLAS, JEWEL_ATLAS])
+    )
+    self.assertTrue(all(len(g.tex_ids) == 1 for g in groups))
+    self.assertNotEqual(groups[0].run, groups[1].run)
+
+  def test_split_upload_binds_every_texture(self) -> None:
+    self.add_loot([(GOLD_COMB, 0x3260), (GOLD_MEDAL, 0x3232)])
+    # Two 64-block free runs (both below the reserved top page); neither holds
+    # the 64-block jewel atlas and the 32-block medal atlas together.
+    self.fill_vram([(0x1800, 0x2600), (0x3E40, 0xC0), (0x3F40, 0x40)])
+    installed = self.interface.install_loot_models([GOLD_COMB, GOLD_MEDAL])
+    self.assertEqual(installed, [GOLD_COMB, GOLD_MEDAL])
+    self.assertEqual(self.drive_loader(), 2)
+    tex0s = self.foreign_tex0s()
+    # The medal atlas is the block that used to wrap to 0; make sure the
+    # sweep actually reached the installed foreign parts.
+    self.assertTrue(tex0s)
+    for tbp, _ in tex0s:
+      self.assertNotEqual(tbp, 0)
+      self.assertLess(tbp, VRAM_BLOCKS)
+    self.assertEqual(self.globals_(), REST_GLOBALS)
+
+  def test_same_tick_completion_binds_the_loaded_records(self) -> None:
+    # The call can complete before the issuing tick polls; bindings must come
+    # from the rewritten rows, not the template rows in the tick cache.
+    self.add_loot([(GOLD_COMB, 0x3260), (GOLD_MEDAL, 0x3232)])
+    self.fill_vram([(0x1800, 0x2600), (0x3E40, 0xC0), (0x3F40, 0x40)])
+    self.interface.install_loot_models([GOLD_COMB, GOLD_MEDAL])
+    self.assertEqual(self.drive_loader(same_tick=True), 2)
+    tex0s = self.foreign_tex0s()
+    self.assertTrue(tex0s)
+    for tbp, cbp in tex0s:
+      self.assertTrue(tbp == DIAMOND_TBP or 0x3E00 <= tbp < VRAM_BLOCKS)
+      self.assertTrue(cbp in DIAMOND_CBPS or 0x3E00 <= cbp < VRAM_BLOCKS)
+    self.assertEqual(self.globals_(), REST_GLOBALS)
+    self.assertIsNone(self.installer.pending)
+
+  def test_allocator_capped_at_run_end(self) -> None:
+    # The game's texture loader folds a block that reaches its limit back
+    # past 0x4000 to block 0, so the limit must be this run's end, never the
+    # end of VRAM.
+    records = self.installer.resident_records()
+    run = self.installer.free_vram(records)[0]
+    self.interface.install_loot_models([GOLD_BAR])
+    allocator = self.pine.peek32(self.addr["cave call"] + 4)
+    limit = struct.unpack("<3I", self.pine.peek_bytes(allocator, 12))[2]
+    self.assertEqual(limit, run[0] + run[1])
