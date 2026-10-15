@@ -918,12 +918,10 @@ class TestGuards(InterfaceTestBase):
     self.pine.poke32(self.addr["guard structs"][0], 0x10)
     self.assertEqual(list(self.interface._walk_guards()), [])
 
-  def test_despawn(self) -> None:
-    guards = make_guard_list(self.pine, self.addr, 0, 2)
-    self.pine.poke32(guards[1] + 0x54, 0)
+  def test_despawn_requests_cave_removal(self) -> None:
+    make_guard_list(self.pine, self.addr, 0, 2)
     self.interface.despawn_guards()
-    self.assertEqual(self.pine.peek32(guards[0] + 0x800 + 0xA0), 1)
-    self.assertFalse(self.pine.written(0xA0))
+    self.assertEqual(self.pine.peek32(self.addr["remove guards"]), 1)
     self.assertEqual(len(self.pine.writes), 1)
 
   def test_alert_and_release_only_targeting_guards(self) -> None:

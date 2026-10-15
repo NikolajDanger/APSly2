@@ -41,6 +41,9 @@
 #     with interval N it replays every N frames until the client clears the id,
 #     so a rhythmic effect keeps frame-accurate timing without the client
 #     driving each hit.
+#   guards: when the remove-guards flag is set, despawns every guard in the
+#     world through the game's own removal (remove_guards below) and clears
+#     the flag.
 #   call: when a function pointer is set, calls it with the four argument words
 #     that follow it, stores the return value, clears the pointer and bumps a
 #     completion counter, so the client can run any game function.
@@ -354,6 +357,17 @@ pop:
 	move  $a1, $zero
 call:
 	lui   $k0, 0x0042
+	ori   $k0, $k0, 0xcfc0      # k0 = 0x0042CFC0 (REMOVE_GUARDS request)
+	lw    $k1, 0($k0)
+	beq   $k1, $zero, call_fn
+	nop
+	bal   remove_guards
+	nop
+	lui   $k0, 0x0042
+	ori   $k0, $k0, 0xcfc0
+	sw    $zero, 0($k0)
+call_fn:
+	lui   $k0, 0x0042
 	ori   $k0, $k0, 0xcf80      # k0 = 0x0042CF80 (CALL_FN request)
 	lw    $k1, 0($k0)
 	beq   $k1, $zero, sound     # no call armed
@@ -502,3 +516,67 @@ heap_alloc:
 	addu  $a1, $v0, $a0
 	jr    $ra
 	sw    $a1, 0($v1)           # bottom = claim + size
+
+# Extra function, not part of the per-frame routine: despawns every guard in
+# the world through its class's Remove (vtable +0x4c, the same removal the
+# game runs once a knocked-out guard has faded out), so the spawner refills
+# the pool with fresh guards that roll their pockets from the current loot
+# config. Guard structs are a fixed pool, chained through +0x20 from three
+# list heads; +0x2c bit 0x10000000 marks one that is in the world. Hiding a
+# guard instead leaves it spawned, frozen and still able to see the player.
+# The t registers don't survive Remove, so the walk state lives on the stack.
+remove_guards:
+	addiu $sp, $sp, -0x20
+	sw    $ra, 0($sp)
+	lui   $t0, 0x003e
+	ori   $t1, $t0, 0x0774
+	sw    $t1, 4($sp)           # swarmer list head
+	ori   $t1, $t0, 0x0778
+	sw    $t1, 8($sp)           # swarmer list head
+	ori   $t1, $t0, 0x0780
+	sw    $t1, 12($sp)          # flashlight guard list head
+	addiu $t0, $zero, 4
+	sw    $t0, 0x10($sp)        # stack offset of the current head
+rg_list:
+	lw    $t0, 0x10($sp)
+	addu  $t0, $t0, $sp
+	lw    $t0, 0($t0)
+	lw    $t1, 0($t0)           # first guard
+	addiu $t2, $zero, 512
+	sw    $t2, 0x14($sp)        # walk limit, in case a list is garbage
+rg_guard:
+	lui   $t2, 0x0010
+	sltu  $t3, $t1, $t2
+	bne   $t3, $zero, rg_next   # below 0x00100000: end of list
+	lui   $t2, 0x0200
+	sltu  $t3, $t1, $t2
+	beq   $t3, $zero, rg_next   # 0x02000000 and up: not a real pointer
+	nop
+	lw    $t2, 0x14($sp)
+	beq   $t2, $zero, rg_next
+	addiu $t2, $t2, -1
+	sw    $t2, 0x14($sp)
+	lw    $t2, 0x20($t1)
+	sw    $t2, 0x18($sp)        # next guard, read before the removal
+	lw    $t2, 0x2c($t1)
+	lui   $t3, 0x1000
+	and   $t2, $t2, $t3
+	beq   $t2, $zero, rg_skip   # not in the world
+	nop
+	lw    $t2, 0xc($t1)         # vtable
+	lh    $a0, 0x48($t2)
+	lw    $t3, 0x4c($t2)        # Remove
+	jalr  $t3
+	addu  $a0, $t1, $a0
+rg_skip:
+	b     rg_guard
+	lw    $t1, 0x18($sp)
+rg_next:
+	lw    $t0, 0x10($sp)
+	addiu $t0, $t0, 4
+	sltiu $t1, $t0, 0x10
+	bne   $t1, $zero, rg_list
+	sw    $t0, 0x10($sp)
+	lw    $ra, 0($sp)
+	jr    $ra
+	addiu $sp, $sp, 0x20

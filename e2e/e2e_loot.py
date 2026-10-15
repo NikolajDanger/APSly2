@@ -4,6 +4,8 @@ despawn, and the client's loot tick (tables, odds, prices and a pickpocket
 location check)."""
 
 import struct
+import time
+from typing import Callable
 
 from ..data.Constants import (
   LOOT, LOOT_IDS, LOOT_PRICES, PICKPOCKET_LOOT_TABLE_CHANCES, TREASURE_PRICES
@@ -84,6 +86,15 @@ class TestLoot(LootReads, E2ETestBase):
     if self.mutated:
       self.reload()
 
+  def _wait(self, cond: Callable[[], bool], timeout: float = 6.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+      self.interface.clear_cache()
+      if cond():
+        return True
+      time.sleep(0.05)
+    return False
+
   def test_vanilla_config(self) -> None:
     self.mutated = False
     self.assertEqual(self.table(), episode_entries(LOOT, 1))
@@ -118,16 +129,24 @@ class TestLoot(LootReads, E2ETestBase):
     self.assertNotEqual(slot_data["loot_prices"], LOOT_PRICES)
 
   def test_despawn_guards(self) -> None:
-    guards = list(self.interface._walk_guards())
-    self.assertGreater(len(guards), 0)
+    self.interface.install_cave()
+    self.assertTrue(self._wait(self.interface.cave_live))
+    spawned = {
+      g: self.pine.read_bytes(g + 0x230, 12)
+      for g in self.interface._walk_guards()
+      if self.pine.read_int32(g + 0x2c) & 0x10000000
+    }
+    self.assertGreater(len(spawned), 0)
     self.interface.despawn_guards()
-    self.interface.clear_cache()
-    transforms = [self.pine.read_int32(g + 0x54) for g in guards]
-    self.assertTrue(all(transforms))
-    self.assertEqual(
-      self.pine.batch_read_int32([t + 0xA0 for t in transforms]),
-      [1] * len(guards)
-    )
+    request = self.interface.addresses["remove guards"]
+    self.assertTrue(self._wait(lambda: self.pine.read_int32(request) == 0))
+    # The spawner can refill a slot within frames, but never at the spot the
+    # removed guard was standing on
+    for guard, position in spawned.items():
+      self.assertTrue(
+        not self.pine.read_int32(guard + 0x2c) & 0x10000000 or
+        self.pine.read_bytes(guard + 0x230, 12) != position
+      )
 
 
 class TestLootTick(LootReads, TickTestBase):

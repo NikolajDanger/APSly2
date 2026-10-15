@@ -2,7 +2,9 @@
 
 PCSX2 savestates loaded by the end-to-end suite (`e2e/`). Captured with `python -m worlds.Sly2.e2e.capture_state <name>` from the Archipelago checkout; recapture with `--force` when the game setup or the PCSX2 version changes, since savestates are not portable across PCSX2 versions.
 
-- PCSX2 `2.6.3`, game `SCUS-97316 (07652DD9)`.
+- PCSX2 `2.6.3`, game `SCUS-97316 (07652DD9)`. Newer PCSX2 releases refuse
+  these states; run the suite against the 2.6.3 AppImage from PCSX2's GitHub
+  releases by pointing `SLY2_E2E_PCSX2` at it.
 - The sentinel word `0x466FF0` is zeroed before capture.
 - **Memory card:** every state is captured against the blank
   `e2e/memcard.ps2`, which the harness copies fresh into its throwaway

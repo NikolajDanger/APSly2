@@ -391,6 +391,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
   last_checked_locations: set[int]  # Track what was already sent
   goal_sent: bool = False
   active_traps: dict[Items.Trap, float]  # Active trap -> time it expires
+  health_trap_check: Optional[int] = None
 
   def __init__(
     self, server_address: Optional[str], password: Optional[str]
@@ -458,6 +459,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     self.episode_sent = None
     self.guards_despawned_episode = None
     self.active_traps.clear()
+    self.health_trap_check = None
     self.bottle_flags = []
     self.job_statuses = []
     self.tick_stats.clear()
@@ -729,16 +731,16 @@ async def _sync_tick(ctx: Sly2Context) -> None:
     await _wait_or_exit(ctx, 3)
 
 def _report_lost_emulator(ctx: Sly2Context) -> Optional["asyncio.Task[None]"]:
-  """Log the last writes before PCSX2 stopped answering, then look for a core
-  dump now and again once systemd has had time to record it."""
+  """Note the lost connection, then look for a core dump now and again once
+  systemd has had time to record it. The last writes before the loss are
+  only shown when a crash turns up; otherwise they go to the debug log."""
   writes = ctx.game_interface.crash_report()
   if not writes:
     return None
   lost_at = time()
-  logger.warning(
-    "Lost the emulator; the last writes before that were:\n"
-    + "\n".join(writes)
-  )
+  dump = "the last writes before that were:\n" + "\n".join(writes)
+  logger.info("Lost connection to PCSX2")
+  logger.debug(f"Lost the emulator; {dump}")
 
   async def check() -> None:
     if shutil.which("coredumpctl") is None:
@@ -749,9 +751,9 @@ def _report_lost_emulator(ctx: Sly2Context) -> Optional["asyncio.Task[None]"]:
         return
       found = await asyncio.to_thread(_coredump_line, lost_at)
       if found:
-        logger.warning(f"PCSX2 crashed: {found}")
+        logger.warning(f"PCSX2 crashed: {found}; {dump}")
         return
-    logger.info("No PCSX2 core dump found; it may have been closed")
+    logger.debug("No PCSX2 core dump found; it was likely closed")
 
   return asyncio.create_task(check())
 

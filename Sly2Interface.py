@@ -1466,7 +1466,8 @@ class Sly2Interface(GameInterface):
         self.logger.debug("Replacing an old code cave left in memory")
       self._write_bytes(cave, blob)
     for name in ("death flag", "coin pops", "coin amount", "coin timer",
-                 "sound id", "sound interval", "sound timer", "cave call"):
+                 "sound id", "sound interval", "sound timer", "cave call",
+                 "remove guards"):
       self._write32(self.addresses[name], 0)
     self.loot_installer.reset()
     self._write32(self.addresses["coin interval"], COIN_POP_INTERVAL)
@@ -1597,29 +1598,49 @@ class Sly2Interface(GameInterface):
 
   def despawn_guards(self) -> None:
     # Guards already spawned when the client connected rolled their pockets
-    # (loot chance and table) from the pre-connect config. Disabling them
-    # makes map streaming re-spawn fresh guards that re-roll from the config
-    # we now hold. Deliberately never re-enabled: re-enabling revives the
-    # same stale objects instead of letting streaming replace them.
-    for guard in self._walk_guards():
-      transform = self._read32(guard + 0x54)
-      if transform != 0:
-        self._write32(transform + 0xA0, 1)
+    # (loot chance and table) from the pre-connect config. The cave despawns
+    # them through the game's own removal, so the spawner refills the pool
+    # with guards that roll from the config we now hold. Only hiding them
+    # leaves them spawned and frozen, still alerting when the player walks
+    # into their view.
+    self._write32(self.addresses["remove guards"], 1)
 
   # =====================================================
   # Traps
   # =====================================================
 
-  def set_current_health(self, value: int) -> None:
-    self.logger.debug(f"Setting health to {value}")
+  def set_current_health(self, value: int) -> Optional[int]:
+    """Set the active character's health; returns the health address
+    written, or None when there was no character or health to set"""
     active_character = self.get_active_character()
     if active_character == 0:
-      return
+      pointer = self._read32(self.addresses["active character pointer"])
+      self.logger.debug(
+        f"Not setting health to {value}: no active character "
+        f"(pointer {pointer:#010x})"
+      )
+      return None
 
     health_pointer = self._read32(active_character + 0xe00)
-    if health_pointer != 0:
-      self._write32(health_pointer, value)
-      self.logger.debug(f"New health value: {self._read32(health_pointer)}")
+    if health_pointer == 0:
+      self.logger.debug(
+        f"Not setting health to {value}: character {active_character:#010x} "
+        "has no health pointer"
+      )
+      return None
+
+    before = self.read_health(health_pointer)
+    self._write32(health_pointer, value)
+    self.logger.debug(
+      f"Set health of character {active_character:#010x} at "
+      f"{health_pointer:#010x}: {before} -> {self.read_health(health_pointer)}"
+    )
+    return health_pointer
+
+  def read_health(self, health_pointer: int) -> int:
+    """The health at `health_pointer`, read past the tick cache"""
+    self.invalidate(health_pointer, 4)
+    return self._read32(health_pointer)
 
   def patch_mega_jump_unload(self) -> None:
     self.safe_patch(

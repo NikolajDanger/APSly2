@@ -921,6 +921,17 @@ class TestTraps(ClientTestBase):
     self.assertEqual(self.power(), 0)
     self.assertEqual(self.ctx.active_traps, {})
 
+  async def test_sly_1_trap_logs_health_next_tick(self) -> None:
+    with self.assertLogs("Client.Sly2", "DEBUG") as logs:
+      activate_trap(self.ctx, Trap.SLY_1)
+      self.pine.poke32(self.pine.peek32(self.active + 0xe00), 3)
+      handle_traps(self.ctx)
+    self.assertTrue(any("-> 1" in r for r in logs.output))
+    self.assertTrue(
+      any("Health a tick after Sly 1 trap: 3" in r for r in logs.output)
+    )
+    self.assertIsNone(self.ctx.health_trap_check)
+
   async def test_timed_trap_lifecycle(self) -> None:
     clock = self.addr["clock speed"]
     with patch.object(Callbacks, "time", return_value=1000.0):
@@ -1196,7 +1207,10 @@ class TestInit(ClientTestBase):
     await super().asyncSetUp()
     self.enter(1, 2)
     build_dag(self.pine, self.addr)
-    self.guards = make_guard_list(self.pine, self.addr, 0, 2)
+    make_guard_list(self.pine, self.addr, 0, 2)
+
+  def removal_requested(self) -> bool:
+    return self.pine.peek32(self.addr["remove guards"]) == 1
 
   async def test_connected(self) -> None:
     self.ctx.active_traps[Trap.ICE] = 5000.0
@@ -1206,8 +1220,7 @@ class TestInit(ClientTestBase):
     self.assertEqual(self.ctx.active_traps, {Trap.ICE: 5000.0})
     self.assertIsNone(self.ctx.prev_coins)
     self.assertEqual(self.pine.peek_float(self.addr["clock speed"]), 1.0)
-    for guard in self.guards:
-      self.assertEqual(self.pine.peek32(guard + 0x800 + 0xA0), 1)
+    self.assertTrue(self.removal_requested())
     self.assertEqual(
       [m["key"] for m in self.ctx.sent_cmds("Set")], ["Slot:1:Episode"]
     )
@@ -1219,25 +1232,23 @@ class TestInit(ClientTestBase):
   async def test_not_connected(self) -> None:
     await init(self.ctx, False)
     self.assertEqual(self.ctx.sent, [])
-    self.assertEqual(self.pine.peek32(self.guards[0] + 0x800 + 0xA0), 0)
+    self.assertFalse(self.removal_requested())
 
   async def test_guards_left_alone_on_map_change_within_episode(
     self
   ) -> None:
     await init(self.ctx, True)
-    for episode, map_id, despawned in ((1, 3, 0), (2, 4, 1)):
-      for guard in self.guards:
-        self.pine.poke32(guard + 0x800 + 0xA0, 0)
+    for episode, map_id, despawned in ((1, 3, False), (2, 4, True)):
+      self.pine.poke32(self.addr["remove guards"], 0)
       self.interface.clear_cache()
       self.enter(episode, map_id)
       await init(self.ctx, True)
-      for guard in self.guards:
-        self.assertEqual(self.pine.peek32(guard + 0x800 + 0xA0), despawned)
+      self.assertEqual(self.removal_requested(), despawned)
 
   async def test_guards_left_alone_without_pickpocketing(self) -> None:
     self.slot_data["include_pickpocketing"] = False
     await init(self.ctx, True)
-    self.assertEqual(self.pine.peek32(self.guards[0] + 0x800 + 0xA0), 0)
+    self.assertFalse(self.removal_requested())
 
   async def test_title_screen_start_disabled(self) -> None:
     address = self.addr["title start mask"]
@@ -1921,24 +1932,38 @@ class TestConnectionMachine(ClientTestBase):
       assert task is not None
       await task
     self.assertTrue(any(
-      "Lost the emulator" in r and "w32 0x00200000 = 0x7" in r
+      f"PCSX2 crashed: {line}" in r and "w32 0x00200000 = 0x7" in r
       for r in logs.output
     ))
-    self.assertTrue(any(f"PCSX2 crashed: {line}" in r for r in logs.output))
     # Nothing was written since: a reconnect loop stays quiet.
     with self.assertNoLogs("Client.Sly2", "INFO"):
       self.assertIsNone(Sly2Client._report_lost_emulator(self.ctx))
+
+  async def test_closed_emulator_reports_quietly(self) -> None:
+    self.interface._write32(0x200000, 7)
+    with (
+      patch.object(Sly2Client.shutil, "which", return_value="/usr/bin/x"),
+      patch.object(Sly2Client, "_coredump_line", return_value=None),
+      patch.object(Sly2Client, "_wait_or_exit"),
+      self.assertLogs("Client.Sly2", "DEBUG") as logs
+    ):
+      task = Sly2Client._report_lost_emulator(self.ctx)
+      assert task is not None
+      await task
+    shown = [r for r in logs.output if not r.startswith("DEBUG")]
+    self.assertEqual(shown, ["INFO:Client.Sly2:Lost connection to PCSX2"])
+    self.assertTrue(any("w32 0x00200000 = 0x7" in r for r in logs.output))
 
   async def test_no_coredump_search_without_coredumpctl(self) -> None:
     self.interface._write32(0x200000, 7)
     with (
       patch.object(Sly2Client.shutil, "which", return_value=None),
-      self.assertLogs("Client.Sly2", "WARNING") as logs
+      self.assertLogs("Client.Sly2", "DEBUG") as logs
     ):
       task = Sly2Client._report_lost_emulator(self.ctx)
       assert task is not None
       await task
-    self.assertTrue(any("Lost the emulator" in r for r in logs.output))
+    self.assertTrue(any("Lost connection to PCSX2" in r for r in logs.output))
     self.assertFalse(any("core dump" in r for r in logs.output))
 
   async def test_coredump_line_picks_the_newest_pcsx2_entry(self) -> None:
