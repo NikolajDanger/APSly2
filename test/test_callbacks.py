@@ -42,6 +42,7 @@ from ..data.Constants import (
   ALARM_SOUND_ID,
   CAVE_HOOK_ENTRY,
   CAVE_HOOK_ORIG,
+  CAVE_HOOK_ORIG_WORD,
   COIN_POPS_MAX,
   COIN_POPS_MIN,
   DEATHLINK_DAMAGE_TYPES,
@@ -949,6 +950,26 @@ class TestTraps(ClientTestBase):
       handle_traps(self.ctx)
     self.assertEqual(self.pine.peek_float(self.addr["friction"]), 1.5)
 
+  async def test_speed_trap_skips_game_freeze(self) -> None:
+    # The game zeroes the clock for the whole pickpocket grab and restores
+    # 1.0 itself; overwriting the zero resumes the scripted sequence early
+    # and crashes the game.
+    clock = self.addr["clock speed"]
+    with patch.object(Callbacks, "time", return_value=1000.0):
+      activate_trap(self.ctx, Trap.SUGAR_RUSH)
+      handle_traps(self.ctx)
+    self.assertEqual(self.pine.peek_float(clock), 1.5)
+    self.pine.poke_float(clock, 0.0)
+    self.interface.clear_cache()
+    with patch.object(Callbacks, "time", return_value=1005.0):
+      handle_traps(self.ctx)
+    self.assertEqual(self.pine.peek_float(clock), 0.0)
+    self.pine.poke_float(clock, 1.0)
+    self.interface.clear_cache()
+    with patch.object(Callbacks, "time", return_value=1006.0):
+      handle_traps(self.ctx)
+    self.assertEqual(self.pine.peek_float(clock), 1.5)
+
   async def test_noise(self) -> None:
     with (
       patch.object(self.interface, "alert_guards") as alert,
@@ -1383,6 +1404,10 @@ class TestUpdate(ClientTestBase):
     set_job_status(self.pine, self.addr["jobs"][0][1][0], 1)
     await self.tick()
     self.assertEqual(job_status(self.pine, self.addr["jobs"][0][1][0]), 0)
+    # ...also when the game re-asserts the value the revert was based on
+    set_job_status(self.pine, self.addr["jobs"][0][1][0], 1)
+    await self.tick()
+    self.assertEqual(job_status(self.pine, self.addr["jobs"][0][1][0]), 0)
     # ...until its chapter is unlocked by an item
     self.ctx.jobs_completed[0][0] = [True, True]
     self.give(EP1_ITEM)
@@ -1405,6 +1430,28 @@ class TestUpdate(ClientTestBase):
     self.pine.poke32(self.addr["bottle flags"][0], 1)
     await self.tick()
     self.assertEqual(self.pine.peek32(self.addr["bottle count"]), 5)
+
+  async def test_death_respawn_reasserts_bottles(self) -> None:
+    self.slot_data["bottle_location_bundle_size"] = 5
+    self.enter(1, 2)
+    set_active_character(self.pine, self.addr)
+    buffer = string_buffer(self.pine, self.addr, "right back", 1)
+    self.give(bottle_item(5, EpisodeName.THE_BLACK_CHATEAU))
+    await self.tick()
+    await self.tick()
+    self.assertEqual(self.pine.peek32(self.addr["bottle count"]), 5)
+    self.pine.poke32(self.addr["health"]["Sly"], 0)
+    await self.tick()
+    # The respawn restores the vanilla text and count in place, with no
+    # map change and no bottle flag change
+    self.pine.poke32(self.addr["bottle count"], 0)
+    self.pine.poke_bytes(buffer, b"We'll be right back!\0")
+    self.pine.poke32(self.addr["health"]["Sly"], 100)
+    await self.tick()
+    self.assertEqual(self.pine.peek32(self.addr["bottle count"]), 5)
+    self.assertEqual(
+      self.pine.peek_cstring(buffer), b"Bottles Collected: 0"
+    )
 
   async def test_loot_odds_follow_pickpocket_checks(self) -> None:
     self.slot_data["dynamic_loot_tables"] = True
@@ -1615,6 +1662,7 @@ class TickHarness(ClientTestBase):
   async def settle(self) -> None:
     await self.tick()
     await self.tick()
+    await self.tick()
     self.pine.clear_counts()
     self.ctx.sent.clear()
 
@@ -1644,6 +1692,27 @@ class TestTick(TickHarness):
     self.assert_cost(0, 2)
     self.assertEqual(self.pine.peek8(self.addr["episode unlocks"]), 8)
 
+  async def test_boot_flow_map_defers_items(self) -> None:
+    # The pre-title boot runs with map -1 and no save loaded; handling
+    # items there would notify and check against garbage state
+    self.place(0, 0xffffffff)
+    await self.tick()
+    self.assertEqual(len(self.ctx.notification_queue), 0)
+    self.assertEqual(self.ctx.notified_items, 0)
+    self.assertEqual(self.ctx.sent_cmds("LocationChecks"), [])
+
+  async def test_reset_demotes_connection(self) -> None:
+    self.place(1, 2)
+    await self.settle()
+    self.pine.memory.clear()
+    await self.tick()
+    self.assertEqual(self.pine.writes, [])
+    self.assertIsNone(self.interface.current_game)
+    self.assertEqual(self.ctx.sent, [])
+    self.pine.poke32(CAVE_HOOK_ORIG, CAVE_HOOK_ORIG_WORD)
+    self.interface.connect_to_game()
+    self.assertTrue(self.interface.get_connection_state())
+
   async def test_first_tick_walks_dag_once(self) -> None:
     self.place(1, 2)
     await self.tick()
@@ -1672,6 +1741,58 @@ class TestTick(TickHarness):
     self.pine.poke32(self.addr["map id"], 3)
     await self.tick()
     self.assertEqual(self.interface._get_job_address(4), dag_node(50))
+
+  async def test_same_map_reload_reasserts_jobs(self) -> None:
+    self.place(1, 2)
+    await self.settle()
+    self.pine.poke32(self.addr["loading"], 2)
+    await self.tick()
+    # An in-game save load rebuilds the DAG from the save records without a
+    # map change; a job saved mid-mission comes back as in progress, which
+    # only init's fix_jobs rescues
+    set_job_status(self.pine, self.addr["jobs"][0][0][0], 2)
+    self.pine.poke32(self.addr["loading"], 0)
+    await self.tick()
+    await self.tick()
+    self.assertEqual(self.ctx.current_map, 2)
+    self.assertFalse(self.ctx.load_pending)
+    self.assertEqual(job_status(self.pine, self.addr["jobs"][0][0][0]), 1)
+
+  async def test_dag_relinked_on_same_map_reload(self) -> None:
+    self.place(1, 2)
+    await self.settle()
+    self.pine.poke32(self.addr["loading"], 2)
+    await self.tick()
+    self.pine.poke32(dag_node(3) + 0x20, dag_node(50))
+    self.pine.poke32(self.addr["loading"], 0)
+    await self.tick()
+    self.assertTrue(self.ctx.load_pending)
+    self.assertIsNone(self.interface._dag_key)
+    await self.tick()
+    self.assertEqual(self.interface._get_job_address(4), dag_node(50))
+
+  async def test_transient_map_defers_init(self) -> None:
+    self.place(1, 2)
+    await self.settle()
+    self.ctx.bottles_text = 5
+    self.pine.poke32(self.addr["map id"], 0xffffffff)
+    await self.tick()
+    self.assertEqual(self.ctx.current_map, 2)
+    self.assertEqual(self.ctx.bottles_text, 5)
+    self.pine.poke32(self.addr["map id"], 3)
+    await self.tick()
+    self.assertEqual(self.ctx.current_map, 3)
+    self.assertIsNone(self.ctx.bottles_text)
+
+  async def test_disconnect_forces_reinit(self) -> None:
+    self.place(1, 2)
+    await self.settle()
+    self.ctx.is_connected_to_game = True
+    update_connection_status(self.ctx, False)
+    self.assertIsNone(self.ctx.current_map)
+    self.assertIsNone(self.interface._dag_key)
+    await self.tick()
+    self.assertEqual(self.ctx.current_map, 2)
 
   async def test_loading_defers_everything(self) -> None:
     self.place(1, 2)
@@ -1905,6 +2026,22 @@ class TestTickLogging(TickHarness):
     ]
     self.assertEqual(len(waiting), 1)
 
+  async def test_boot_flow_connect_logs_once(self) -> None:
+    self.place(0, 0xffffffff)
+    with self.assertLogs("Client.Sly2", "INFO") as logs:
+      await self.tick()
+      await self.tick()
+      await self.tick()
+    connected = [
+      r for r in logs.output if "Connected to Archipelago server" in r
+    ]
+    self.assertEqual(len(connected), 1)
+    self.assertTrue(self.ctx.load_pending)
+    self.pine.poke32(self.addr["map id"], 0)
+    await self.tick()
+    self.assertEqual(self.ctx.current_map, 0)
+    self.assertFalse(self.ctx.load_pending)
+
   async def test_steady_state_is_silent(self) -> None:
     self.place(1, 2)
     await self.settle()
@@ -2006,8 +2143,20 @@ class TestApplyThiefnetText(ClientTestBase):
     with set_call as colored, clear_call as cleared:
       apply_thiefnet_text(self.ctx)
     expected = [THIEFNET_TEXT_COLORS[c] for c in self.ctx.thiefnet_classes]
-    colored.assert_called_once_with(expected)
+    colored.assert_called_once_with(expected, expected[:6])
     cleared.assert_not_called()
+
+  def test_visible_rows_skip_purchases(self) -> None:
+    self._prime()
+    self.ctx.thiefnet_purchases = PowerUps(
+      *[i in (0, 2) for i in range(24)]
+    )
+    set_call, clear_call = self._calls()
+    with set_call as colored, clear_call:
+      apply_thiefnet_text(self.ctx)
+    expected = [THIEFNET_TEXT_COLORS[c] for c in self.ctx.thiefnet_classes]
+    visible = [expected[i] for i in (1, 3, 4, 5, 6, 7)]
+    colored.assert_called_once_with(expected, visible)
 
   def test_toggle_off_clears(self) -> None:
     self._prime()

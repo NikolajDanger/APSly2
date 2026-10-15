@@ -1,9 +1,15 @@
 """Fixtures for the end-to-end suite, which talks to Sly 2 in PCSX2 over
-PINE. A running PCSX2 is reused as is; otherwise, when SLY2_E2E_ISO is set,
-one is launched under a throwaway config directory whose memory cards are
-fresh copies of the blank e2e card, so the checked-in savestates always
-meet the card they were captured with. The suite is gated on SLY2_E2E=1 so
-it can never run as part of a blanket Archipelago test run."""
+PINE. When SLY2_E2E_ISO is set the suite launches its own PCSX2 under a
+throwaway config directory whose memory cards are fresh copies of the blank
+e2e card, so the checked-in savestates always meet the card they were
+captured with. A PCSX2 that is already running makes the suite skip
+immediately: its card and savestate directory are almost never the ones the
+states expect, and a mismatched load can wedge the emulator mid-run. Set
+SLY2_E2E_SSTATES to that instance's sstates directory to deliberately reuse
+it anyway (the launch helper prints the path). The ad-hoc tools
+(launch.py, capture_state.py) still reuse a running PCSX2 as before. The
+suite is gated on SLY2_E2E=1 so it can never run as part of a blanket
+Archipelago test run."""
 
 import atexit
 import os
@@ -17,6 +23,7 @@ from logging import getLogger
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
+from ..data.Constants import CAVE_HOOK_ORIG, CAVE_HOOK_ORIG_WORD
 from ..pcsx2_interface.pine import DEFAULT_SLOT, Pine, PineConnectionError
 from ..Sly2Interface import Sly2Interface
 
@@ -202,7 +209,13 @@ class Emulator:
       pine = Pine(PINE_SLOT)
       try:
         pine.connect()
-        if pine.get_game_id() == GAME_ID:
+        # The game id answers seconds before the ELF's code is in RAM;
+        # returning then makes the first test's connect_to_game fail its
+        # boot probe, and a savestate load over the boot can kill PCSX2.
+        if (
+          pine.get_game_id() == GAME_ID and
+          pine.read_int32(CAVE_HOOK_ORIG) == CAVE_HOOK_ORIG_WORD
+        ):
           return pine
         pine.disconnect()
       except (PineConnectionError, TimeoutError, ConnectionError):
@@ -228,7 +241,7 @@ emulator = Emulator()
 scratch = ScratchSlot(SCRATCH_SLOT)
 
 
-def connect() -> Pine:
+def connect(reuse: bool = True) -> Pine:
   pine = Pine(PINE_SLOT)
   try:
     pine.connect()
@@ -239,6 +252,13 @@ def connect() -> Pine:
       raise unittest.SkipTest(f"PCSX2 is not answering on PINE: {error}")
     pine = emulator.launch()
   else:
+    if not reuse and emulator.process is None:
+      pine.disconnect()
+      raise unittest.SkipTest(
+        "A PCSX2 is already running; close it so the suite can launch its "
+        "own with the blank e2e card, or set SLY2_E2E_SSTATES to its "
+        "sstates directory to reuse it"
+      )
     print(
       "Reusing the running PCSX2 and its memory card; the savestates "
       "expect the blank e2e card and may complain about it"
@@ -318,7 +338,7 @@ class E2ETestBase(unittest.TestCase):
 
   @classmethod
   def setUpClass(cls) -> None:
-    cls.pine = connect()
+    cls.pine = connect(reuse="SLY2_E2E_SSTATES" in os.environ)
     cls.interface = Sly2Interface(getLogger("Sly2E2E"))
     cls.interface.pcsx2_interface = cls.pine
     cls.interface.connect_to_game()

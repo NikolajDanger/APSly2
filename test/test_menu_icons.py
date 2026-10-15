@@ -96,6 +96,11 @@ class TestMenuIconStructure(MenuIconTestBase):
     # the appended filler row glyph points at its fill staging packet
     fill = MENU_ICON_PACKETS["filler"][0]
     self.assertEqual(self.pine.peek32(MENU_ICON_TABLE + 0x66 * 0x40), fill)
+    # the staging packets hold real data at build time already: theme 0
+    # never stages them, and drawing an unstaged packet freezes the game
+    for cls in ("filler", "unknown"):
+      for address in MENU_ICON_PACKETS[cls]:
+        self.assertNotEqual(self.pine.peek32(address), 0)
     # the row group is appended in the COPY; the live header is left untouched
     row_copy = MENU_ICON_GROUPS + MENU_ICON_ROW_GROUP * 0x30
     self.assertEqual(self.pine.peek16(row_copy), 11)
@@ -111,9 +116,13 @@ class TestMenuIconStructure(MenuIconTestBase):
     self._prime_glyphs()
     inst = self._installer()
     inst.build_structure()
+    # a stale animation-observed flag from a previous open must not let the
+    # cave wire a menu that is already open when the client arms
+    self.pine.poke32(MENU_ICON_CAVE + 12, 1)
     inst.arm()
     self.assertEqual(self.pine.peek32(MENU_ICON_CAVE), 1)
     self.assertEqual(self.pine.peek32(MENU_ICON_CAVE + 4), VANILLA_BASE)
+    self.assertEqual(self.pine.peek32(MENU_ICON_CAVE + 12), 0)
     self.assertTrue(inst.armed)
 
   def test_rebuild_disarms(self) -> None:
@@ -136,6 +145,39 @@ class TestMenuIconStructure(MenuIconTestBase):
     self.pine.clear_writes()
     inst.build_structure()
     self.assertEqual(self.pine.writes, [])
+
+  def test_stale_wired_glyph_set_adopts_without_rebuild(self) -> None:
+    # The game can reuse the glyph set without reinitializing it (e.g. after
+    # a same-episode map reload), so it comes back still wired from the
+    # previous open; a rebuild would snapshot the copy onto itself and
+    # re-append the row elements.
+    self._prime_glyphs()
+    inst = self._installer()
+    inst.build_structure()
+    inst.arm()
+    self.pine.poke32(GLYPH_SET + 0x54, MENU_ICON_TABLE + 0x24)
+    self.pine.poke32(GLYPH_SET + 0x80, 32)
+    self.pine.poke32(GLYPH_SET + 0x84, MENU_ICON_GROUPS)
+    inst.reset()
+    self.interface.clear_cache()
+    self.pine.clear_writes()
+    inst.build_structure()
+    self.assertTrue(inst.built())
+    self.assertFalse(inst.armed)
+    self.assertEqual(self.pine.writes, [])
+    row_copy = MENU_ICON_GROUPS + MENU_ICON_ROW_GROUP * 0x30
+    self.assertEqual(self.pine.peek16(row_copy), 11)
+    inst.arm()
+    self.assertEqual(self.pine.peek32(MENU_ICON_CAVE + 4), VANILLA_BASE)
+
+  def test_stale_wired_glyph_set_needs_a_known_vanilla_base(self) -> None:
+    # A fresh client that never saw the vanilla table can't adopt the wired
+    # structures (it couldn't restore anything on teardown).
+    self._prime_glyphs()
+    self.pine.poke32(GLYPH_SET + 0x54, MENU_ICON_TABLE + 0x24)
+    inst = self._installer()
+    inst.build_structure()
+    self.assertFalse(inst.built())
 
   def test_structure_ready_only_with_a_valid_glyph_set(self) -> None:
     self.assertFalse(self._installer().structure_ready())  # bare safehouse

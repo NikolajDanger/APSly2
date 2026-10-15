@@ -150,6 +150,8 @@ class InterfaceTestBase(unittest.TestCase):
     self.interface.pcsx2_interface = self.pine
     self.interface.connect_to_game()
     self.addr = self.interface.addresses
+    self.pine.poke_float(self.addr["clock speed"], 1.0)
+    self.pine.clear_counts()
 
 
 class RecordingContext(Sly2Context):
@@ -184,6 +186,7 @@ class ClientTestBase(unittest.IsolatedAsyncioTestCase):
     self.interface.pcsx2_interface = self.pine
     self.interface.connect_to_game()
     self.addr = self.interface.addresses
+    self.pine.poke_float(self.addr["clock speed"], 1.0)
 
     self.ctx.slot = 1
     self.ctx.team = 0
@@ -193,6 +196,7 @@ class ClientTestBase(unittest.IsolatedAsyncioTestCase):
     self.ctx.consume_players_package([NetworkPlayer(0, 1, "Tester", "Tester")])
     self.ctx.slot_data = make_slot_data(**self.options)
     self.ctx.reset_world_state()
+    self.pine.clear_counts()
 
   async def asyncTearDown(self) -> None:
     self.ctx.exit_event.set()

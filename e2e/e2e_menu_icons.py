@@ -10,6 +10,7 @@ from typing import Callable
 
 from ..data.Constants import (
   GLYPH_SET_PTR,
+  MENU_ICON_CAVE,
   MENU_ICON_CHARS,
   MENU_ICON_CHOOSER,
   MENU_ICON_GLYPHS,
@@ -32,14 +33,16 @@ class TestMenuIcons(E2ETestBase):
     super().setUp()
     self.interface.install_cave()
     self._wait(self.interface.cave_live)
-    # ThiefNet is already open and settled here, so the cave must wire
-    # without another settle.
     installer = self.interface.menu_icon_installer
     self.interface.install_menu_icons()
     self.assertTrue(self._wait(installer.built))
     self.interface.apply_thiefnet_theme(1)
     self.interface.set_thiefnet_row_chars(None)
     self.interface.arm_menu_icons()
+    # Arming with ThiefNet already open (as in this state) defers the wire
+    # to an open animation the cave has observed; stand in for mi_blank and
+    # set the animation-observed flag so the wire lands this open.
+    self.pine.write_int32(MENU_ICON_CAVE + 12, 1)
     self.assertTrue(self._wait(installer.installed))
 
   def tearDown(self) -> None:

@@ -46,21 +46,21 @@ class TestThiefnetText(E2ETestBase):
     return False
 
   def test_redirect_through_cave(self) -> None:
-    self.interface.set_thiefnet_colors(self.colors)
+    self.interface.set_thiefnet_colors(self.colors, self.colors[:6])
     redirect = 0x0C000000 | (CAVE_THIEFNET_COLORS >> 2)
     self.assertTrue(self._wait(
       lambda: self.pine.read_int32(THIEFNET_COLORS_SITE) == redirect
     ))
 
   def test_color_table_written(self) -> None:
-    self.interface.set_thiefnet_colors(self.colors)
+    self.interface.set_thiefnet_colors(self.colors, self.colors[:6])
     self.interface.clear_cache()
     table = self.addr["thiefnet color table"]
     for i, color in enumerate(self.colors):
       self.assertEqual(self.pine.read_int32(table + 4*i), color)
 
   def test_visible_rows_colored(self) -> None:
-    self.interface.set_thiefnet_colors(self.colors)
+    self.interface.set_thiefnet_colors(self.colors, self.colors[:6])
     self.interface.clear_cache()
     slots = THIEFNET_NAME_COLOR
     for i in range(6):
@@ -69,7 +69,7 @@ class TestThiefnetText(E2ETestBase):
       )
 
   def test_clear_restores(self) -> None:
-    self.interface.set_thiefnet_colors(self.colors)
+    self.interface.set_thiefnet_colors(self.colors, self.colors[:6])
     self._wait(
       lambda: self.pine.read_int32(THIEFNET_COLORS_SITE)
       == (0x0C000000 | (CAVE_THIEFNET_COLORS >> 2))

@@ -2,9 +2,11 @@
 have them already."""
 
 import struct
+import time
 from logging import Logger
 from typing import TYPE_CHECKING, NamedTuple
 
+from .data.Constants import CAVE_HEAP_ALLOC
 from .data.LootModels import CLUTS, LOOT_MODELS, TEXTURES, LootModel, decode
 
 if TYPE_CHECKING:
@@ -26,6 +28,7 @@ VRAM_PAGE = 0x80
 USABLE_VRAM = VRAM_BLOCKS - VRAM_PAGE
 TEXTURE_VRAM_START = 0x1800
 ALLOCATOR_SIZE = 0x40
+CLAIM_TIMEOUT = 0.5
 GLOBALS = (
   "texture table count", "texture table", "clut table count", "clut table",
   "texture registry", "clut registry", "pending textures", "pending cluts"
@@ -84,6 +87,26 @@ class Upload:
 
 def align(value: int, to: int = 16) -> int:
   return (value + to - 1) & ~(to - 1)
+
+
+def model_size(model: LootModel) -> int:
+  return sum(
+    align(part.main + part.second) + sum(align(n) for n in part.refs)
+    for part in model.parts
+  )
+
+
+def group_size(group: Group) -> int:
+  table_size = len(group.tex_ids) * TEXTURE_RECORD_SIZE
+  clut_table_size = len(group.clut_ids) * CLUT_RECORD_SIZE
+  slots = align(4 * (len(group.tex_ids) + len(group.clut_ids) + 1))
+  pixels = sum(
+    align(len(decode(TEXTURES[i][1]))) for i in group.tex_ids
+  ) + sum(align(len(decode(CLUTS[i][1]))) for i in group.clut_ids)
+  return (
+    ALLOCATOR_SIZE + align(table_size) + align(clut_table_size) + slots +
+    pixels
+  )
 
 
 def dma_tags(chain: bytes) -> list[tuple[int, int, int, int]]:
@@ -154,6 +177,8 @@ class LootInstaller:
     self.interface = interface
     self.logger = logger
     self.pending: Upload | None = None
+    self.claimed: int | None = None
+    self.claim_end = 0
 
   @property
   def addresses(self) -> dict:
@@ -178,10 +203,38 @@ class LootInstaller:
   def write_many(self, operations: list[tuple[int, int]]) -> None:
     self.interface._batch_write32(operations)
 
+  def claim(self, size: int) -> bool:
+    """Claims one block for the whole install from the level heap, through
+    the cave: the game allocates from the same pointer on its own thread, so
+    bumping it from here can hand out memory a live object was just given
+    (see CAVE_HEAP_ALLOC)."""
+    interface = self.interface
+    slot = self.addresses["cave call"]
+    interface.invalidate(slot + 0x18, 4)
+    count = interface.call_count()
+    if not interface.call_function(CAVE_HEAP_ALLOC, [align(size)]):
+      return False
+    deadline = time.monotonic() + CLAIM_TIMEOUT
+    while True:
+      interface.invalidate(slot + 0x18, 4)
+      if interface.call_count() != count:
+        break
+      if time.monotonic() > deadline:
+        self.logger.warning(
+          "The cave never serviced the heap claim; loot models not installed"
+        )
+        return False
+      time.sleep(0.002)
+    interface.invalidate(slot + 0x14, 4)
+    self.claimed = self.read32(slot + 0x14)
+    self.claim_end = self.claimed + align(size)
+    return True
+
   def allocate(self, size: int) -> int:
-    bottom = self.read32(self.addresses["heap bottom"])
-    address = align(bottom)
-    self.write_many([(self.addresses["heap bottom"], address + align(size))])
+    assert self.claimed is not None
+    address = self.claimed
+    self.claimed = address + align(size)
+    assert self.claimed <= self.claim_end
     return address
 
   # =====================================================
@@ -242,20 +295,26 @@ class LootInstaller:
       struct.unpack_from("<I28xI", raw, i * TYPE_ROW_SIZE) for i in range(n)
     )
 
+  def grow_size(self, pool: Pool) -> int:
+    size = POOL_CAPACITY * PART_SIZE
+    if (
+      pool.records == pool.lists[0] + size * len(pool.managers) and
+      pool.bounds == pool.records + POOL_CAPACITY * RECORD_SIZE
+    ):
+      return 0
+    return (
+      size * len(pool.managers) + POOL_CAPACITY * (RECORD_SIZE + BOUNDS_SIZE)
+    )
+
   def grow_pool(self, pool: Pool) -> Pool:
     # The pool is moved to free memory, because the array only has room for
     # the vanilla values.
     size = POOL_CAPACITY * PART_SIZE
     lists = pool.lists
-    if (
-      pool.records == lists[0] + size * len(pool.managers) and
-      pool.bounds == pool.records + POOL_CAPACITY * RECORD_SIZE
-    ):
+    total = self.grow_size(pool)
+    if total == 0:
       return pool
-    block = self.allocate(
-      size * len(pool.managers) +
-      POOL_CAPACITY * (RECORD_SIZE + BOUNDS_SIZE)
-    )
+    block = self.allocate(total)
     records = block + size * len(pool.managers)
     bounds = records + POOL_CAPACITY * RECORD_SIZE
     operations = []
@@ -367,17 +426,27 @@ class LootInstaller:
     if uploads is None:
       return []
     wanted, groups = uploads
-    pool = self.grow_pool(pool)
-    patches = []
-    installed = []
-    for loot_id in wanted:
-      model = LOOT_MODELS[loot_id]
-      parts, part_patches = self.install_model(pool, model)
-      pool = pool._replace(parts=parts)
-      patches += part_patches
-      installed.append(loot_id)
-    uploaded = sum(len(g.tex_ids) for g in groups)
-    self.bind_textures(patches, records, groups)
+    total = (
+      self.grow_size(pool) +
+      sum(model_size(LOOT_MODELS[loot_id]) for loot_id in wanted) +
+      sum(group_size(group) for group in groups)
+    )
+    if not self.claim(total):
+      return []
+    try:
+      pool = self.grow_pool(pool)
+      patches = []
+      installed = []
+      for loot_id in wanted:
+        model = LOOT_MODELS[loot_id]
+        parts, part_patches = self.install_model(pool, model)
+        pool = pool._replace(parts=parts)
+        patches += part_patches
+        installed.append(loot_id)
+      uploaded = sum(len(g.tex_ids) for g in groups)
+      self.bind_textures(patches, records, groups)
+    finally:
+      self.claimed = None
     self.logger.debug(
       f"Installed loot models {[hex(i) for i in installed]}"
       + (f", uploading {uploaded} texture(s)" if uploaded else "")
@@ -491,11 +560,7 @@ class LootInstaller:
     )
     target_projection = projection_block(pool.projection)
     assert source_projection and target_projection
-    total = sum(
-      align(part.main + part.second) + sum(align(n) for n in part.refs)
-      for part in model.parts
-    )
-    block = self.allocate(total)
+    block = self.allocate(model_size(model))
     address = block
     patches = []
     entries = []
@@ -570,13 +635,7 @@ class LootInstaller:
     table_size = len(tex_ids) * TEXTURE_RECORD_SIZE
     clut_table_size = len(clut_ids) * CLUT_RECORD_SIZE
     slots = align(4 * (len(tex_ids) + len(clut_ids) + 1))
-    pixels = sum(
-      align(len(decode(TEXTURES[i][1]))) for i in tex_ids
-    ) + sum(align(len(decode(CLUTS[i][1]))) for i in clut_ids)
-    block = self.allocate(
-      ALLOCATOR_SIZE + align(table_size) + align(clut_table_size) + slots +
-      pixels
-    )
+    block = self.allocate(group_size(group))
     table = block + ALLOCATOR_SIZE
     clut_table = table + align(table_size)
     slot_base = clut_table + align(clut_table_size)

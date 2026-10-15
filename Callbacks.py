@@ -84,11 +84,14 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
         await handle_deathlink(ctx)
         await handle_ring_link(ctx)
 
-    # If not in the tutorial or a cutscene, do Archipelago stuff.
-    # This part is separate from the other "handle_*" functions because
-    # episodes should be able to be unlocked and victory should be able
-    # to be sent while in the episode menu
-    if current_map != 0 and not ctx.game_interface.in_cutscene():
+    # If not in the tutorial, a cutscene or the pre-title boot flow
+    # (map -1), do Archipelago stuff. This part is separate from the other
+    # "handle_*" functions because episodes should be able to be unlocked
+    # and victory should be able to be sent while in the episode menu
+    if (
+      current_map not in (0, 0xffffffff) and
+      not ctx.game_interface.in_cutscene()
+    ):
       await handle_received(ctx, in_safehouse)
       pay_out_coins(ctx)
       handle_traps(ctx)
@@ -133,6 +136,15 @@ def handle_episode_state(ctx: 'Sly2Context', in_hub: bool) -> None:
   if ctx.slot_data is None:
     return
 
+  # A death respawn restores the bottle count and text table in place
+  # without a map change, so no init re-asserts them; re-apply on the
+  # dead->alive edge.
+  alive = ctx.game_interface.alive()
+  if alive and ctx.was_alive is False:
+    ctx.bottles_dirty = True
+    ctx.bottles_text = None
+  ctx.was_alive = alive
+
   if ctx.current_episode == Sly2Episode.Anatomy_for_Disaster:
     check_clockla(ctx)
     ctx.game_interface.allow_sly_treasure_pickup()
@@ -145,6 +157,9 @@ def handle_episode_state(ctx: 'Sly2Context', in_hub: bool) -> None:
   if ctx.jobs_dirty and in_hub:
     if ctx.game_interface.get_current_job() == 0xffffffff:
       set_jobs(ctx)
+      # Re-baseline on the corrected statuses (served from the tick cache),
+      # so the game re-asserting its own value later still reads as a change
+      check_jobs(ctx)
       ctx.jobs_dirty = False
 
   if ctx.loot_dirty:
@@ -531,7 +546,9 @@ def apply_thiefnet_text(ctx: 'Sly2Context') -> None:
   if color:
     assert ctx.thiefnet_classes is not None
     colors = [THIEFNET_TEXT_COLORS[cls] for cls in ctx.thiefnet_classes]
-    interface.set_thiefnet_colors(colors)
+    purchased = list(ctx.thiefnet_purchases)[:24]
+    visible = [c for c, p in zip(colors, purchased) if not p][:6]
+    interface.set_thiefnet_colors(colors, visible)
   else:
     interface.clear_thiefnet_colors()
 
@@ -669,6 +686,9 @@ def set_jobs(ctx: 'Sly2Context') -> None:
   episode_jobs = ctx.game_interface.addresses["jobs"][episode_index]
   available = ctx.available_episodes[ctx.current_episode]
   completed_jobs = ctx.jobs_completed[ctx.current_episode-1]
+  ctx.game_interface.logger.debug(
+    f"set_jobs: episode {episode_index+1}, {available} episode item(s)"
+  )
   for i, chapter in enumerate(episode_jobs):
     for job in chapter:
       if isinstance(job, tuple):
@@ -881,6 +901,11 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
     fix_mega_jump(ctx)
 
   if available_episodes != ctx.available_episodes:
+    ctx.game_interface.logger.debug(
+      "Available episodes changed: "
+      f"{[ctx.available_episodes[e] for e in Sly2Episode]} -> "
+      f"{[available_episodes[e] for e in Sly2Episode]}"
+    )
     ctx.jobs_dirty = True
     ctx.text_dirty = True
   if bottles != ctx.all_bottles:

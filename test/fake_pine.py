@@ -1,12 +1,19 @@
 import struct
 
+from ..data.Constants import (
+  ADDRESSES,
+  CAVE_HEAP_ALLOC,
+  CAVE_HOOK_ORIG,
+  CAVE_HOOK_ORIG_WORD,
+)
 from ..pcsx2_interface.pine import Pine
 
 
 class FakePine(Pine):
-  """In-memory stand-in for PINE. Untouched memory reads as zero; every write
-  is also appended to `writes` as (kind, address, bytes). `reads` counts
-  single-value reads and `batches` batch requests (each one round trip)."""
+  """In-memory stand-in for PINE, modeling a booted game. Untouched memory
+  reads as zero; every write is also appended to `writes` as (kind, address,
+  bytes). `reads` counts single-value reads and `batches` batch requests
+  (each one round trip)."""
 
   def __init__(self, game_id: str = "SCUS-97316") -> None:
     self.game_id = game_id
@@ -15,6 +22,9 @@ class FakePine(Pine):
     self.writes: list[tuple[str, int, bytes]] = []
     self.reads = 0
     self.batches = 0
+    self.serve_cave_calls = True
+    if game_id in ADDRESSES:
+      self.poke32(CAVE_HOOK_ORIG, CAVE_HOOK_ORIG_WORD)
 
   def connect(self) -> None:
     self.connected = True
@@ -79,6 +89,22 @@ class FakePine(Pine):
   def _record(self, kind: str, address: int, data: bytes) -> None:
     self.writes.append((kind, address, data))
     self.poke_bytes(address, data)
+    self._service_cave_call(address)
+
+  def _service_cave_call(self, address: int) -> None:
+    """Models the cave servicing a heap_alloc call the moment its function
+    word is armed, like the game thread would next frame."""
+    if not self.serve_cave_calls or self.game_id not in ADDRESSES:
+      return
+    slot = ADDRESSES[self.game_id]["cave call"]
+    if address != slot or self.peek32(slot) != CAVE_HEAP_ALLOC:
+      return
+    bottom = ADDRESSES[self.game_id]["heap bottom"]
+    claim = (self.peek32(bottom) + 15) & ~15
+    self.poke32(bottom, claim + self.peek32(slot + 4))
+    self.poke32(slot + 0x14, claim)
+    self.poke32(slot, 0)
+    self.poke32(slot + 0x18, self.peek32(slot + 0x18) + 1)
 
   def read_int8(self, address: int) -> int:
     self.reads += 1

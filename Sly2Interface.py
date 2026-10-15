@@ -41,6 +41,7 @@ from .data.Constants import (
   CAVE_BLOB,
   CAVE_HOOK_ENTRY,
   CAVE_HOOK_ORIG,
+  CAVE_HOOK_ORIG_WORD,
   CAVE_PATCH_SLOTS,
   CAVE_VAULT_MARKER,
   VAULT_MARKER_PATCH_SITE,
@@ -50,7 +51,11 @@ from .data.Constants import (
   THIEFNET_COLORS_ORIG,
   THIEFNET_TEXT_VANILLA,
   THIEFNET_NAME_COLOR,
+  THIEFNET_NAME_COLOR_RELOC,
+  THIEFNET_COLORS_FLAG,
+  GLYPH_TABLE_ALT,
   MENU_ICON_CAVE,
+  MENU_ICON_TABLE,
   COIN_POP_INTERVAL,
   DEATH_INFO_TEMPLATE,
   THIEFNET_DESCRIPTION_FORMAT,
@@ -507,10 +512,17 @@ class GameInterface():
         return
 
       if game_id in ADDRESSES.keys():
-        self.current_game = game_id
         self.addresses = ADDRESSES[game_id]
-      if (
-        self.current_game is None and
+        # PCSX2 reports the game id from the moment a boot starts, before
+        # the game's code is in RAM; connecting then would write into
+        # memory the loader is still filling and break the boot. The tick
+        # cache can hold the probe from before a disconnect, so drop it.
+        self.clear_cache()
+        if self.game_loaded():
+          self.current_game = game_id
+        else:
+          self.logger.debug("Game is still booting")
+      elif (
         self.game_id_error != game_id and
         game_id != b'\x00\x00\x00\x00\x00\x00'
       ):
@@ -533,6 +545,10 @@ class GameInterface():
       return connected and self.current_game is not None
     except (RuntimeError, ConnectionError):
       return False
+
+  def game_loaded(self) -> bool:
+    """Whether the game's code has finished loading into RAM"""
+    return True
 
 class Sly2Interface(GameInterface):
   def __init__(self, logger: Logger) -> None:
@@ -599,6 +615,7 @@ class Sly2Interface(GameInterface):
       "coin pops"
     ]
     reads = [(4, a[name]) for name in words]
+    reads += [(4, CAVE_HOOK_ORIG)]
     reads += [(2, a["frame counter"]), (1, a["input"])]
     reads += [(1, a["episode unlocks"]), (6, a["gadgets"])]
     reads += [(4, a["sly bindings"] + 4*i) for i in range(3)]
@@ -664,6 +681,9 @@ class Sly2Interface(GameInterface):
   # =====================================================
   # State Checking
   # =====================================================
+
+  def game_loaded(self) -> bool:
+    return self._read32(CAVE_HOOK_ORIG) == CAVE_HOOK_ORIG_WORD
 
   def alive(self) -> bool:
     # Batch read all needed addresses at once
@@ -927,12 +947,22 @@ class Sly2Interface(GameInterface):
 
   def activate_job(self, task: int) -> None:
     status = self._read_job_status(task)
-    if status == 0 and self._task_parents_finished(task):
+    if status != 0:
+      return
+    if self._task_parents_finished(task):
+      self.logger.debug(f"Activating job {task}")
       self._write_job_status(task,1)
+    else:
+      parents = self._get_task_parents(task)
+      statuses = [self._read32(p+0x54) for p in parents]
+      self.logger.debug(
+        f"Not activating job {task}: parent statuses {statuses}"
+      )
 
   def deactivate_job(self, task: int) -> None:
     status = self._read_job_status(task)
     if status == 1:
+      self.logger.debug(f"Deactivating job {task}")
       self._write_job_status(task,0)
 
   def job_completed(self, task: int) -> bool:
@@ -1448,7 +1478,15 @@ class Sly2Interface(GameInterface):
       b"".join(a.to_bytes(4, "little") for a in self.addresses["vaults"])
     )
     self._write_bytes(self.addresses["thiefnet color table"], bytes(0x80))
-    self._write_bytes(MENU_ICON_CAVE, bytes(8))
+    # A map change with ThiefNet open skips the cave's teardown; restore the
+    # glyph-table global here, before its vanilla base is zeroed below and
+    # the teardown can never restore it (other menus read it and crash on
+    # the relocated table).
+    if self._read32(GLYPH_TABLE_ALT) == MENU_ICON_TABLE + 0x24:
+      base = self.menu_icon_installer.vanilla_table_base
+      if base:
+        self._write32(GLYPH_TABLE_ALT, base)
+    self._write_bytes(MENU_ICON_CAVE, bytes(16))
     self.menu_icon_installer.reset()
     self.safe_patch(
       self.addresses["cave hook"], CAVE_HOOK_ENTRY, CAVE_HOOK_ORIG
@@ -1466,34 +1504,43 @@ class Sly2Interface(GameInterface):
       VAULT_MARKER_ORIG,
     )
 
-  def set_thiefnet_colors(self, colors: list[int]) -> None:
-    """Color the ThiefNet rows' name text. `colors` is one ABGR word per row.
-    The cave function keeps the visible slots synced on scroll from the table;
-    the initial visible rows are set here since it only fires on a scroll."""
+  def set_thiefnet_colors(
+    self, colors: list[int], visible: list[int]
+  ) -> None:
+    """Color the ThiefNet rows' name text. `colors` is one ABGR word per
+    item; `visible` is the six displayed rows' colors (the shop hides
+    purchased items, so the displayed order skips them). The cave keeps the
+    visible slots synced per frame from the table; the initial rows are set
+    here since the rows build from the slots before the cave sees them."""
     if not self.cave_live():
       return
     padded = colors[:32] + [THIEFNET_TEXT_VANILLA] * (32 - len(colors))
     table = self.addresses["thiefnet color table"]
     self._batch_write32([(table + i*4, padded[i]) for i in range(32)])
+    self._write32(THIEFNET_COLORS_FLAG, 1)
     self.safe_patch(
       THIEFNET_COLORS_SITE,
       0x0C000000 | (CAVE_THIEFNET_COLORS >> 2),
       THIEFNET_COLORS_ORIG,
     )
-    slots = THIEFNET_NAME_COLOR
-    self._batch_write32([(slots + i*0x80, padded[i]) for i in range(6)])
+    shown = visible[:6] + [THIEFNET_TEXT_VANILLA] * (6 - len(visible))
+    self._batch_write32(
+      [(slots + i*0x80, shown[i]) for i in range(6)
+       for slots in (THIEFNET_NAME_COLOR, THIEFNET_NAME_COLOR_RELOC)]
+    )
 
   def clear_thiefnet_colors(self) -> None:
     """Undo set_thiefnet_colors: restore the scroll handler's own call and put
     the visible rows' name text back to the vanilla blue."""
+    self._write32(THIEFNET_COLORS_FLAG, 0)
     self.safe_patch(
       THIEFNET_COLORS_SITE,
       THIEFNET_COLORS_ORIG,
       0x0C000000 | (CAVE_THIEFNET_COLORS >> 2),
     )
-    slots = THIEFNET_NAME_COLOR
     self._batch_write32(
-      [(slots + i*0x80, THIEFNET_TEXT_VANILLA) for i in range(6)]
+      [(slots + i*0x80, THIEFNET_TEXT_VANILLA) for i in range(6)
+       for slots in (THIEFNET_NAME_COLOR, THIEFNET_NAME_COLOR_RELOC)]
     )
 
   def kill_player(self, damage_type: int = 0x200) -> None:
@@ -1606,6 +1653,12 @@ class Sly2Interface(GameInterface):
       self.logger.debug(f"New gadget power value: {self._read32(gadget_power)}")
 
   def set_clock_speed(self, speed: float) -> None:
+    # The game zeroes the clock while it scripts a sequence (a pickpocket
+    # grab holds 0.0 for its whole duration) and restores 1.0 itself.
+    # Writing over the zero resumes time mid-script, which dereferences a
+    # NULL message provider and hard-crashes the game.
+    if self._read_float(self.addresses["clock speed"]) == 0.0:
+      return
     self._write_float(self.addresses["clock speed"], speed)
 
   def set_friction(self, friction: float) -> None:

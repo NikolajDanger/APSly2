@@ -7,6 +7,7 @@ from ..data.Constants import (
   CAVE_BLOB,
   CAVE_HOOK_ENTRY,
   CAVE_HOOK_ORIG,
+  CAVE_HOOK_ORIG_WORD,
   CAVE_VAULT_MARKER,
   COIN_POP_INTERVAL,
   LOOT,
@@ -33,8 +34,12 @@ from ..data.Constants import (
   CAVE_THIEFNET_COLORS,
   THIEFNET_COLORS_SITE,
   THIEFNET_COLORS_ORIG,
+  THIEFNET_COLORS_FLAG,
   THIEFNET_TEXT_VANILLA,
-  THIEFNET_NAME_COLOR
+  THIEFNET_NAME_COLOR,
+  THIEFNET_NAME_COLOR_RELOC,
+  GLYPH_TABLE_ALT,
+  MENU_ICON_TABLE
 )
 from ..Sly2Interface import (
   RECENT_WRITES,
@@ -145,6 +150,18 @@ class TestConnection(unittest.TestCase):
     interface.connect_to_game()
     pine.disconnect()
     self.assertFalse(interface.get_connection_state())
+
+  def test_booting_game_not_connected(self) -> None:
+    # PCSX2 reports the game id before the game's code is in RAM
+    interface, pine = self.make(GAME_ID)
+    pine.memory.clear()
+    with self.assertNoLogs("Sly2Test", "WARNING"):
+      interface.connect_to_game()
+    self.assertIsNone(interface.current_game)
+    self.assertFalse(interface.get_connection_state())
+    pine.poke32(CAVE_HOOK_ORIG, CAVE_HOOK_ORIG_WORD)
+    interface.connect_to_game()
+    self.assertTrue(interface.get_connection_state())
 
 
 class TestMemoryGuards(InterfaceTestBase):
@@ -295,6 +312,26 @@ class TestCave(InterfaceTestBase):
     self.assertIsNone(installer.built_for)
     self.assertFalse(installer.armed)
     self.assertEqual(self.pine.peek32(MENU_ICON_CAVE), 0)
+    self.assertEqual(self.pine.peek32(THIEFNET_COLORS_FLAG), 0)
+
+  def test_install_restores_glyph_table_global(self) -> None:
+    # A map change with ThiefNet open skips the cave teardown, leaving the
+    # global on the relocated table while the vanilla base param is zeroed.
+    self._prime_hook()
+    self.interface.menu_icon_installer.vanilla_table_base = 0x3E21A0
+    self.pine.poke32(GLYPH_TABLE_ALT, MENU_ICON_TABLE + 0x24)
+    self.interface.clear_cache()
+    self.interface.install_cave()
+    self.assertEqual(self.pine.peek32(GLYPH_TABLE_ALT), 0x3E21A0)
+
+  def test_install_leaves_vanilla_glyph_table_global(self) -> None:
+    self._prime_hook()
+    self.interface.menu_icon_installer.vanilla_table_base = 0x3E21A0
+    self.pine.poke32(GLYPH_TABLE_ALT, 0x3E21A0)
+    self.interface.clear_cache()
+    self.pine.clear_writes()
+    self.interface.install_cave()
+    self.assertFalse(self.pine.written(GLYPH_TABLE_ALT))
 
   def test_code_patch_goes_through_cave(self) -> None:
     self._prime_hook()
@@ -457,19 +494,33 @@ class TestThiefNetColors(InterfaceTestBase):
   def test_set_writes_table_and_visible_slots(self) -> None:
     self._install()
     colors = self._colors()
-    self.interface.set_thiefnet_colors(colors)
+    self.interface.set_thiefnet_colors(colors, colors[:6])
     table = self.addr["thiefnet color table"]
     for i in range(24):
       self.assertEqual(self.pine.peek32(table + 4*i), colors[i])
     for i in range(24, 32):
       self.assertEqual(self.pine.peek32(table + 4*i), THIEFNET_TEXT_VANILLA)
-    slots = THIEFNET_NAME_COLOR
-    for i in range(6):
-      self.assertEqual(self.pine.peek32(slots + i*0x80), colors[i])
+    for slots in (THIEFNET_NAME_COLOR, THIEFNET_NAME_COLOR_RELOC):
+      for i in range(6):
+        self.assertEqual(self.pine.peek32(slots + i*0x80), colors[i])
+    self.assertEqual(self.pine.peek32(THIEFNET_COLORS_FLAG), 1)
+
+  def test_visible_rows_skip_purchased_items(self) -> None:
+    self._install()
+    colors = self._colors()
+    visible = [colors[i] for i in (1, 3, 4, 5, 6)]
+    self.interface.set_thiefnet_colors(colors, visible)
+    table = self.addr["thiefnet color table"]
+    for i in range(24):
+      self.assertEqual(self.pine.peek32(table + 4*i), colors[i])
+    shown = visible + [THIEFNET_TEXT_VANILLA]
+    for slots in (THIEFNET_NAME_COLOR, THIEFNET_NAME_COLOR_RELOC):
+      for i in range(6):
+        self.assertEqual(self.pine.peek32(slots + i*0x80), shown[i])
 
   def test_set_redirects_through_cave(self) -> None:
     self._install()
-    self.interface.set_thiefnet_colors(self._colors())
+    self.interface.set_thiefnet_colors(self._colors(), self._colors()[:6])
     slot = self.addr["cave patches"]
     redirect = 0x0C000000 | (CAVE_THIEFNET_COLORS >> 2)
     self.assertEqual(self.pine.peek32(slot), THIEFNET_COLORS_SITE)
@@ -482,12 +533,12 @@ class TestThiefNetColors(InterfaceTestBase):
   def test_set_without_cave_does_nothing(self) -> None:
     self.pine.poke32(THIEFNET_COLORS_SITE, THIEFNET_COLORS_ORIG)
     self.pine.clear_writes()
-    self.interface.set_thiefnet_colors(self._colors())
+    self.interface.set_thiefnet_colors(self._colors(), self._colors()[:6])
     self.assertEqual(self.pine.writes, [])
 
   def test_clear_restores_patch_and_blue(self) -> None:
     self._install()
-    self.interface.set_thiefnet_colors(self._colors())
+    self.interface.set_thiefnet_colors(self._colors(), self._colors()[:6])
     # simulate the cave applying the redirect and clearing its request slot
     self.pine.poke32(
       THIEFNET_COLORS_SITE, 0x0C000000 | (CAVE_THIEFNET_COLORS >> 2)
@@ -499,9 +550,12 @@ class TestThiefNetColors(InterfaceTestBase):
     slot = self.addr["cave patches"]
     self.assertEqual(self.pine.peek32(slot), THIEFNET_COLORS_SITE)
     self.assertEqual(self.pine.peek32(slot + 4), THIEFNET_COLORS_ORIG)
-    slots = THIEFNET_NAME_COLOR
-    for i in range(6):
-      self.assertEqual(self.pine.peek32(slots + i*0x80), THIEFNET_TEXT_VANILLA)
+    for slots in (THIEFNET_NAME_COLOR, THIEFNET_NAME_COLOR_RELOC):
+      for i in range(6):
+        self.assertEqual(
+          self.pine.peek32(slots + i*0x80), THIEFNET_TEXT_VANILLA
+        )
+    self.assertEqual(self.pine.peek32(THIEFNET_COLORS_FLAG), 0)
 
   def test_clear_when_never_set_queues_no_patch(self) -> None:
     self._install()
@@ -927,6 +981,12 @@ class TestCharacter(InterfaceTestBase):
       self.pine.peek_float(self.addr["friction"]), 0.2, places=6
     )
 
+  def test_clock_speed_respects_game_freeze(self) -> None:
+    self.pine.poke_float(self.addr["clock speed"], 0.0)
+    self.interface.clear_cache()
+    self.interface.set_clock_speed(1.5)
+    self.assertEqual(self.pine.peek_float(self.addr["clock speed"]), 0.0)
+
 
 class TestAlive(InterfaceTestBase):
   def locate(self, episode: int, map_id: int) -> None:
@@ -1130,7 +1190,7 @@ class TestTickCache(InterfaceTestBase):
     self.interface.prefetch_tick_state()
     self.interface.in_safehouse()
     self.interface.alive()
-    self.interface.set_clock_speed(1.0)
+    self.interface.set_clock_speed(1.5)
     counts = self.interface.take_cycle_counts()
     self.assertEqual(counts.batches, 2)
     self.assertGreaterEqual(counts.reads, 2)

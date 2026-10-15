@@ -3,6 +3,7 @@ against a savestate with the real poll-loop sleeps. Kept out of the
 e2e_*.py modules so it is never collected on its own."""
 
 import asyncio
+import os
 import unittest
 from contextlib import suppress
 from types import SimpleNamespace
@@ -28,7 +29,7 @@ class TickTestBase(unittest.IsolatedAsyncioTestCase):
   options: dict[str, Any] = {}
 
   async def asyncSetUp(self) -> None:
-    self.pine = connect()
+    self.pine = connect(reuse="SLY2_E2E_SSTATES" in os.environ)
     load_state(self.pine, self.state, self.episode, self.map_id)
     self.ctx = RecordingContext()
     self.interface = self.ctx.game_interface

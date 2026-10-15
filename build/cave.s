@@ -73,13 +73,18 @@ _start:
 # menu icons: finish the ThiefNet icon install in the frame the shop
 # settles, and undo its one global once the shop closes. The client builds
 # everything into free RAM during the open animation and arms this through
-# the params at 0x0042CFB0 (+0 armed, +4 vanilla glyph-table base). The
-# group array is only laid out at settle, so the cave copies the finalized
-# groups over the client's copy, re-appends the row group's two elements
-# and wires the glyph set. On close it restores GLYPH_TABLE_ALT, which
-# other menus read. 0x3DA160 is zero once ThiefNet closes, unlike the glyph
-# set and settle marker, which stay stale; every glyph-set dereference is
-# guarded.
+# the params at 0x0042CFB0 (+0 armed, +4 vanilla glyph-table base, +8 text
+# colors on, +c animation observed). The group array is only laid out at
+# settle, so the cave copies
+# the finalized groups over the client's copy, re-appends the row group's
+# two elements and wires the glyph set. On close it restores GLYPH_TABLE_ALT,
+# which other menus read. 0x3DA160 is zero once ThiefNet closes, unlike the
+# glyph set and settle marker, which stay stale; every glyph-set dereference
+# is guarded. A reopen can find the glyph set still wired (the game reuses
+# it without reinitializing, e.g. after a same-episode map reload); the wire
+# itself must not rerun then (its +2 appends aren't idempotent), but the
+# blanked chars and the visible text colors are restored every settled
+# frame either way.
 menu_icons:
 	lui   $k1, 0x003d
 	ori   $k1, $k1, 0xa160      # ThiefNet UI control block
@@ -113,8 +118,14 @@ menu_icons:
 	nop
 	lui   $t0, 0x0043
 	ori   $t0, $t0, 0x6024      # MENU_ICON_TABLE + 0x24
-	beq   $k1, $t0, patches     # already wired this open
-	nop
+	beq   $k1, $t0, mi_restore  # already wired: skip the non-idempotent
+	nop                         # wire, still restore chars and colors
+	lw    $t0, 0xc($k0)         # only wire a menu whose open animation the
+	beq   $t0, $zero, mi_colors # cave saw (mi_blank sets this): a client
+	nop                         # connecting mid-open leaves the row pool
+	                            # built from the vanilla table, and wiring
+	                            # under it freezes the next reopen. Colors
+	                            # still apply (the slots don't need the wire).
 	lw    $t1, 0x84($a0)        # src = live group array
 	lw    $t2, 0x80($a0)        # group count
 	sltiu $t0, $t2, 0x100
@@ -158,6 +169,7 @@ mi_copy:
 	lui   $t5, 0x0043
 	ori   $t5, $t5, 0x6024
 	sw    $t5, 0($t4)           # GLYPH_TABLE_ALT = relocated
+mi_restore:
 	lui   $t0, 0x002b
 	ori   $t0, $t0, 0xcde4      # ThiefNet row 0 char word (0x2BCDE4, stride 0x20)
 	lui   $t1, 0x0043
@@ -171,9 +183,64 @@ mi_chars:
 	addiu $t2, $t2, -1
 	bne   $t2, $zero, mi_chars
 	nop
+# The row pool the game built at settle reads its name colors from whichever
+# table it was built against, so keep the six visible slots fresh in both the
+# vanilla pool and the relocated copy. The scroll hook only fires on a
+# scroll, never at the open itself. Each visible row's item comes from the
+# menu's own row array (a purchase removes the item's row, so the displayed
+# list is not contiguous in item index); rows past the end hold -1 and fall
+# back to the vanilla blue.
+mi_colors:
+	lw    $t0, 8($k0)           # text colors on (client toggle)
+	beq   $t0, $zero, patches
+	nop
+	lui   $t0, 0x003d
+	ori   $t0, $t0, 0xa3a0      # scroll offset = first visible row
+	lw    $t0, 0($t0)
+	sltiu $t1, $t0, 27          # 24-row list, 6 visible rows
+	beq   $t1, $zero, patches   # implausible scroll: bail
+	nop
+	lui   $t1, 0x003d
+	ori   $t1, $t1, 0xa19c      # menu row array {item entry, element id}
+	sll   $t2, $t0, 3
+	addu  $t1, $t1, $t2         # &rows[scroll]
+	lui   $t2, 0x003e
+	ori   $t2, $t2, 0x307c      # row 0's name-color slot, vanilla pool
+	lui   $t3, 0x0043
+	ori   $t3, $t3, 0x6f00      # the same slot in the relocated copy
+	addiu $t4, $zero, 6
+mi_colors_loop:
+	lw    $t5, 0($t1)           # the row's item entry index
+	addiu $t5, $t5, -7          # entry 7+i = client item i
+	sltiu $t6, $t5, 24
+	beq   $t6, $zero, mi_colors_vanilla
+	sll   $t5, $t5, 2
+	lui   $t6, 0x0042
+	ori   $t6, $t6, 0xce80      # color table (client-populated)
+	addu  $t6, $t6, $t5
+	b     mi_colors_store
+	lw    $t5, 0($t6)
+mi_colors_vanilla:
+	lui   $t5, 0x7f66
+	ori   $t5, $t5, 0x4c33
+mi_colors_store:
+	sw    $t5, 0($t2)
+	sw    $t5, 0($t3)
+	addiu $t1, $t1, 8
+	addiu $t2, $t2, 0x80
+	addiu $t4, $t4, -1
+	bne   $t4, $zero, mi_colors_loop
+	addiu $t3, $t3, 0x80
 	b     patches
 	nop
 mi_blank:
+	lw    $t0, 0x54($a0)        # already wired: the rebuild reads the real
+	lui   $t1, 0x0043           # chars, so no vanilla portrait can flash, and
+	ori   $t1, $t1, 0x6024      # a blanked char would draw the appended
+	beq   $t0, $t1, patches     # filler glyph mid-animation, whose packet
+	nop                         # theme 0 never stages
+	addiu $t1, $zero, 1
+	sw    $t1, 0xc($k0)         # animation observed: the settle wire may run
 	lui   $t0, 0x002b
 	ori   $t0, $t0, 0xcde4      # ThiefNet row 0 char word
 	addiu $t1, $zero, 15        # filler char: its glyph's group isn't built yet,
@@ -358,7 +425,13 @@ vault_marker_opened:
 # original function, then recolors the six visible rows' name text. The color
 # slots are per screen position, not per item, so on every scroll the client's
 # per-item color table is re-read and the visible slots rewritten, keeping the
-# names colored by item class as the list scrolls.
+# names colored by item class as the list scrolls. Each row's item comes from
+# the menu's row array (a purchase removes the item's row, so the displayed
+# list is not contiguous in item index). Writes are gated on the
+# client's toggle flag, so a freshly zeroed color table (every map init) is
+# never copied into the slots as invisible alpha-0 words, and both slot
+# regions are written since a stale-wired reopen's row pool reads the
+# relocated copy.
 thiefnet_colors:
 	lui   $k0, 0x0042
 	ori   $k0, $k0, 0xcfa0      # save area
@@ -369,24 +442,63 @@ thiefnet_colors:
 	lui   $k0, 0x0042
 	ori   $k0, $k0, 0xcfa0
 	lw    $a0, 4($k0)
-	lw    $t0, 0x250($a0)       # t0 = scroll offset (first visible item)
-	lui   $t1, 0x0042
-	ori   $t1, $t1, 0xce80      # t1 = &color_table[0] (client-populated)
-	sll   $t2, $t0, 2
-	addu  $t1, $t1, $t2         # t1 = &color_table[scroll]
+	lui   $t0, 0x0042
+	ori   $t0, $t0, 0xcfb8      # text colors on (client toggle)
+	lw    $t0, 0($t0)
+	beq   $t0, $zero, tncolors_done
+	nop
+	lw    $t0, 0x250($a0)       # t0 = scroll offset (first visible row)
+	sll   $t1, $t0, 3
+	addu  $t1, $t1, $a0
+	addiu $t1, $t1, 0x4c        # t1 = &rows[scroll] {item entry, element id}
 	lui   $t2, 0x003e
 	ori   $t2, $t2, 0x307c      # t2 = row 0's name-color slot (stride 0x80),
 	                            # THIEFNET_NAME_COLOR (the vanilla row pool)
+	lui   $t5, 0x0043
+	ori   $t5, $t5, 0x6f00      # the same slot in the relocated copy
 	addiu $t3, $zero, 6         # six visible rows
 tncolors_loop:
-	lw    $t4, 0($t1)
+	lw    $t4, 0($t1)           # the row's item entry index
+	addiu $t4, $t4, -7          # entry 7+i = client item i
+	sltiu $t6, $t4, 24
+	beq   $t6, $zero, tncolors_vanilla
+	sll   $t4, $t4, 2
+	lui   $t6, 0x0042
+	ori   $t6, $t6, 0xce80      # color table (client-populated)
+	addu  $t6, $t6, $t4
+	b     tncolors_store
+	lw    $t4, 0($t6)
+tncolors_vanilla:
+	lui   $t4, 0x7f66
+	ori   $t4, $t4, 0x4c33
+tncolors_store:
 	sw    $t4, 0($t2)
-	addiu $t1, $t1, 4
+	sw    $t4, 0($t5)
+	addiu $t1, $t1, 8
+	addiu $t5, $t5, 0x80
 	addiu $t3, $t3, -1
 	bne   $t3, $zero, tncolors_loop
 	addiu $t2, $t2, 0x80
+tncolors_done:
 	lui   $k0, 0x0042
 	ori   $k0, $k0, 0xcfa0
 	lw    $ra, 0($k0)
 	jr    $ra
 	nop
+
+# Extra function, not part of the per-frame routine, run through the call
+# slot: claims a0 bytes (16-aligned by the client) from the bottom of the
+# level heap and returns the claimed address. The game allocates map-lifetime
+# memory from the same pointer on its own thread, so a read-modify-write of
+# it over PINE can hand out memory the game just claimed; here the bump runs
+# between frames, where nothing else allocates.
+heap_alloc:
+	lui   $v1, 0x002f
+	ori   $v1, $v1, 0x6384      # &heap bottom
+	lw    $v0, 0($v1)
+	addiu $v0, $v0, 15
+	addiu $a1, $zero, -16
+	and   $v0, $v0, $a1         # v0 = the claim: heap bottom, aligned up
+	addu  $a1, $v0, $a0
+	jr    $ra
+	sw    $a1, 0($v1)           # bottom = claim + size

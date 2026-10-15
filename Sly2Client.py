@@ -348,10 +348,14 @@ class Sly2Context(CommonContext): # type: ignore[misc]
 
   # Game state
   is_loading: bool = False
+  # A level transition just finished; init must re-run even if the map id
+  # is unchanged, since every load rebuilds the DAG from the save records
+  load_pending: bool = False
   in_safehouse: bool = False
   in_hub: bool = False
   current_episode: Optional[Sly2Episode] = None
   current_map: Optional[int] = None
+  was_alive: Optional[bool] = None
   episode_sent: Optional[Sly2Episode] = None
   guards_despawned_episode: Optional[Sly2Episode] = None
   bottles_text: Optional[int] = None
@@ -450,6 +454,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     self.last_checked_locations = set()
     self.goal_sent = False
     self.current_map = None
+    self.load_pending = False
     self.episode_sent = None
     self.guards_despawned_episode = None
     self.active_traps.clear()
@@ -672,10 +677,19 @@ def update_connection_status(ctx: Sly2Context, status: bool) -> None:
     logger.info("Connected to Sly 2")
     ctx.connection_retry_attempts = 0
     ctx.last_connect_message = None
+  elif ctx.game_interface.pcsx2_interface.is_connected():
+    logger.info("Sly 2 is no longer loaded, waiting for it to come back...")
   else:
     logger.info(
       "Unable to connect to the PCSX2 instance, attempting to reconnect..."
     )
+
+  if not status:
+    # The game may come back in the same map (crash + save reload), which
+    # would never fire a map-change edge; force init on the next valid tick
+    ctx.current_map = None
+    ctx.load_pending = False
+    ctx.game_interface.invalidate_dag()
 
   ctx.is_connected_to_game = status
 
@@ -764,6 +778,13 @@ async def _handle_game_ready(ctx: Sly2Context) -> None:
   ctx.game_interface.clear_cache()
   ctx.game_interface.prefetch_tick_state()
 
+  # An in-emulator reset keeps the game id up while RAM reloads; stop
+  # touching memory until the game's code is back.
+  if not ctx.game_interface.game_loaded():
+    ctx.game_interface.current_game = None
+    ctx.game_interface.take_cycle_counts()
+    return
+
   ctx.game_interface.flush_patches()
   ctx.game_interface.skip_cutscene()
   # ctx.game_interface.skip_dialogue()
@@ -785,6 +806,8 @@ async def _handle_loading(ctx: Sly2Context) -> bool:
   if ctx.is_loading:
     if not ctx.game_interface.is_loading():
       ctx.is_loading = False
+      ctx.load_pending = True
+      ctx.game_interface.invalidate_dag()
       logger.debug("Level transition finished")
     await asyncio.sleep(0.1)
     return True
@@ -812,11 +835,19 @@ def _map_description(episode: Sly2Episode, map_id: int) -> str:
   return f"{episode_name(int(episode))} (map {map_id})"
 
 async def _handle_map_change(ctx: Sly2Context, ap_connected: bool) -> None:
-  current_episode = ctx.game_interface.get_current_episode()
+  # The map id holds a transient 0xffffffff while a level is torn down or
+  # built; running init then would walk (and cache) a garbage DAG
   current_map = ctx.game_interface.get_current_map()
+  if current_map == 0xffffffff:
+    if ctx.is_connected_to_server != ap_connected:
+      ctx.is_connected_to_server = ap_connected
+      ctx.load_pending = True
+    return
+  current_episode = ctx.game_interface.get_current_episode()
 
   server_edge = ctx.is_connected_to_server != ap_connected
   map_changed = (
+    ctx.load_pending or
     (ctx.current_episode, ctx.current_map) != (current_episode, current_map)
   )
   if not (map_changed or server_edge):
@@ -824,6 +855,7 @@ async def _handle_map_change(ctx: Sly2Context, ap_connected: bool) -> None:
 
   if map_changed:
     logger.debug(f"Entered {_map_description(current_episode, current_map)}")
+  ctx.load_pending = False
   ctx.current_episode = current_episode
   ctx.current_map = current_map
   ctx.is_connected_to_server = ap_connected

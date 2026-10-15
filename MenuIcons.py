@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Optional
 
 from .data.Constants import (
   GLYPH_SET_PTR, MENU_ICON_CAVE, MENU_ICON_CHAR_TABLE, MENU_ICON_CHARS,
-  MENU_ICON_CHOOSER,
+  MENU_ICON_CHOOSER, MENU_ICON_DEFAULT_THEME,
   MENU_ICON_ELEMS, MENU_ICON_FIFTH_ARENA, MENU_ICON_FIFTH_ELEMS,
   MENU_ICON_FIFTH_NODE, MENU_ICON_FOURTH_ARENA, MENU_ICON_FOURTH_ELEMS,
   MENU_ICON_FOURTH_NODE, MENU_ICON_FREE_TAG, MENU_ICON_GLYPHS,
@@ -121,6 +121,15 @@ class MenuIconInstaller:
       return
     self.armed = False
     base = self.read32(glyph_set + 0x54)
+    if base == MENU_ICON_TABLE + 0x24:
+      # The glyph set can come back still wired from a previous open (the
+      # game reuses it without reinitializing, e.g. after a same-episode map
+      # reload). The free-RAM structures are the live ones then; rebuilding
+      # from them would snapshot the table onto itself and re-append the row
+      # elements, so adopt them instead.
+      if self.vanilla_table_base:
+        self.built_for = glyph_set
+      return
     self.vanilla_table_base = base
     self.write_bytes(
       MENU_ICON_TABLE, self.read_bytes(base - 0x24, TABLE_ENTRIES * 0x40 + 0x24)
@@ -144,6 +153,13 @@ class MenuIconInstaller:
     self._new_glyph(FOURTH_GLYPH, fill, sil, [MENU_ICON_FOURTH_ARENA])
     fill, sil = MENU_ICON_PACKETS["unknown"]
     self._new_glyph(FIFTH_GLYPH, fill, sil, [MENU_ICON_FIFTH_ARENA])
+    # The appended glyphs must never point at unstaged packet bytes: theme 0
+    # applies no packets, and drawing an unstaged packet freezes the game.
+    icons = THEMES[MENU_ICON_DEFAULT_THEME]
+    for cls in ("filler", "unknown"):
+      fill, sil = MENU_ICON_PACKETS[cls]
+      self.write_bytes(fill, decode(icons[cls].fill))
+      self.write_bytes(sil, decode(icons[cls].sil))
     self.built_for = glyph_set
 
   def reset(self) -> None:
@@ -155,7 +171,11 @@ class MenuIconInstaller:
 
   def arm(self) -> None:
     """Let the cave wire the glyph set at settle. Theme and row icons are
-    already in free RAM, so nothing flashes."""
+    already in free RAM, so nothing flashes. The wire waits for an open whose
+    animation the cave observed: arming mid-open (a client connecting with
+    ThiefNet up) must not wire under a row pool built from the vanilla table,
+    which freezes the next reopen."""
+    self.write32(MENU_ICON_CAVE + 12, 0)
     self.write32(MENU_ICON_CAVE, 1)
     self.write32(MENU_ICON_CAVE + 4, self.vanilla_table_base or 0)
     self.armed = True

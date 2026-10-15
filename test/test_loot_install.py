@@ -1,5 +1,7 @@
 import struct
+from unittest.mock import patch
 
+from .. import LootInstall
 from ..data.Constants import CAVE_HOOK_ENTRY
 from ..data.LootModels import LOOT_MODELS, decode
 from ..LootInstall import (
@@ -236,7 +238,7 @@ class TestLootInstall(LootInstallTestBase):
     self.pine.poke32(clut_table + 0x1C, (1 << 29) | (0x3F10 << 5))
     self.pine.poke32(clut_table + 0x20 + 0x1C, (1 << 29) | (0x3F11 << 5))
     self.pine.poke32(slot, 0)
-    self.pine.poke32(slot + 0x18, 1)
+    self.pine.poke32(slot + 0x18, self.pine.peek32(slot + 0x18) + 1)
     self.interface.clear_cache()
     self.assertFalse(self.interface.poll_loot_textures())
     dl = self.entries(MANAGERS[0])[2][4]
@@ -263,6 +265,18 @@ class TestLootInstall(LootInstallTestBase):
     self.interface.clear_cache()
     self.assertEqual(self.interface.install_loot_models([GOLD_BAR]), [])
     self.assertEqual(self.counts(), [2] * 4)
+
+  def test_heap_claim_goes_through_the_cave(self) -> None:
+    self.interface.install_loot_models([GOLD_BAR, DIAMOND])
+    self.assertFalse(self.pine.written(self.addr["heap bottom"]))
+    self.assertGreater(self.pine.peek32(self.addr["heap bottom"]), HEAP_BOTTOM)
+
+  def test_unserviced_claim_aborts(self) -> None:
+    self.pine.serve_cave_calls = False
+    with patch.object(LootInstall, "CLAIM_TIMEOUT", 0.01):
+      self.assertEqual(self.interface.install_loot_models([GOLD_BAR]), [])
+    self.assertEqual(self.counts(), [2] * 4)
+    self.assertFalse(self.pine.written(self.addr["heap bottom"]))
 
 
 class TestLootPacking(LootInstallTestBase):

@@ -4,6 +4,7 @@ and textures of every pickpocket loot, for LootInstall."""
 
 import base64
 import zlib
+from functools import lru_cache
 from typing import NamedTuple
 
 
@@ -25,6 +26,7 @@ class LootModel(NamedTuple):
   data: str
 
 
+@lru_cache(maxsize=None)
 def decode(data: str) -> bytes:
   return zlib.decompress(base64.b85decode(data))
 
