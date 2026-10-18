@@ -1,9 +1,11 @@
 import json
+import struct
 import unittest
 from logging import getLogger
 
 from ..data.Constants import (
   ADDRESSES,
+  MENU_WORLD_RECORD,
   CAVE_BLOB,
   CAVE_HOOK_ENTRY,
   CAVE_HOOK_ORIG,
@@ -73,6 +75,7 @@ from .client_base import (
 from .fake_pine import FakePine
 
 WIRE_LOOT = json.loads(json.dumps(LOOT))
+MISSION = 0x500000
 
 
 class TestFakePine(unittest.TestCase):
@@ -1248,32 +1251,73 @@ class TestFixJobs(InterfaceTestBase):
     super().setUp()
     build_dag(self.pine, self.addr)
     set_location(self.pine, self.addr, 1, 2)
+    set_job_mission(self.pine, 4, MISSION)
 
-  def test_no_op_when_job_active(self) -> None:
-    set_location(self.pine, self.addr, 1, 2, job=4)
-    set_job_status(self.pine, 4, 2)
-    self.interface.fix_jobs()
+  def test_no_op_without_job_in_progress(self) -> None:
+    self.assertFalse(self.interface.fix_jobs())
     self.assertEqual(self.pine.writes, [])
+
+  def test_aborts_job_and_reloads_episode(self) -> None:
+    record = bytes(range(0x40))
+    self.pine.poke_bytes(self.addr["world record"], record)
+    set_job_status(self.pine, 4, 2)
+    self.assertTrue(self.interface.fix_jobs())
+    self.assertEqual(self.pine.peek32(self.addr["abort mission"]), MISSION)
+    self.assertEqual(self.pine.peek32(self.addr["reload"]), 1)
+    self.assertEqual(
+      self.pine.peek_bytes(self.addr["reload values"], 0x88),
+      record + struct.pack("<Ii", 0x189, -1) + record
+    )
     self.assertEqual(job_status(self.pine, 4), 2)
 
-  def test_repairs_status_two_job(self) -> None:
-    set_job_status(self.pine, 4, 2)
-    self.interface.fix_jobs()
-    self.assertEqual(job_status(self.pine, 4), 1)
+  def test_finds_second_node_of_tuple_job(self) -> None:
+    set_location(self.pine, self.addr, 3, 8)
+    set_job_mission(self.pine, 76, MISSION)
+    set_job_status(self.pine, 76, 2)
+    self.assertTrue(self.interface.fix_jobs())
+    self.assertEqual(self.pine.peek32(self.addr["abort mission"]), MISSION)
 
-  def test_zeros_same_mission_successors(self) -> None:
+  def test_abort_lands_before_reload_request(self) -> None:
     set_job_status(self.pine, 4, 2)
-    set_job_mission(self.pine, 4, 5)
-    for i in (5, 6):
-      set_job_mission(self.pine, i, 5)
-      set_job_status(self.pine, i, 1)
-    set_job_mission(self.pine, 7, 9)
-    set_job_status(self.pine, 7, 3)
     self.interface.fix_jobs()
-    self.assertEqual(job_status(self.pine, 4), 1)
-    self.assertEqual(job_status(self.pine, 5), 0)
-    self.assertEqual(job_status(self.pine, 6), 0)
-    self.assertEqual(job_status(self.pine, 7), 3)
+    order = [address for _, address, _ in self.pine.writes]
+    self.assertLess(
+      order.index(self.addr["abort mission"]), order.index(self.addr["reload"])
+    )
+
+
+class TestToEpisodeMenu(InterfaceTestBase):
+  def setUp(self) -> None:
+    super().setUp()
+    build_dag(self.pine, self.addr)
+    set_job_mission(self.pine, 4, MISSION)
+
+  def assert_menu_reload(self) -> None:
+    self.assertEqual(self.pine.peek32(self.addr["reload"]), 1)
+    self.assertEqual(
+      self.pine.peek_bytes(self.addr["reload values"], 0x40),
+      bytes.fromhex(MENU_WORLD_RECORD)
+    )
+
+  def test_aborts_job_in_progress(self) -> None:
+    set_location(self.pine, self.addr, 1, 2)
+    set_job_status(self.pine, 4, 2)
+    self.interface.to_episode_menu()
+    self.assert_menu_reload()
+    self.assertEqual(self.pine.peek32(self.addr["abort mission"]), MISSION)
+
+  def test_no_abort_without_job_in_progress(self) -> None:
+    set_location(self.pine, self.addr, 1, 2)
+    self.interface.to_episode_menu()
+    self.assert_menu_reload()
+    self.assertEqual(self.pine.peek32(self.addr["abort mission"]), 0)
+
+  def test_title_screen_skips_dag(self) -> None:
+    set_location(self.pine, self.addr, 0, 0)
+    set_job_status(self.pine, 4, 2)
+    self.interface.to_episode_menu()
+    self.assert_menu_reload()
+    self.assertEqual(self.pine.peek32(self.addr["abort mission"]), 0)
 
 
 class TestStaleTriggers(InterfaceTestBase):

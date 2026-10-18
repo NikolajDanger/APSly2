@@ -92,7 +92,9 @@ from .client_base import (
   set_active_character,
   infobox_pointer,
   set_infobox_pointers,
+  set_job_mission,
   set_job_status,
+  set_location,
   set_parents,
   set_string_table,
   string_buffer,
@@ -1501,23 +1503,19 @@ class TestFixJobs(ClientTestBase):
   async def asyncSetUp(self) -> None:
     await super().asyncSetUp()
     build_dag(self.pine, self.addr)
-
-  async def test_fixes_when_in_hub_and_no_job(self) -> None:
     self.enter(1, 2)
+    set_job_mission(self.pine, 4, 0x500000)
     set_job_status(self.pine, 4, 2)
-    fix_jobs(self.ctx)
-    self.assertEqual(job_status(self.pine, 4), 1)
 
-  async def test_skips_outside_hub(self) -> None:
-    self.enter(1, 3)
-    set_job_status(self.pine, 4, 2)
-    fix_jobs(self.ctx)
-    self.assertEqual(job_status(self.pine, 4), 2)
+  async def test_repairs_on_episode_entry(self) -> None:
+    self.ctx.entered_episode = True
+    self.assertTrue(fix_jobs(self.ctx))
+    self.assertEqual(self.pine.peek32(self.addr["abort mission"]), 0x500000)
+    self.assertEqual(self.pine.peek32(self.addr["reload"]), 1)
 
-  async def test_skips_when_job_active(self) -> None:
-    self.enter(1, 2, job=4)
-    set_job_status(self.pine, 4, 2)
-    fix_jobs(self.ctx)
+  async def test_leaves_job_spanning_maps(self) -> None:
+    self.assertFalse(fix_jobs(self.ctx))
+    self.assertEqual(self.pine.writes, [])
     self.assertEqual(job_status(self.pine, 4), 2)
 
 
@@ -1619,15 +1617,14 @@ class TestInitPerMap(ClientTestBase):
     await init(self.ctx, True)
     self.assertEqual(self.pine.peek32(self.addr["reload"]), 1)
 
-  async def test_fixes_abandoned_jobs_in_hub(self) -> None:
+  async def test_stuck_job_reloads_before_map_setup(self) -> None:
     self.enter(1, 2)
     set_job_status(self.pine, 4, 2)
+    self.ctx.entered_episode = True
+    self.ctx.prev_coins = 7
     await init(self.ctx, True)
-    self.assertEqual(job_status(self.pine, 4), 1)
-    set_job_status(self.pine, 4, 2)
-    self.enter(1, 3)
-    await init(self.ctx, True)
-    self.assertEqual(job_status(self.pine, 4), 2)
+    self.assertEqual(self.pine.peek32(self.addr["reload"]), 1)
+    self.assertEqual(self.ctx.prev_coins, 7)
 
   async def test_episode_set_once_per_episode(self) -> None:
     self.enter(1, 2)
@@ -1753,21 +1750,44 @@ class TestTick(TickHarness):
     await self.tick()
     self.assertEqual(self.interface._get_job_address(4), dag_node(50))
 
-  async def test_same_map_reload_reasserts_jobs(self) -> None:
+  async def test_same_map_reload_keeps_job(self) -> None:
+    job = self.addr["jobs"][0][0][0]
     self.place(1, 2)
     await self.settle()
+    set_job_status(self.pine, job, 2)
     self.pine.poke32(self.addr["loading"], 2)
     await self.tick()
-    # An in-game save load rebuilds the DAG from the save records without a
-    # map change; a job saved mid-mission comes back as in progress, which
-    # only init's fix_jobs rescues
-    set_job_status(self.pine, self.addr["jobs"][0][0][0], 2)
     self.pine.poke32(self.addr["loading"], 0)
     await self.tick()
     await self.tick()
     self.assertEqual(self.ctx.current_map, 2)
     self.assertFalse(self.ctx.load_pending)
-    self.assertEqual(job_status(self.pine, self.addr["jobs"][0][0][0]), 1)
+    self.assertEqual(job_status(self.pine, job), 2)
+    self.assertEqual(self.pine.peek32(self.addr["reload"]), 0)
+
+  async def test_hub_return_keeps_job_spanning_maps(self) -> None:
+    job = self.addr["jobs"][0][0][0]
+    self.place(1, 2)
+    await self.settle()
+    set_job_status(self.pine, job, 2)
+    self.pine.poke32(self.addr["map id"], 3)
+    await self.tick()
+    self.pine.poke32(self.addr["map id"], 2)
+    await self.tick()
+    self.assertEqual(job_status(self.pine, job), 2)
+    self.assertEqual(self.pine.peek32(self.addr["reload"]), 0)
+
+  async def test_episode_entry_repairs_stuck_job(self) -> None:
+    job = self.addr["jobs"][0][0][0]
+    self.place(0, 1)
+    await self.settle()
+    set_job_mission(self.pine, job, 0x500000)
+    set_job_status(self.pine, job, 2)
+    set_location(self.pine, self.addr, 1, 2)
+    await self.tick()
+    self.assertTrue(self.ctx.entered_episode)
+    self.assertEqual(self.pine.peek32(self.addr["abort mission"]), 0x500000)
+    self.assertEqual(self.pine.peek32(self.addr["reload"]), 1)
 
   async def test_dag_relinked_on_same_map_reload(self) -> None:
     self.place(1, 2)

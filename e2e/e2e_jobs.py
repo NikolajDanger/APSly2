@@ -4,11 +4,13 @@ Sabotage (node 4 -> tasks 5, 6, 7 -> job end 8) gating node 9, which gates
 Breaking and Entering (node 10)."""
 
 import asyncio
+import time
+from typing import Callable
 
 from ..data.Locations import location_dict
 from ..data.Names import EpisodeName, job_location
 from ..Sly2Client import _handle_game_ready
-from .harness import E2ETestBase
+from .harness import LOADING_ACTIVE, POLL_INTERVAL, E2ETestBase
 from .tick_base import TickTestBase
 
 FIRST_JOB = 4
@@ -17,6 +19,16 @@ FIRST_JOB_CLOSURE = range(4, 10)
 SECOND_JOB = 10
 SECOND_CHAPTER_JOB = 36
 LOCKED, AVAILABLE, IN_PROGRESS, DONE = range(4)
+SETTLED = 3
+
+
+def wait_for(condition: Callable[[], bool], timeout: float) -> bool:
+  deadline = time.monotonic() + timeout
+  while time.monotonic() < deadline:
+    if condition():
+      return True
+    time.sleep(POLL_INTERVAL)
+  return False
 
 
 class TestJobs(E2ETestBase):
@@ -59,20 +71,59 @@ class TestJobs(E2ETestBase):
     self.interface.activate_job(FIRST_JOB)
     self.assertEqual(self.status(FIRST_JOB), AVAILABLE)
 
-  def test_fix_jobs_resets_abandoned_job(self) -> None:
-    self.interface._write_job_status(FIRST_JOB, IN_PROGRESS)
-    self.interface._write_job_status(FIRST_JOB_TASKS[0], IN_PROGRESS)
-    self.interface.fix_jobs()
+  def test_fix_jobs_leaves_episode_without_job(self) -> None:
+    self.assertFalse(self.interface.fix_jobs())
+    self.assertEqual(self.pine.read_int32(self.addr["reload"]), 0)
+
+
+class TestJobAbort(E2ETestBase):
+  """Rolling back Satellite Sabotage, started in-game"""
+  state = "ep1_job"
+  episode = 1
+  map_id = 2
+
+  def tearDown(self) -> None:
+    self.reload()
+
+  def transitioned(self, episode: int, map_id: int) -> bool:
+    """Waits for a reload to start and settle on episode/map_id"""
+    def loading() -> int:
+      return self.pine.read_int32(self.addr["loading"])
+
+    def settled() -> bool:
+      return (
+        loading() == SETTLED and
+        self.pine.read_int32(self.addr["world id"]) == episode and
+        self.pine.read_int32(self.addr["map id"]) == map_id
+      )
+
+    return (
+      wait_for(lambda: loading() == LOADING_ACTIVE, 10.0) and
+      wait_for(settled, 30.0)
+    )
+
+  def status(self, node: int) -> int:
+    self.interface.clear_cache()
+    self.interface.invalidate_dag()
+    return self.interface._read_job_status(node)
+
+  def test_fix_jobs_rolls_back_through_reload(self) -> None:
+    self.assertEqual(self.status(FIRST_JOB), IN_PROGRESS)
+    self.assertTrue(self.interface.fix_jobs())
+    self.assertTrue(self.transitioned(self.episode, self.map_id))
+    self.assertEqual(self.pine.read_int32(self.addr["abort mission"]), 0)
     self.assertEqual(self.status(FIRST_JOB), AVAILABLE)
     self.assertEqual(
       [self.status(t) for t in FIRST_JOB_TASKS], [LOCKED] * 3
     )
 
-  def test_fix_jobs_leaves_running_job(self) -> None:
-    self.interface._write_job_status(FIRST_JOB, IN_PROGRESS)
-    self.interface.set_current_job(0x100)
-    self.interface.fix_jobs()
-    self.assertEqual(self.status(FIRST_JOB), IN_PROGRESS)
+  def test_menu_reload_consumes_abort(self) -> None:
+    self.interface.to_episode_menu()
+    self.assertNotEqual(
+      self.pine.read_int32(self.addr["abort mission"]), 0
+    )
+    self.assertTrue(self.transitioned(0, 1))
+    self.assertEqual(self.pine.read_int32(self.addr["abort mission"]), 0)
 
 
 class TestJobTick(TickTestBase):

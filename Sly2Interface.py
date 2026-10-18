@@ -16,7 +16,7 @@ from .pcsx2_interface.pine import (
 from .LootInstall import LootInstaller
 from .MenuIcons import MenuIconInstaller
 from .data.Constants import (
-  MENU_RETURN_DATA,
+  MENU_WORLD_RECORD,
   ADDRESSES,
   EPISODES,
   TASKS,
@@ -671,10 +671,11 @@ class Sly2Interface(GameInterface):
       for p in parents
     ])
 
-  def _reload(self, reload_data: bytes) -> None:
+  def _reload(self, world_record: bytes) -> None:
+    # 0x189/-1 is the warp pair every vanilla transition request passes
     self._write_bytes(
       self.addresses["reload values"],
-      reload_data
+      world_record + struct.pack("<Ii", 0x189, -1) + world_record
     )
     self._write32(self.addresses["reload"], 1)
 
@@ -819,34 +820,33 @@ class Sly2Interface(GameInterface):
   # Job/Task Management
   # =====================================================
 
-  def fix_jobs(self) -> None:
-    current_job = self.get_current_job()
-    if current_job != 0xffffffff:
-      return
+  def _job_in_progress(self) -> Optional[int]:
+    episode = self.get_current_episode()
+    if episode == Sly2Episode.Title_Screen:
+      return None
+    for chapter in self.addresses["jobs"][episode-1]:
+      for job in chapter:
+        for node in job if isinstance(job, tuple) else (job,):
+          if self._read_job_status(node) == 2:
+            return node
+    return None
 
-    all_jobs = [
-      job
-      for chapter in self.addresses["jobs"][self.get_current_episode()-1]
-      for job in chapter
-    ]
+  def _abort_job(self) -> Optional[int]:
+    """Makes the next transition roll back the job in progress"""
+    job = self._job_in_progress()
+    if job is not None:
+      mission = self._read32(self._get_job_address(job)+0x7c)
+      self._write32(self.addresses["abort mission"], mission)
+    return job
 
-    for job in all_jobs:
-      if isinstance(job, tuple):
-        job = job[0]
-
-      if self._read_job_status(job) == 2:
-        self.logger.info(f"Fixing job {job}")
-        self._write_job_status(job,1)
-        address = self._get_job_address(job)
-        mission = self._read32(address+0x7c)
-
-        for i in range(1,50):
-          address = self._read32(address+0x20)
-          task_mission = self._read32(address+0x7c)
-          if task_mission != mission:
-            break
-
-          self._write_job_status(job+i,0)
+  def fix_jobs(self) -> bool:
+    """Reloads the episode to roll back a job left in progress in the save"""
+    job = self._abort_job()
+    if job is None:
+      return False
+    self.logger.info(f"Fixing job {job}")
+    self._reload(self._read_bytes(self.addresses["world record"], 0x40))
+    return True
 
   def disarm_stale_triggers(self) -> None:
     """Marks leftover job checkpoints done once their job is. Touching one
@@ -1726,7 +1726,8 @@ class Sly2Interface(GameInterface):
       self.set_current_job(0xffffffff)
       self.set_items_received(0)
 
-    self._reload(bytes.fromhex(MENU_RETURN_DATA))
+    self._abort_job()
+    self._reload(bytes.fromhex(MENU_WORLD_RECORD))
 
   def unlock_episodes(self) -> None:
     self._write8(self.addresses["episode unlocks"], 8)

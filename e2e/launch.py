@@ -16,7 +16,7 @@ from .harness import (
 STATES = {
   "ep1_hub": (1, 2), "ep1_safehouse": (1, 2), "ep1_thiefnet": (1, 2),
   "ep8_hub": (8, 38), "ep8_pack": (8, 38), "title": (0, 0),
-  "episode_menu": (0, 1)
+  "episode_menu": (0, 1), "ep1_job": (1, 2)
 }
 
 

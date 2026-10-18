@@ -355,6 +355,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
   in_hub: bool = False
   current_episode: Optional[Sly2Episode] = None
   current_map: Optional[int] = None
+  entered_episode: bool = False
   was_alive: Optional[bool] = None
   episode_sent: Optional[Sly2Episode] = None
   guards_despawned_episode: Optional[Sly2Episode] = None
@@ -858,6 +859,11 @@ async def _handle_map_change(ctx: Sly2Context, ap_connected: bool) -> None:
   if map_changed:
     logger.debug(f"Entered {_map_description(current_episode, current_map)}")
   ctx.load_pending = False
+  ctx.entered_episode = (
+    map_changed and
+    ctx.current_episode == Sly2Episode.Title_Screen and
+    current_episode != Sly2Episode.Title_Screen
+  )
   ctx.current_episode = current_episode
   ctx.current_map = current_map
   ctx.is_connected_to_server = ap_connected

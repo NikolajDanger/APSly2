@@ -696,6 +696,8 @@ ADDRESSES = {
     "thiefnet control": 0x3DA160,
     "reload": 0x3E1080,
     "reload values": 0x3E1088,
+    "world record": 0x3E10D0,
+    "abort mission": 0x3E0FA8,
     "camera focus": 0x2DE258,
     "fade type": 0x443798,
     "items received": 0x3D57FC,
@@ -1526,25 +1528,7 @@ COIN_POPS_MAX = 5
 ALARM_SOUND_ID = 0x158
 ALARM_INTERVAL = 60
 
-MENU_RETURN_DATA = (
-  "8F1B8DAE"+
-  "A19F156B"+
-  "C9553493"+
-  "EA141CB0"+
-  "9DFADC0B"+
-  "D9679121"+
-  "2CAAB3DF"+
-  "F9A50AD0"+
-  "82D34135"+
-  "ECBF73F2"+
-  "38D17CBA"+
-  "C1067796"+
-  "BD977E22"+
-  "AF5088AE"+
-  "F0553493"+
-  "9E5F086B"+
-  "89010000"+
-  "FFFFFFFF"+
+MENU_WORLD_RECORD = (
   "8F1B8DAE"+
   "A19F156B"+
   "C9553493"+

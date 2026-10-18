@@ -336,6 +336,9 @@ async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
     if ctx.game_interface.stuck_in_cairo():
       ctx.game_interface.to_episode_menu()
   elif ctx.current_episode:
+    if fix_jobs(ctx):
+      return
+
     # In case the client stopped mid-trap (e.g. a crash), revert any
     # lingering trap edits to their defaults.
     reset_traps(ctx)
@@ -364,7 +367,6 @@ async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
       ctx.game_interface.despawn_guards()
       ctx.guards_despawned_episode = ctx.current_episode
 
-    fix_jobs(ctx)
     ctx.game_interface.disarm_stale_triggers()
     if not ctx.game_interface.in_safehouse():
       set_powerups(ctx)
@@ -746,12 +748,9 @@ def set_powerups(ctx: 'Sly2Context') -> None:
   """Loads the correct powerups into the game"""
   ctx.game_interface.load_powerups(ctx.powerups)
 
-def fix_jobs(ctx: 'Sly2Context') -> None:
-  """Fixes jobs in case they are broken"""
-  current_job = ctx.game_interface.get_current_job()
-  in_hub = ctx.game_interface.in_hub()
-  if in_hub and current_job == 0xffffffff:
-    ctx.game_interface.fix_jobs()
+def fix_jobs(ctx: 'Sly2Context') -> bool:
+  """Repairs a job a forced reload left in progress in the save"""
+  return ctx.entered_episode and ctx.game_interface.fix_jobs()
 
 async def handle_notifications(ctx: 'Sly2Context') -> None:
   """Displays notifications in an infobox"""
