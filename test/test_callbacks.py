@@ -983,6 +983,12 @@ class TestTraps(ClientTestBase):
       handle_traps(self.ctx)
     self.assertEqual(self.pine.peek_float(clock), 1.5)
 
+  async def test_custom_duration(self) -> None:
+    self.slot_data["trap_duration"][Trap.SLOW_MO.key] = 3
+    with patch.object(Callbacks, "time", return_value=1000.0):
+      activate_trap(self.ctx, Trap.SLOW_MO)
+    self.assertEqual(self.ctx.active_traps, {Trap.SLOW_MO: 1003.0})
+
   async def test_noise(self) -> None:
     with (
       patch.object(self.interface, "alert_guards") as alert,

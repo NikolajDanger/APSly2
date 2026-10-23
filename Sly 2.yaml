@@ -257,16 +257,24 @@ requires:
   #
   # - Sly 1 Trap: sets the current character's health to 1.
   # - Energy Drain Trap: empties the gadget meter.
-  # - Slow-mo Trap: slows the game down for a few seconds.
-  # - Sugar Rush Trap: speeds the game up for a few seconds.
-  # - Ice Trap: makes the ground slippery for a few seconds.
-  # - Noise Trap: sounds an alarm and alerts nearby guards for a few seconds.
+  # - Slow-mo Trap: slows the game down.
+  # - Sugar Rush Trap: speeds the game up.
+  # - Ice Trap: makes the ground slippery.
+  # - Noise Trap: sounds an alarm and alerts nearby guards.
   trap_weights:
     sly_1_trap: 10
     energy_drain_trap: 10
     slow_mo_trap: 10
     sugar_rush_trap: 10
     ice_trap: 10
+    noise_trap: 10
+
+  # How long each timed trap lasts, in seconds. Traps with an instant effect
+  # (Sly 1 Trap, Energy Drain Trap) have no duration.
+  trap_duration:
+    slow_mo_trap: 15
+    sugar_rush_trap: 15
+    ice_trap: 20
     noise_trap: 10
 
   ###############

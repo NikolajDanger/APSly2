@@ -16,7 +16,7 @@ class Sly2Item(Item):
   game: str = "Sly 2: Band of Thieves"
 
 class Trap(Enum):
-  """Trap items. `duration` is in seconds; None means an instant effect."""
+  """Trap items. `duration` is the default in seconds; None is instant."""
   SLY_1        = ("Sly 1 Trap",        None)
   ENERGY_DRAIN = ("Energy Drain Trap", None)
   SLOW_MO      = ("Slow-mo Trap",      15)

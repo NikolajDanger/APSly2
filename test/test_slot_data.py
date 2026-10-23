@@ -47,6 +47,7 @@ PASSTHROUGH_OPTIONS = [
   "scout_thiefnet",
   "trap_chance",
   "trap_weights",
+  "trap_duration",
   "ring_link",
 ]
 

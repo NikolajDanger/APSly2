@@ -543,6 +543,7 @@ class Sly2World(World):
           "scout_thiefnet",
           "trap_chance",
           "trap_weights",
+          "trap_duration",
           "ring_link"
         ]:
           getattr(self.options, name).value = slot_data[name]
@@ -644,7 +645,8 @@ class Sly2World(World):
       "bottle_item_bundle_size",
       "scout_thiefnet",
       "trap_chance",
-      "trap_weights"
+      "trap_weights",
+      "trap_duration"
       # "skip_intro"
     )
 

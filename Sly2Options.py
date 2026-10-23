@@ -449,16 +449,29 @@ class TrapWeights(OptionCounter):
 
   - Sly 1 Trap: sets the current character's health to 1.
   - Energy Drain Trap: empties the gadget meter.
-  - Slow-mo Trap: slows the game down for a few seconds.
-  - Sugar Rush Trap: speeds the game up for a few seconds.
-  - Ice Trap: makes the ground slippery for a few seconds.
-  - Noise Trap: sounds an alarm and alerts nearby guards for a few seconds.
+  - Slow-mo Trap: slows the game down.
+  - Sugar Rush Trap: speeds the game up.
+  - Ice Trap: makes the ground slippery.
+  - Noise Trap: sounds an alarm and alerts nearby guards.
   """
 
   display_name = "Trap Weights"
   min = 0
   valid_keys = frozenset(trap.key for trap in Trap)
   default = {trap.key: 10 for trap in Trap}
+
+
+class TrapDuration(OptionCounter):
+  """
+  How long each timed trap lasts, in seconds. Traps with an instant effect
+  (Sly 1 Trap, Energy Drain Trap) have no duration.
+  """
+
+  display_name = "Trap Duration"
+  min = 1
+  max = 60
+  valid_keys = frozenset(trap.key for trap in Trap if trap.duration)
+  default = {trap.key: trap.duration for trap in Trap if trap.duration}
 
 
 class RingLink(Toggle):
@@ -513,6 +526,7 @@ class Sly2Options(PerGameCommonOptions):
   # skip_intro: SkipIntro
   trap_chance: TrapChance
   trap_weights: TrapWeights
+  trap_duration: TrapDuration
 
 sly2_option_groups = [
   OptionGroup("Goal",[
@@ -533,7 +547,8 @@ sly2_option_groups = [
     CoinsMaximum,
     BottleItemBundleSize,
     TrapChance,
-    TrapWeights
+    TrapWeights,
+    TrapDuration
   ]),
   OptionGroup("Locations",[
     ThiefNetCostMinimum,

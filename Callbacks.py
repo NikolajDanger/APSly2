@@ -931,10 +931,13 @@ def activate_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
     elif trap is Items.Trap.ENERGY_DRAIN:
       ctx.game_interface.set_current_gadget_power(0)
     return
+  if ctx.slot_data is None:
+    return
 
   # Timed traps: (re)start the timer. The per-tick effect is applied in
   # handle_traps, since map reloads reset the underlying memory.
-  ctx.active_traps[trap] = time() + trap.duration
+  duration = ctx.slot_data["trap_duration"][trap.key]
+  ctx.active_traps[trap] = time() + duration
   if trap is Items.Trap.NOISE:
     ctx.game_interface.alert_guards()
     ctx.game_interface.play_sound(ALARM_SOUND_ID, ALARM_INTERVAL)
