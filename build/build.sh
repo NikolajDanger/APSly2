@@ -150,6 +150,8 @@ function cp_data() {
     local root="$1" destdir="$2"
     echo "=> Copying over the extra data"
     cp --verbose "${root}/Sly 2.yaml" ${destdir}
+    python "${CWD}/essentials_yaml.py" "${root}/Sly 2.yaml" \
+        "${destdir}/sly2_essentials.yaml"
 }
 
 ##
