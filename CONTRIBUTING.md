@@ -33,7 +33,7 @@ With `SLY2_E2E_ISO` set the suite starts `pcsx2-qt` itself (`SLY2_E2E_PCSX2` pic
 The suite loads the savestates checked in under `e2e/states/` through PCSX2 savestate slot 99 and never touches your own slots. `e2e/states/README.md` lists what each state contains and how to recapture one with `python -m worlds.Sly2.e2e.capture_state <name>`.
 
 ## Building
-`build/build.sh` lints, type checks, runs the test suite, and zips the repo into `build/target/sly2_apworld-<date_time>/` (the `.apworld` plus `Sly 2.yaml`). It's a bash script, so on Windows use Git Bash or WSL. It needs `zip`, `rsync`, `pip`, `ruff` and `pyright` on the path, and `AP_ROOT` pointing at your Archipelago checkout (the script checks that `$AP_ROOT/worlds/Sly2` really resolves to the repo being built):
+`build/build.sh` lints, type checks, runs the test suite, and zips the repo into `build/target/sly2_apworld-<date_time>/` (the `.apworld` plus `sly2.yaml`). It's a bash script, so on Windows use Git Bash or WSL. It needs `zip`, `rsync`, `pip`, `ruff` and `pyright` on the path, and `AP_ROOT` pointing at your Archipelago checkout (the script checks that `$AP_ROOT/worlds/Sly2` really resolves to the repo being built):
 
 ```sh
 AP_ROOT=/path/to/Archipelago ./build/build.sh   # build a bundle

@@ -3,7 +3,7 @@
 
 The version is written explicitly in three places that must stay in sync,
 or the client refuses to connect (see the version gate in Sly2Client.py):
-  - Sly 2.yaml          'Sly 2: Band of Thieves': X.Y.Z
+  - sly2.yaml           'Sly 2: Band of Thieves': X.Y.Z
   - archipelago.json    "world_version": "X.Y.Z"
   - Sly2Client.py       self.version = [X, Y, Z]
 
@@ -39,7 +39,7 @@ def main() -> None:
   major, minor, patch = match.groups()
 
   replace(
-    ROOT / "Sly 2.yaml",
+    ROOT / "sly2.yaml",
     r"('Sly 2: Band of Thieves': )\d+\.\d+\.\d+",
     rf"\g<1>{version}",
   )

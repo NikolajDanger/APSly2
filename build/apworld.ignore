@@ -5,7 +5,7 @@ build
 set_version
 LICENSE
 requirements.txt
-Sly 2.yaml
+sly2.yaml
 Sly_Addresses.xlsx
 savefile_data.txt
 ruff.toml

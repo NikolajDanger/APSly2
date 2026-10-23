@@ -7,7 +7,7 @@ from Options import Range
 from ..Sly2Options import Sly2Options
 
 YAML_PATH = os.path.join(
-  os.path.dirname(os.path.dirname(__file__)), "Sly 2.yaml"
+  os.path.dirname(os.path.dirname(__file__)), "sly2.yaml"
 )
 
 
