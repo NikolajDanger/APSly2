@@ -1724,7 +1724,6 @@ class Sly2Interface(GameInterface):
       self.get_current_job() == 1583
     ):
       self.set_current_job(0xffffffff)
-      self.set_items_received(0)
 
     self._abort_job()
     self._reload(bytes.fromhex(MENU_WORLD_RECORD))

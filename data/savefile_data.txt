@@ -4473,3 +4473,6 @@
 3D9AF0 - 00 - 989/194 - t8_turret_shoot_clockwerk / state
 3D9AF4 - 04 - 989/195 - t8_turret_shoot_clockwerk / from_memcard
 # Unused space [0x3D9AF8, 0x3D9E5B], verified to persist through a save and reload
+# and to be zeroed by New Game and by Save & Quit. Client data in it:
+3D9AF8 - client - ThiefNet prefs (byte 0 = icon theme, byte 1 = text color)
+3D9AFC - client - received items count

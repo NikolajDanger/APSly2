@@ -866,6 +866,15 @@ class TestCoins(InterfaceTestBase):
     self.interface.set_items_received(7)
     self.assertEqual(self.interface.read_items_received(), 7)
 
+  def test_items_received_beside_thiefnet_prefs(self) -> None:
+    self.interface.set_items_received(0xFFFFFFFF)
+    self.interface.save_thiefnet_theme(2)
+    self.interface.save_thiefnet_text(True)
+    self.assertEqual(self.interface.read_items_received(), 0xFFFFFFFF)
+    self.interface.set_items_received(1)
+    self.assertEqual(self.interface.read_thiefnet_prefs(), (2, True))
+    self.assertEqual(self.interface.read_items_received(), 1)
+
 
 class TestBindings(InterfaceTestBase):
   def test_get_signed(self) -> None:
