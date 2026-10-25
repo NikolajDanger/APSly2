@@ -485,11 +485,18 @@ async def set_thiefnet(ctx: 'Sly2Context') -> None:
 
 def load_thiefnet_prefs(ctx: 'Sly2Context') -> None:
   """Once per session, take the icon theme and text-color toggle from the
-  save file when the player has set them there, overriding the session
-  defaults before the shop is drawn."""
+  yaml, overridden by the save file when the player has set them there,
+  before the shop is drawn."""
   if ctx.thiefnet_prefs_loaded:
     return
   ctx.thiefnet_prefs_loaded = True
+  if ctx.slot_data is not None:
+    ctx.thiefnet_theme = ctx.slot_data.get(
+      "thiefnet_icon_theme", ctx.thiefnet_theme
+    )
+    ctx.thiefnet_text_color = bool(ctx.slot_data.get(
+      "thiefnet_text_color", ctx.thiefnet_text_color
+    ))
   theme, text = ctx.game_interface.read_thiefnet_prefs()
   if theme is not None and theme in MENU_ICON_THEMES:
     ctx.thiefnet_theme = theme

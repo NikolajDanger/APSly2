@@ -2244,6 +2244,35 @@ class TestLoadThiefnetPrefs(ClientTestBase):
     self.assertEqual(self.ctx.thiefnet_theme, 0)
     self.assertFalse(self.ctx.thiefnet_text_color)
 
+  def test_unset_uses_slot_data(self) -> None:
+    self.pine.poke32(self.addr["thiefnet prefs"], 0)
+    self.interface.clear_cache()
+    self.slot_data["thiefnet_icon_theme"] = 1
+    self.slot_data["thiefnet_text_color"] = False
+    load_thiefnet_prefs(self.ctx)
+    self.assertEqual(self.ctx.thiefnet_theme, 1)
+    self.assertFalse(self.ctx.thiefnet_text_color)
+
+  def test_saved_overrides_slot_data(self) -> None:
+    self.interface.save_thiefnet_theme(3)
+    self.interface.save_thiefnet_text(True)
+    self.interface.clear_cache()
+    self.slot_data["thiefnet_icon_theme"] = 1
+    self.slot_data["thiefnet_text_color"] = False
+    load_thiefnet_prefs(self.ctx)
+    self.assertEqual(self.ctx.thiefnet_theme, 3)
+    self.assertTrue(self.ctx.thiefnet_text_color)
+
+  def test_partial_save_overrides_one(self) -> None:
+    self.pine.poke32(self.addr["thiefnet prefs"], 0)
+    self.interface.save_thiefnet_text(True)
+    self.interface.clear_cache()
+    self.slot_data["thiefnet_icon_theme"] = 0
+    self.slot_data["thiefnet_text_color"] = False
+    load_thiefnet_prefs(self.ctx)
+    self.assertEqual(self.ctx.thiefnet_theme, 0)
+    self.assertTrue(self.ctx.thiefnet_text_color)
+
   def test_loads_only_once(self) -> None:
     self.interface.save_thiefnet_theme(3)
     self.interface.clear_cache()

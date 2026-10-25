@@ -470,6 +470,31 @@ requires:
     random-low: 0
     random-high: 0
 
+  ##############
+  ## Cosmetic ##
+  ##############
+
+  # The icons shown next to each ThiefNet item. Can be changed in game with the
+  # /thiefnet_theme command.
+  #
+  # - Vanilla: The base game's character portraits.
+  # - Plain Logo: The Archipelago logo on every item.
+  # - Class Colors: The Archipelago logo, with an arrow badge on progression
+  #   items, red for traps and green for filler.
+  # - Alternative Class Colors: The Archipelago logo in one solid color per
+  #   item class.
+  thiefnet_icon_theme:
+    vanilla: 0
+    plain_logo: 0
+    class_colors: 100
+    alternative_class_colors: 0
+
+  # Whether each ThiefNet item's text is colored by item class. Can be toggled
+  # in game with the /thiefnet_text command.
+  thiefnet_text_color:
+    'false': 0
+    'true': 100
+
   #############################
   ## Item & Location Options ##
   #############################

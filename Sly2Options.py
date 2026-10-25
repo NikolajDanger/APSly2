@@ -484,6 +484,36 @@ class RingLink(Toggle):
   display_name = "Ring Link"
 
 
+class ThiefNetIconTheme(Choice):
+  """
+  The icons shown next to each ThiefNet item. Can be changed in game with the
+  /thiefnet_theme command.
+
+  - Vanilla: The base game's character portraits.
+  - Plain Logo: The Archipelago logo on every item.
+  - Class Colors: The Archipelago logo, with an arrow badge on progression
+    items, red for traps and green for filler.
+  - Alternative Class Colors: The Archipelago logo in one solid color per
+    item class.
+  """
+
+  display_name = "ThiefNet Icon Theme"
+  option_vanilla = 0
+  option_plain_logo = 1
+  option_class_colors = 2
+  option_alternative_class_colors = 3
+  default = 2
+
+
+class ThiefNetTextColor(DefaultOnToggle):
+  """
+  Whether each ThiefNet item's text is colored by item class. Can be toggled
+  in game with the /thiefnet_text command.
+  """
+
+  display_name = "ThiefNet Text Color"
+
+
 @dataclass
 class Sly2Options(PerGameCommonOptions):
   start_inventory_from_pool: StartInventoryPool
@@ -527,6 +557,8 @@ class Sly2Options(PerGameCommonOptions):
   trap_chance: TrapChance
   trap_weights: TrapWeights
   trap_duration: TrapDuration
+  thiefnet_icon_theme: ThiefNetIconTheme
+  thiefnet_text_color: ThiefNetTextColor
 
 sly2_option_groups = [
   OptionGroup("Goal",[
@@ -574,5 +606,9 @@ sly2_option_groups = [
     TreasureValues,
     TreasureValueMinimum,
     TreasureValueMaximum
+  ]),
+  OptionGroup("Cosmetic",[
+    ThiefNetIconTheme,
+    ThiefNetTextColor
   ])
 ]

@@ -544,7 +544,9 @@ class Sly2World(World):
           "trap_chance",
           "trap_weights",
           "trap_duration",
-          "ring_link"
+          "ring_link",
+          "thiefnet_icon_theme",
+          "thiefnet_text_color"
         ]:
           getattr(self.options, name).value = slot_data[name]
         self.tracker_world = self._build_tracker_world()
@@ -646,7 +648,9 @@ class Sly2World(World):
       "scout_thiefnet",
       "trap_chance",
       "trap_weights",
-      "trap_duration"
+      "trap_duration",
+      "thiefnet_icon_theme",
+      "thiefnet_text_color"
       # "skip_intro"
     )
 

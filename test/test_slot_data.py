@@ -49,6 +49,8 @@ PASSTHROUGH_OPTIONS = [
   "trap_weights",
   "trap_duration",
   "ring_link",
+  "thiefnet_icon_theme",
+  "thiefnet_text_color",
 ]
 
 GENERATED_KEYS = [
