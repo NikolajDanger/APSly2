@@ -337,10 +337,17 @@ requires:
     'false': 0
     'true': 100
 
-  # Whether to scout/hint ThiefNet checks. They will still be displayed in game.
+  # How much ThiefNet shows about the items it sells.
+  #
+  # - Show and Scout: ThiefNet shows each item, and they are all hinted once
+  #   ThiefNet is first opened.
+  # - Show Only: ThiefNet shows each item, without hinting them.
+  # - Hide: ThiefNet only shows whose item each one is. An item is revealed
+  #   when it is hinted or bought.
   scout_thiefnet:
-    'false': 0
-    'true': 100
+    show_only: 0
+    show_and_scout: 100
+    hide: 0
 
   ####################
   ## Pick-pocketing ##

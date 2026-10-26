@@ -374,6 +374,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
   all_bottles: Dict[Sly2Episode,int]
   thiefnet_items: Optional[list[tuple[str, str]]] = None
   thiefnet_classes: Optional[list[str]] = None
+  thiefnet_hidden: frozenset[int] = frozenset()
   thiefnet_theme: int = MENU_ICON_DEFAULT_THEME  # ThiefNet icon theme (0-3)
   thiefnet_text_color: bool = True
   thiefnet_prefs_loaded: bool = False
@@ -450,6 +451,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     self.thiefnet_purchases = PowerUps()
     self.thiefnet_prefs_loaded = False
     self.thiefnet_scouted = False
+    self.thiefnet_hidden = frozenset()
     self.notified_items = 0
     self.clockwerk_parts_count = 0
     self.locations_checked = set()

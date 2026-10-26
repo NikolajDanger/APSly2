@@ -37,7 +37,7 @@ from ..data.Names import (
 from ..data.Locations import location_dict, tasksanity_list
 from ..data.Locations import from_id as location_from_id
 from ..Sly2Interface import PowerUps, Sly2Episode
-from ..Sly2Options import BottleItemBundleSize
+from ..Sly2Options import BottleItemBundleSize, ScoutThiefnet
 
 GAME_ID = "SCUS-97316"
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -261,3 +261,16 @@ class TestPowerUps(unittest.TestCase):
     names = list(POWERUP_TEXT.keys()) + OTHER_POWERUPS
     for name in ordered_group("Power-Up"):
       self.assertIn(name.replace("Paraglider", "Paraglide"), names)
+
+
+class TestScoutThiefnetAliases(unittest.TestCase):
+  def test_old_toggle_values(self) -> None:
+    for value in ("true", "True", True):
+      self.assertEqual(
+        ScoutThiefnet.from_any(value).value,
+        ScoutThiefnet.option_show_and_scout
+      )
+    for value in ("false", False):
+      self.assertEqual(
+        ScoutThiefnet.from_any(value).value, ScoutThiefnet.option_show_only
+      )

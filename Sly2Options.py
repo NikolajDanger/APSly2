@@ -415,12 +415,24 @@ class BottleSanity(DefaultOnToggle):
 #    """
 #    display_name = "Lootsanity"
 
-class ScoutThiefnet(DefaultOnToggle):
+class ScoutThiefnet(Choice):
   """
-  Whether to scout/hint ThiefNet checks. They will still be displayed in game.
+  How much ThiefNet shows about the items it sells.
+
+  - Show and Scout: ThiefNet shows each item, and they are all hinted once
+    ThiefNet is first opened.
+  - Show Only: ThiefNet shows each item, without hinting them.
+  - Hide: ThiefNet only shows whose item each one is. An item is revealed
+    when it is hinted or bought.
   """
 
   display_name = "Scout Thiefnet"
+  option_show_only = 0
+  option_show_and_scout = 1
+  option_hide = 2
+  alias_false = 0
+  alias_true = 1
+  default = 1
 
 class SkipIntro(DefaultOnToggle):
   """

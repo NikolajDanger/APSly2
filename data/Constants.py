@@ -1484,13 +1484,15 @@ THIEFNET_COLORS_SITE = 0x001DBCF4
 THIEFNET_COLORS_ORIG = 0x0C076A7A
 THIEFNET_COLORS_FLAG = MENU_ICON_CAVE + 8
 # Per-class ThiefNet name colors (ABGR, alpha 0x7f) and the vanilla blue.
+# Hidden items keep the vanilla blue so the color doesn't leak their class.
+THIEFNET_TEXT_VANILLA = 0x7F664C33
 THIEFNET_TEXT_COLORS = {
   "progression": 0x7FAD7491,
   "useful": 0x7FAD826B,
   "trap": 0x7F5A61AD,
   "filler": 0x7F6E9E6E,
+  "unknown": THIEFNET_TEXT_VANILLA,
 }
-THIEFNET_TEXT_VANILLA = 0x7F664C33
 # Claims a size (16-aligned, in CALL_A0) from the bottom of the level heap
 # and returns the claimed address, run through the call slot. The game
 # allocates map-lifetime memory from the same pointer on its own thread, so

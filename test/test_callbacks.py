@@ -11,6 +11,7 @@ from ..Callbacks import (
   activate_trap,
   apply_thiefnet_text,
   load_thiefnet_prefs,
+  reveal_thiefnet,
   check_clockla,
   check_jobs,
   compute_available_episodes,
@@ -83,6 +84,7 @@ from ..Sly2Client import (
   update_connection_status
 )
 from ..Sly2Interface import PowerUps, Sly2Episode
+from ..Sly2Options import ScoutThiefnet
 from .client_base import (
   ClientTestBase,
   build_dag,
@@ -1127,7 +1129,7 @@ class TestSetThiefnet(ClientTestBase):
     return self.pine.peek_cstring(pointer)
 
   async def test_sets_up_shop(self) -> None:
-    self.slot_data["scout_thiefnet"] = False
+    self.slot_data["scout_thiefnet"] = ScoutThiefnet.option_show_only
     await set_thiefnet(self.ctx)
     # Own item: the table row drops the "Tester's" owner prefix; the
     # description keeps it and adds the classification.
@@ -1156,7 +1158,7 @@ class TestSetThiefnet(ClientTestBase):
     self.assertEqual(self.ctx.sent, [])
 
   async def test_foreign_item_keeps_owner_prefix(self) -> None:
-    self.slot_data["scout_thiefnet"] = False
+    self.slot_data["scout_thiefnet"] = ScoutThiefnet.option_show_only
     self.ctx.slot = 2  # the items belong to player 1, so they are foreign
     await set_thiefnet(self.ctx)
     self.assertEqual(
@@ -1174,7 +1176,9 @@ class TestSetThiefnet(ClientTestBase):
     self.interface.clear_cache()
 
   async def test_scouts_only_once_the_menu_is_open_and_settled(self) -> None:
-    self.slot_data["scout_thiefnet"] = True
+    self.slot_data["scout_thiefnet"] = (
+      ScoutThiefnet.option_show_and_scout
+    )
     await set_thiefnet(self.ctx)
     self.assertEqual(self.ctx.sent_cmds("LocationScouts"), [])  # not open
     await scout_thiefnet(self.ctx)
@@ -1196,13 +1200,85 @@ class TestSetThiefnet(ClientTestBase):
     self.assertEqual(len(self.ctx.sent_cmds("LocationScouts")), 1)
 
   async def test_no_scout_when_option_off(self) -> None:
-    self.slot_data["scout_thiefnet"] = False
+    self.slot_data["scout_thiefnet"] = ScoutThiefnet.option_show_only
     self._open_thiefnet(settled=True)
     await scout_thiefnet(self.ctx)
     self.assertEqual(self.ctx.sent_cmds("LocationScouts"), [])
 
+  async def test_hide_shows_only_the_owner(self) -> None:
+    self.slot_data["scout_thiefnet"] = ScoutThiefnet.option_hide
+    await set_thiefnet(self.ctx)
+    self.assertEqual(self.ctx.thiefnet_items[0], ("???", "Tester's ???"))
+    self.assertEqual(self.ctx.thiefnet_classes[0], "unknown")
+    self.assertEqual(self.resolved(0), b"???")
+    # bought before connecting, so not hidden
+    self.assertEqual(
+      self.ctx.thiefnet_items[1],
+      ("Paraglider", "Tester's Paraglider: Progression item")
+    )
+    self.assertEqual(self.ctx.thiefnet_hidden, frozenset(range(24)) - {1})
+
+  async def test_hide_keeps_foreign_owner(self) -> None:
+    self.slot_data["scout_thiefnet"] = ScoutThiefnet.option_hide
+    self.ctx.slot = 2
+    await set_thiefnet(self.ctx)
+    self.assertEqual(
+      self.ctx.thiefnet_items[0], ("Tester's ???", "Tester's ???")
+    )
+
+  async def test_hide_never_scouts(self) -> None:
+    self.slot_data["scout_thiefnet"] = ScoutThiefnet.option_hide
+    self._open_thiefnet(settled=True)
+    await scout_thiefnet(self.ctx)
+    self.assertEqual(self.ctx.sent_cmds("LocationScouts"), [])
+
+  async def test_hint_reveals_row(self) -> None:
+    self.slot_data["scout_thiefnet"] = ScoutThiefnet.option_hide
+    await set_thiefnet(self.ctx)
+    reveal_thiefnet(self.ctx)
+    self.assertEqual(self.resolved(4), b"???")
+    self.ctx.stored_data["_read_hints_0_1"] = [
+      {"location": self.loc(thiefnet_location(5)), "finding_player": 1}
+    ]
+    reveal_thiefnet(self.ctx)
+    self.assertEqual(self.resolved(4), b"Paraglider")
+    self.assertEqual(self.ctx.thiefnet_classes[4], "progression")
+    self.assertNotIn(4, self.ctx.thiefnet_hidden)
+    self.assertEqual(self.resolved(5), b"???")
+
+  async def test_other_players_hint_does_not_reveal(self) -> None:
+    self.slot_data["scout_thiefnet"] = ScoutThiefnet.option_hide
+    await set_thiefnet(self.ctx)
+    self.ctx.stored_data["_read_hints_0_1"] = [
+      {"location": self.loc(thiefnet_location(5)), "finding_player": 2}
+    ]
+    reveal_thiefnet(self.ctx)
+    self.assertEqual(self.resolved(4), b"???")
+
+  async def test_purchase_reveals_once(self) -> None:
+    self.slot_data["scout_thiefnet"] = ScoutThiefnet.option_hide
+    await set_thiefnet(self.ctx)
+    self.ctx.in_safehouse = True
+    self.interface.load_powerups(PowerUps(*[i in (0, 1) for i in range(24)]))
+    await handle_checks(self.ctx)
+    self.assertEqual(
+      list(self.ctx.notification_queue), ["Bought Tester's Paraglider"]
+    )
+    reveal_thiefnet(self.ctx)
+    self.assertNotIn(0, self.ctx.thiefnet_hidden)
+    await handle_checks(self.ctx)
+    self.assertEqual(len(self.ctx.notification_queue), 1)
+
+  async def test_shown_purchase_has_no_notification(self) -> None:
+    self.slot_data["scout_thiefnet"] = ScoutThiefnet.option_show_only
+    await set_thiefnet(self.ctx)
+    self.ctx.in_safehouse = True
+    self.interface.load_powerups(PowerUps(*[i == 0 for i in range(24)]))
+    await handle_checks(self.ctx)
+    self.assertEqual(list(self.ctx.notification_queue), [])
+
   async def test_names_cached(self) -> None:
-    self.slot_data["scout_thiefnet"] = False
+    self.slot_data["scout_thiefnet"] = ScoutThiefnet.option_show_only
     self.ctx.thiefnet_items = [("row", "cached")]*24
     await set_thiefnet(self.ctx)
     self.assertEqual(self.resolved(0, True), b"cached")
@@ -1345,7 +1421,7 @@ class TestUpdate(ClientTestBase):
     self.assertFalse(self.ctx.episode_hint_shown)
 
   async def test_safehouse_entry_sets_up_thiefnet(self) -> None:
-    self.slot_data["scout_thiefnet"] = False
+    self.slot_data["scout_thiefnet"] = ScoutThiefnet.option_show_only
     self.enter(1, 2)
     self.pine.poke32(self.addr["infobox string"], 305)
     self.ctx.thiefnet_items = [("x", "y")]*24

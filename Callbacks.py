@@ -47,6 +47,7 @@ from .data.Names import (
   vault_location,
 )
 from .Sly2Interface import Sly2Episode, PowerUps, INFOBOX_CLIENT_STRING
+from .Sly2Options import ScoutThiefnet
 
 if TYPE_CHECKING:
   from .Sly2Client import Sly2Context
@@ -126,6 +127,7 @@ async def handle_safehouse(
   if in_safehouse:
     install_menu_icons(ctx)
     await scout_thiefnet(ctx)
+    reveal_thiefnet(ctx)
 
   if in_hub:
     ctx.in_hub = True
@@ -429,45 +431,97 @@ def classification_key(flags: int) -> str:
     return "trap"
   return "filler"
 
+def thiefnet_code(i: int) -> int:
+  code = Locations.location_dict[thiefnet_location(i+1)].code
+  assert code is not None
+  return code
+
+def thiefnet_full_name(ctx: 'Sly2Context', i: int) -> str:
+  location_info = ctx.locations_info[thiefnet_code(i)]
+  player_name = ctx.player_names[location_info.player]
+  item_name = ctx.item_names.lookup_in_slot(
+    location_info.item, location_info.player
+  )
+  return f"{player_name}'s {item_name}"
+
+def thiefnet_hidden(ctx: 'Sly2Context') -> frozenset[int]:
+  """The ThiefNet rows whose item is still secret: under the hide option,
+  those neither hinted nor bought."""
+  if (ctx.slot_data is None or
+      ctx.slot_data["scout_thiefnet"] != ScoutThiefnet.option_hide):
+    return frozenset()
+  hints = ctx.stored_data.get(f"_read_hints_{ctx.team}_{ctx.slot}") or []
+  hinted = {
+    hint["location"] for hint in hints if hint["finding_player"] == ctx.slot
+  }
+  purchases = list(ctx.thiefnet_purchases)[:24]
+  return frozenset(
+    i for i in range(24)
+    if thiefnet_code(i) not in hinted and
+    thiefnet_code(i) not in ctx.checked_locations and not purchases[i]
+  )
+
+def build_thiefnet_items(ctx: 'Sly2Context') -> None:
+  """Build each row's name, description and class. The row title is the
+  item name (prefixed with the owner unless it's your own), capped to one
+  line. The description is always the full "{player}'s {item}" plus the item
+  classification. A hidden row shows only the owner."""
+  ctx.thiefnet_hidden = thiefnet_hidden(ctx)
+  ctx.thiefnet_items = []
+  ctx.thiefnet_classes = []
+  for i in range(24):
+    location_info = ctx.locations_info[thiefnet_code(i)]
+    own = location_info.player == ctx.slot
+    if i in ctx.thiefnet_hidden:
+      owner = f"{ctx.player_names[location_info.player]}'s ???"
+      table_name = truncate("???" if own else owner, THIEFNET_TABLE_LIMIT)
+      description = truncate(owner, THIEFNET_DESCRIPTION_LIMIT)
+      ctx.thiefnet_items.append((table_name, description))
+      ctx.thiefnet_classes.append("unknown")
+      continue
+
+    item_name = ctx.item_names.lookup_in_slot(
+      location_info.item, location_info.player
+    )
+    full_name = thiefnet_full_name(ctx, i)
+    table_name = truncate(
+      item_name if own else full_name, THIEFNET_TABLE_LIMIT
+    )
+    classification = classification_label(location_info.flags)
+    description = (
+      f"{truncate(full_name, THIEFNET_DESCRIPTION_LIMIT)}: {classification}"
+    )
+    ctx.thiefnet_items.append((table_name, description))
+    ctx.thiefnet_classes.append(classification_key(location_info.flags))
+
+def write_thiefnet_names(ctx: 'Sly2Context') -> None:
+  assert ctx.thiefnet_items is not None
+  for i, (table_name, description) in enumerate(ctx.thiefnet_items):
+    ctx.game_interface.set_thiefnet(i, table_name, description)
+
+def reveal_thiefnet(ctx: 'Sly2Context') -> None:
+  """Flip hidden rows that have since been hinted or bought to their real
+  name, icon and color."""
+  if (ctx.thiefnet_items is None or
+      thiefnet_hidden(ctx) == ctx.thiefnet_hidden):
+    return
+  build_thiefnet_items(ctx)
+  write_thiefnet_names(ctx)
+  apply_menu_icons(ctx)
+
 async def set_thiefnet(ctx: 'Sly2Context') -> None:
   """Sets the randomized ThiefNet items"""
   if ctx.slot_data is None:
     return
-
-  # The row title is the item name (prefixed with the owner unless it's your
-  # own), capped to one line. The description is always the full
-  # "{player}'s {item}" plus the item classification.
-  if ctx.thiefnet_items is None:
-    info = ctx.locations_info
-    ctx.thiefnet_items = []
-    ctx.thiefnet_classes = []
-    for i in range(24):
-      location_info = info[
-        Locations.location_dict[thiefnet_location(i+1)].code
-      ]
-
-      player_name = ctx.player_names[location_info.player]
-      item_name = ctx.item_names.lookup_in_slot(
-        location_info.item, location_info.player
-      )
-      full_name = f"{player_name}'s {item_name}"
-      own = location_info.player == ctx.slot
-
-      table_name = truncate(
-        item_name if own else full_name, THIEFNET_TABLE_LIMIT
-      )
-      classification = classification_label(location_info.flags)
-      description = (
-        f"{truncate(full_name, THIEFNET_DESCRIPTION_LIMIT)}: {classification}"
-      )
-      ctx.thiefnet_items.append((table_name, description))
-      ctx.thiefnet_classes.append(classification_key(location_info.flags))
 
   ctx.thiefnet_purchases = PowerUps(*[
     Locations.location_dict[thiefnet_location(i+1)].code
     in ctx.checked_locations
     for i in range(24)
   ])
+  if (ctx.thiefnet_items is None or
+      thiefnet_hidden(ctx) != ctx.thiefnet_hidden):
+    build_thiefnet_items(ctx)
 
   # Set which items should be available to purchase and unlock all from the
   # start
@@ -475,10 +529,9 @@ async def set_thiefnet(ctx: 'Sly2Context') -> None:
   ctx.game_interface.set_thiefnet_unlock()
   ctx.game_interface.set_thiefnet_format()
 
-  # Set costs and names
-  for i, (table_name, description) in enumerate(ctx.thiefnet_items):
-    ctx.game_interface.set_thiefnet_cost(i,ctx.slot_data["thiefnet_costs"][i])
-    ctx.game_interface.set_thiefnet(i, table_name, description)
+  for i, cost in enumerate(ctx.slot_data["thiefnet_costs"]):
+    ctx.game_interface.set_thiefnet_cost(i, cost)
+  write_thiefnet_names(ctx)
 
   load_thiefnet_prefs(ctx)
   install_menu_icons(ctx)
@@ -506,8 +559,8 @@ def load_thiefnet_prefs(ctx: 'Sly2Context') -> None:
 async def scout_thiefnet(ctx: 'Sly2Context') -> None:
   """Scout every ThiefNet location, assuming the option has been set in the
   yaml. Only scouts once ThiefNet has been opened."""
-  if (ctx.thiefnet_scouted or ctx.slot_data is None
-      or not ctx.slot_data["scout_thiefnet"]):
+  if (ctx.thiefnet_scouted or ctx.slot_data is None or
+      ctx.slot_data["scout_thiefnet"] != ScoutThiefnet.option_show_and_scout):
     return
   installer = ctx.game_interface.menu_icon_installer
   if not installer.structure_ready() or not installer.menu_settled():
@@ -1015,9 +1068,10 @@ async def handle_checks(ctx: 'Sly2Context') -> None:
   purchases = list(ctx.thiefnet_purchases)[:24]
   for i, purchased in enumerate(purchases):
     if purchased:
-      location_name = thiefnet_location(i+1)
-      location_code = Locations.location_dict[location_name].code
-      ctx.locations_checked.add(location_code)
+      if (i in ctx.thiefnet_hidden and
+          thiefnet_code(i) not in ctx.locations_checked):
+        ctx.notification(f"Bought {thiefnet_full_name(ctx, i)}")
+      ctx.locations_checked.add(thiefnet_code(i))
 
   # Bottles
   bottle_n = ctx.slot_data["bottle_location_bundle_size"]
