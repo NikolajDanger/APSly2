@@ -13,6 +13,7 @@ ESSENTIALS = (
   "death_link",
   "ring_link",
   "starting_episode",
+  "skip_intro",
   "goal",
   "pick_and_mix",
   "keys_in_pool",

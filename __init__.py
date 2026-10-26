@@ -546,7 +546,8 @@ class Sly2World(World):
           "trap_duration",
           "ring_link",
           "thiefnet_icon_theme",
-          "thiefnet_text_color"
+          "thiefnet_text_color",
+          "skip_intro"
         ]:
           getattr(self.options, name).value = slot_data[name]
         self.tracker_world = self._build_tracker_world()
@@ -650,8 +651,8 @@ class Sly2World(World):
       "trap_weights",
       "trap_duration",
       "thiefnet_icon_theme",
-      "thiefnet_text_color"
-      # "skip_intro"
+      "thiefnet_text_color",
+      "skip_intro"
     )
 
   def fill_slot_data(self) -> Mapping[str, Any]:
@@ -660,7 +661,6 @@ class Sly2World(World):
     slot_data["loot_table"] = self.loot_table
     slot_data["loot_prices"] = self.loot_prices
     slot_data["treasure_prices"] = self.treasure_prices
-    slot_data["skip_intro"] = True
     slot_data["world_version"] = self.world_version
 
     return slot_data

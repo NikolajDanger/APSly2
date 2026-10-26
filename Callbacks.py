@@ -1,5 +1,4 @@
 from typing import TYPE_CHECKING
-from asyncio import sleep
 from time import time
 from random import choice, randint
 from math import ceil
@@ -681,15 +680,18 @@ async def boot_from_invalid_episode(
     current_episode != 0 and
     ctx.available_episodes[current_episode] == 0
   )
-  # Skipping the intro breaks saving
+  skip_intro = (
+    ap_connected and
+    ctx.slot_data is not None and
+    ctx.slot_data["skip_intro"] and
+    ctx.game_interface.in_intro()
+  )
 
-  if not_connected or locked_episode:
+  if not_connected or locked_episode or skip_intro:
     ctx.game_interface.logger.debug(
       f"Booting from locked or disconnected episode {int(current_episode)}"
     )
     ctx.game_interface.to_episode_menu()
-    # Sleeping because stuff breaks if we don't
-    await sleep(1)
 
 def check_clockla(ctx: 'Sly2Context') -> None:
   if ctx.jobs_completed[7][3][0]:

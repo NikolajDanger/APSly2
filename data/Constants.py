@@ -695,6 +695,7 @@ ADDRESSES = {
     "episode unlocks": 0x5975E8,
     "thiefnet control": 0x3DA160,
     "reload": 0x3E1080,
+    "load flags": 0x3E1084,
     "reload values": 0x3E1088,
     "world record": 0x3E10D0,
     "abort mission": 0x3E0FA8,

@@ -434,9 +434,10 @@ class ScoutThiefnet(Choice):
   alias_true = 1
   default = 1
 
-class SkipIntro(DefaultOnToggle):
+class SkipIntro(Toggle):
   """
-  Whether the Cairo intro should be skipped.
+  Whether to skip the Cairo intro. Starting a new game takes you straight to
+  the episode select.
   """
 
   display_name = "Skip Intro"
@@ -533,6 +534,7 @@ class Sly2Options(PerGameCommonOptions):
   ring_link: RingLink
   permissive_yaml: PermissiveYaml
   starting_episode: StartingEpisode
+  skip_intro: SkipIntro
   goal: Goal
   pick_and_mix: PickAndMix
   keys_in_pool: KeysInPool
@@ -565,7 +567,6 @@ class Sly2Options(PerGameCommonOptions):
   bottlesanity: BottleSanity
   # lootsanity:LootSanity
   scout_thiefnet: ScoutThiefnet
-  # skip_intro: SkipIntro
   trap_chance: TrapChance
   trap_weights: TrapWeights
   trap_duration: TrapDuration

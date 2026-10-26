@@ -823,6 +823,12 @@ async def _handle_loading(ctx: Sly2Context) -> bool:
     await asyncio.sleep(0.1)
     return True
 
+  # A requested reload starts loading a few frames later; ticking in between
+  # acts on the level that is about to go away.
+  if ctx.game_interface.reload_pending():
+    await asyncio.sleep(0.1)
+    return True
+
   return False
 
 def _check_server_connection(ctx: Sly2Context) -> bool:

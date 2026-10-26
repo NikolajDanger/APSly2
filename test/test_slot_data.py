@@ -51,6 +51,7 @@ PASSTHROUGH_OPTIONS = [
   "ring_link",
   "thiefnet_icon_theme",
   "thiefnet_text_color",
+  "skip_intro",
 ]
 
 GENERATED_KEYS = [

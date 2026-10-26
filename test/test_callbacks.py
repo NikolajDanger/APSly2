@@ -10,6 +10,7 @@ from .. import Callbacks, Sly2Client
 from ..Callbacks import (
   activate_trap,
   apply_thiefnet_text,
+  boot_from_invalid_episode,
   load_thiefnet_prefs,
   reveal_thiefnet,
   check_clockla,
@@ -1355,12 +1356,8 @@ class TestUpdate(ClientTestBase):
 
   async def tick(self) -> None:
     self.interface.clear_cache()
-    with (
-      patch.object(Callbacks, "sleep") as sleep,
-      patch.object(Callbacks, "time", return_value=1000.0)
-    ):
+    with patch.object(Callbacks, "time", return_value=1000.0):
       await update(self.ctx, True)
-    self.sleep = sleep
 
   async def test_title_screen(self) -> None:
     self.enter(0, 0)
@@ -1377,7 +1374,7 @@ class TestUpdate(ClientTestBase):
     self.assertEqual(
       self.pine.peek_cstring(self.addr["text"]["Episode 2"]), b"Locked"
     )
-    self.sleep.assert_not_called()
+    self.assertEqual(self.pine.peek32(self.addr["reload"]), 0)
 
   async def test_hub_tick(self) -> None:
     self.enter(1, 2)
@@ -1396,13 +1393,12 @@ class TestUpdate(ClientTestBase):
       [set(m["locations"]) for m in self.ctx.sent_cmds("LocationChecks")],
       [{self.loc("The Black Chateau - Satellite Sabotage")}]
     )
-    self.sleep.assert_not_called()
+    self.assertEqual(self.pine.peek32(self.addr["reload"]), 0)
 
   async def test_locked_episode_boots_to_menu(self) -> None:
     self.enter(4, 14)
     await self.tick()
     self.assertEqual(self.pine.peek32(self.addr["reload"]), 1)
-    self.sleep.assert_called_once()
 
   async def test_safehouse_exit_resets_hint(self) -> None:
     self.enter(1, 2)
@@ -1699,6 +1695,17 @@ class TestInitPerMap(ClientTestBase):
     await init(self.ctx, True)
     self.assertEqual(self.pine.peek32(self.addr["reload"]), 1)
 
+  async def test_skip_intro_boots_to_menu(self) -> None:
+    self.slot_data["skip_intro"] = True
+    self.enter(0, 0, 1583)
+    await boot_from_invalid_episode(self.ctx, True)
+    self.assertEqual(self.pine.peek32(self.addr["reload"]), 1)
+
+  async def test_intro_kept_without_skip_intro(self) -> None:
+    self.enter(0, 0, 1583)
+    await boot_from_invalid_episode(self.ctx, True)
+    self.assertEqual(self.pine.peek32(self.addr["reload"]), 0)
+
   async def test_stuck_job_reloads_before_map_setup(self) -> None:
     self.enter(1, 2)
     set_job_status(self.pine, 4, 2)
@@ -1744,7 +1751,6 @@ class TickHarness(ClientTestBase):
   async def tick(self) -> None:
     with (
       patch.object(Sly2Client.asyncio, "sleep"),
-      patch.object(Callbacks, "sleep"),
       patch.object(Callbacks, "time", return_value=1000.0)
     ):
       await _handle_game_ready(self.ctx)
@@ -1918,6 +1924,17 @@ class TestTick(TickHarness):
     await self.tick()
     self.assertFalse(self.ctx.is_loading)
     self.assertIsNone(self.ctx.current_episode)
+    await self.tick()
+    self.assertEqual(self.ctx.current_episode, Sly2Episode.The_Black_Chateau)
+
+  async def test_pending_reload_defers_everything(self) -> None:
+    self.place(1, 2)
+    self.pine.poke32(self.addr["reload"], 1)
+    await self.tick()
+    self.assertFalse(self.ctx.is_loading)
+    self.assertIsNone(self.ctx.current_episode)
+    self.assertEqual(self.pine.writes, [])
+    self.pine.poke32(self.addr["reload"], 0)
     await self.tick()
     self.assertEqual(self.ctx.current_episode, Sly2Episode.The_Black_Chateau)
 

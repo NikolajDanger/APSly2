@@ -606,8 +606,8 @@ class Sly2Interface(GameInterface):
     then the values behind pointers found in the first batch"""
     a = self.addresses
     words = [
-      "world id", "map id", "job id", "loading", "active character",
-      "active character pointer", "camera focus", "infobox",
+      "world id", "map id", "job id", "loading", "reload",
+      "active character", "active character pointer", "camera focus", "infobox",
       "infobox string", "coins", "items received", "bottle count",
       "savefile last world", "unload mega jump", "DAG root",
       "clock-la defeated", "hackpack", "sly pointer", "clock speed",
@@ -766,6 +766,9 @@ class Sly2Interface(GameInterface):
   def is_loading(self) -> bool:
     return self._read32(self.addresses["loading"]) == 2
 
+  def reload_pending(self) -> bool:
+    return self._read32(self.addresses["reload"]) != 0
+
   def in_safehouse(self) -> bool:
     # Some of these checks are not necessary, but I absolutely can't be
     # bothered to figure out which ones are
@@ -792,6 +795,9 @@ class Sly2Interface(GameInterface):
   def is_infobox(self) -> bool:
     infobox_pointer = self._read32(self.addresses["infobox"])
     return self._read32(infobox_pointer+0x64) == 2
+
+  def in_intro(self) -> bool:
+    return self.get_current_map() == 0 and self.get_current_job() == 1583
 
   def stuck_in_cairo(self) -> bool:
     return (
@@ -1719,11 +1725,12 @@ class Sly2Interface(GameInterface):
 
   def to_episode_menu(self) -> None:
     self.logger.info("Skipping to episode menu")
-    if (
-      self.get_current_map() == 0 and
-      self.get_current_job() == 1583
-    ):
+    if self.in_intro():
       self.set_current_job(0xffffffff)
+      # Bit 0 marks a new-game load and makes the next load drop the save
+      # slot (no autosave, "Quit Game"); the intro's own ending clears it.
+      flags = self.addresses["load flags"]
+      self._write32(flags, self._read32(flags) & ~1)
 
     self._abort_job()
     self._reload(bytes.fromhex(MENU_WORLD_RECORD))

@@ -1058,6 +1058,12 @@ class TestStateChecks(InterfaceTestBase):
     self.pine.poke32(self.addr["map id"], 2)
     self.assertFalse(self.interface.stuck_in_cairo())
 
+  def test_in_intro(self) -> None:
+    set_location(self.pine, self.addr, 0, 0)
+    self.assertFalse(self.interface.in_intro())
+    set_location(self.pine, self.addr, 0, 0, 1583)
+    self.assertTrue(self.interface.in_intro())
+
   def test_in_safehouse(self) -> None:
     set_location(self.pine, self.addr, 1, 2)
     self.pine.poke32(self.addr["infobox string"], 306)
@@ -1320,6 +1326,20 @@ class TestToEpisodeMenu(InterfaceTestBase):
     self.interface.to_episode_menu()
     self.assert_menu_reload()
     self.assertEqual(self.pine.peek32(self.addr["abort mission"]), 0)
+
+  def test_intro_clears_new_game_flag(self) -> None:
+    set_location(self.pine, self.addr, 0, 0, 1583)
+    self.pine.poke32(self.addr["load flags"], 0x41)
+    self.interface.to_episode_menu()
+    self.assert_menu_reload()
+    self.assertEqual(self.pine.peek32(self.addr["load flags"]), 0x40)
+    self.assertEqual(self.pine.peek32(self.addr["job id"]), 0xffffffff)
+
+  def test_keeps_new_game_flag_outside_intro(self) -> None:
+    set_location(self.pine, self.addr, 0, 1)
+    self.pine.poke32(self.addr["load flags"], 1)
+    self.interface.to_episode_menu()
+    self.assertEqual(self.pine.peek32(self.addr["load flags"]), 1)
 
   def test_title_screen_skips_dag(self) -> None:
     set_location(self.pine, self.addr, 0, 0)

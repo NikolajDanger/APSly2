@@ -72,6 +72,12 @@ requires:
     menace_from_the_north_eh: 0
     anatomy_for_disaster: 0
 
+  # Whether to skip the Cairo intro. Starting a new game takes you straight to
+  # the episode select.
+  skip_intro:
+    'false': 100
+    'true': 0
+
   ##########
   ## Goal ##
   ##########
