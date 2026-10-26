@@ -1,6 +1,7 @@
 """Module for installing pickpocket loot models into a map that doesn't
 have them already."""
 
+import re
 import struct
 import time
 from logging import Logger
@@ -28,6 +29,9 @@ VRAM_PAGE = 0x80
 USABLE_VRAM = VRAM_BLOCKS - VRAM_PAGE
 TEXTURE_VRAM_START = 0x1800
 ALLOCATOR_SIZE = 0x40
+# A record's flag word has a low byte of 1 and fits in 16 bits; the lookahead
+# finds every such word in C instead of unpacking each offset.
+RECORD_FLAG = re.compile(rb"(?=\x01.\x00\x00)", re.DOTALL)
 CLAIM_TIMEOUT = 0.5
 GLOBALS = (
   "texture table count", "texture table", "clut table count", "clut table",
@@ -346,9 +350,9 @@ class LootInstaller:
     memory = self.read_bytes(start, end - start)
     found: dict[str, dict[int, tuple[int, ...]]] = {"tex": {}, "clut": {}}
     sizes = {1 << k for k in range(3, 11)}
-    for offset in range(0, len(memory) - TEXTURE_RECORD_SIZE, 4):
-      flag = struct.unpack_from("<I", memory, offset + 4)[0]
-      if (flag & 0xFF) != 1 or flag > 0xFFFF:
+    for match in RECORD_FLAG.finditer(memory, 4):
+      offset = match.start() - 4
+      if offset % 4 or offset >= len(memory) - TEXTURE_RECORD_SIZE:
         continue
       words = struct.unpack_from("<10I", memory, offset)
       if (

@@ -118,15 +118,11 @@ for ep in EPISODES:
     if loc.name.startswith(episode_location_prefix(ep))
   }
 
+_locations_by_id = {
+  location.code: location for location in location_dict.values()
+}
+
 def from_id(location_id: int) -> Sly2LocationData:
-  matching = [
-    location
-    for location in location_dict.values()
-    if location.code == location_id
-  ]
-  if len(matching) == 0:
+  if location_id not in _locations_by_id:
     raise ValueError(f"No location data for location id '{location_id}'")
-  assert len(matching) < 2, (
-    f"Multiple locations data with id '{location_id}'. Please report."
-  )
-  return matching[0]
+  return _locations_by_id[location_id]

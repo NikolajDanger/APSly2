@@ -126,6 +126,10 @@ class PowerUps(NamedTuple):
 EE_RAM_START = 0x0010_0000
 EE_RAM_END = 0x0200_0000
 RECENT_WRITES = 64
+# Bulk writes (loot models, textures) are never repeated within a tick, so
+# caching them can't skip a write; it only bloats the cache that every
+# invalidate scans.
+CACHE_STORE_LIMIT = 0x100
 
 # No map holds anywhere near this many guards at once; a list longer than this
 # is a walk that wandered into freed memory.
@@ -226,17 +230,21 @@ class GameInterface():
 
   def _cache_store(self, address: int, data: bytes) -> None:
     self.invalidate(address, len(data))
+    if len(data) > CACHE_STORE_LIMIT:
+      return
     for size, chunk in Pine._chunks(address, len(data)):
       self._cache[(chunk, size)] = data[chunk-address:chunk-address+size]
 
   def _cached_bytes(self, address: int, n: int) -> Optional[bytes]:
-    data = b''
+    if n > CACHE_STORE_LIMIT:
+      return None
+    parts = []
     for size, chunk in Pine._chunks(address, n):
       value = self._cache.get((chunk, size))
       if value is None:
         return None
-      data += value
-    return data
+      parts.append(value)
+    return b"".join(parts)
 
   def _read_int(self, address: int, size: int) -> int:
     if not in_ee_ram(address, size):
