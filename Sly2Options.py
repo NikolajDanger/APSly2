@@ -466,6 +466,7 @@ class TrapWeights(OptionCounter):
   - Sugar Rush Trap: speeds the game up.
   - Ice Trap: makes the ground slippery.
   - Noise Trap: sounds an alarm and alerts nearby guards.
+  - Debt Trap: takes a percentage of your coins (see Debt Trap Percentage).
   """
 
   display_name = "Trap Weights"
@@ -477,7 +478,7 @@ class TrapWeights(OptionCounter):
 class TrapDuration(OptionCounter):
   """
   How long each timed trap lasts, in seconds. Traps with an instant effect
-  (Sly 1 Trap, Energy Drain Trap) have no duration.
+  (Sly 1 Trap, Energy Drain Trap, Debt Trap) have no duration.
   """
 
   display_name = "Trap Duration"
@@ -485,6 +486,17 @@ class TrapDuration(OptionCounter):
   max = 60
   valid_keys = frozenset(trap.key for trap in Trap if trap.duration)
   default = {trap.key: trap.duration for trap in Trap if trap.duration}
+
+
+class DebtTrapPercentage(Range):
+  """
+  The percentage of your current coins a Debt Trap takes away.
+  """
+
+  display_name = "Debt Trap Percentage"
+  range_start = 1
+  range_end = 100
+  default = 10
 
 
 class RingLink(Toggle):
@@ -495,6 +507,23 @@ class RingLink(Toggle):
   """
 
   display_name = "Ring Link"
+
+
+class RingLinkBehavior(Choice):
+  """
+  Which coin changes made by received items are shared over ring link. Coins
+  you pick up or spend in game are always shared.
+
+  - Items: Coins items are shared, Debt Traps are not.
+  - Items and Traps: both Coins items and Debt Traps are shared.
+  - Neither: only coins you pick up or spend in game are shared.
+  """
+
+  display_name = "Ring Link Behavior"
+  option_items = 0
+  option_items_and_traps = 1
+  option_neither = 2
+  default = 0
 
 
 class ThiefNetIconTheme(Choice):
@@ -532,6 +561,7 @@ class Sly2Options(PerGameCommonOptions):
   start_inventory_from_pool: StartInventoryPool
   death_link: DeathLink
   ring_link: RingLink
+  ring_link_behavior: RingLinkBehavior
   permissive_yaml: PermissiveYaml
   starting_episode: StartingEpisode
   skip_intro: SkipIntro
@@ -570,6 +600,7 @@ class Sly2Options(PerGameCommonOptions):
   trap_chance: TrapChance
   trap_weights: TrapWeights
   trap_duration: TrapDuration
+  debt_trap_percentage: DebtTrapPercentage
   thiefnet_icon_theme: ThiefNetIconTheme
   thiefnet_text_color: ThiefNetTextColor
 
@@ -593,7 +624,8 @@ sly2_option_groups = [
     BottleItemBundleSize,
     TrapChance,
     TrapWeights,
-    TrapDuration
+    TrapDuration,
+    DebtTrapPercentage
   ]),
   OptionGroup("Locations",[
     ThiefNetCostMinimum,

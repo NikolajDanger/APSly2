@@ -35,7 +35,8 @@
 #     the wallet through the game's own coin functions and plays the coin pickup
 #     sound, so a received Coins item clinks in like a real coin grab. The
 #     client writes the amount before the number of installments, since the
-#     latter is what starts the payout.
+#     latter is what starts the payout. A negative amount takes the coins
+#     away in the same installments (the Debt trap), never below zero.
 #   sound: while a sound id is set, plays it through the game's own sound
 #     functions. With interval 0 the sound plays once and the id is cleared;
 #     with interval N it replays every N frames until the client clears the id,
@@ -333,8 +334,8 @@ pop:
 	lw    $a1, 4($k0)           # COIN_AMOUNT
 	sw    $k1, 8($k0)
 	lw    $k1, 0($k0)           # COIN_POPS
-	divu  $zero, $a1, $k1
-	mflo  $a2                   # pop = amount / pops
+	div   $zero, $a1, $k1
+	mflo  $a2                   # pop = amount / pops (signed)
 	subu  $a1, $a1, $a2
 	sw    $a1, 4($k0)
 	addiu $k1, $k1, -1
@@ -347,9 +348,11 @@ pop:
 	ori   $k0, $k0, 0xcf20
 	lw    $a1, 0($k0)
 	lui   $a0, 0x002d
+	addu  $a1, $a1, $v0         # coins + pop
+	slt   $k1, $a1, $zero
+	movn  $a1, $zero, $k1       # floor at 0
+	jal   0x1617e0             # SetCoins(0x2DEB30, max(coins + pop, 0))
 	ori   $a0, $a0, 0xeb30
-	jal   0x1617e0             # SetCoins(0x2DEB30, coins + pop)
-	addu  $a1, $a1, $v0
 	jal   0x1fbb90             # new sound instance, id 41 (coin pickup)
 	addiu $a0, $zero, 41
 	move  $a0, $v0

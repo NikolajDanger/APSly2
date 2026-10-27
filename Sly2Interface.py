@@ -396,7 +396,7 @@ class GameInterface():
     data = (value & 0xFFFF_FFFF).to_bytes(4, "little")
     if self._writable(address) and self._needs_write(address, data):
       self._log_write("w32", address, value)
-      self.pcsx2_interface.write_int32(address, value)
+      self.pcsx2_interface.write_int32(address, value & 0xFFFF_FFFF)
 
   def _write_bytes(self, address: int, value: bytes) -> None:
     if (
@@ -471,7 +471,7 @@ class GameInterface():
     for address, value in operations:
       data = (value & 0xFFFF_FFFF).to_bytes(4, "little")
       if self._writable(address) and self._needs_write(address, data):
-        valid.append((address, value))
+        valid.append((address, value & 0xFFFF_FFFF))
     if valid:
       self._log_write("bw32", [a for a, _ in valid],
               [v for _, v in valid])

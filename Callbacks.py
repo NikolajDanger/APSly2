@@ -46,7 +46,7 @@ from .data.Names import (
   vault_location,
 )
 from .Sly2Interface import Sly2Episode, PowerUps, INFOBOX_CLIENT_STRING
-from .Sly2Options import ScoutThiefnet
+from .Sly2Options import RingLinkBehavior, ScoutThiefnet
 
 if TYPE_CHECKING:
   from .Sly2Client import Sly2Context
@@ -94,6 +94,7 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
     ):
       await handle_received(ctx, in_safehouse)
       pay_out_coins(ctx)
+      collect_debt(ctx)
       handle_traps(ctx)
       await handle_checks(ctx)
       await handle_check_goal(ctx)
@@ -992,6 +993,8 @@ def activate_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
       ctx.health_trap_check = ctx.game_interface.set_current_health(1)
     elif trap is Items.Trap.ENERGY_DRAIN:
       ctx.game_interface.set_current_gadget_power(0)
+    elif trap is Items.Trap.DEBT:
+      ctx.pending_debt_traps += 1
     return
   if ctx.slot_data is None:
     return
@@ -1209,10 +1212,43 @@ def pay_out_coins(ctx: 'Sly2Context') -> None:
   elif not ctx.game_interface.cave_live():
     ctx.game_interface.add_coins(amount)
     ctx.pending_coins = 0
+  if ctx.pending_coins == 0 and not ring_link_shares(ctx, trap=False):
+    ctx.ring_link_exempt += amount
+
+def collect_debt(ctx: 'Sly2Context') -> None:
+  """Take one pending Debt trap's share of the wallet, in negative pops
+  with the pickup sound like a payout"""
+  if ctx.pending_debt_traps <= 0 or ctx.slot_data is None:
+    return
+  interface = ctx.game_interface
+  if interface.coins_paying_out():
+    return
+
+  coins = interface.get_coins()
+  loss = coins * ctx.slot_data["debt_trap_percentage"] // 100
+  interface.logger.debug(f"Debt trap: taking {loss} of {coins} coins")
+  if loss > 0:
+    pops = randint(COIN_POPS_MIN, COIN_POPS_MAX)
+    if not interface.queue_coins(-loss, pops):
+      interface.add_coins(-loss)
+  ctx.pending_debt_traps -= 1
+  if not ring_link_shares(ctx, trap=True):
+    ctx.ring_link_exempt -= loss
+
+def ring_link_shares(ctx: 'Sly2Context', trap: bool) -> bool:
+  """Whether a wallet change made by a received item (a Coins item, or a
+  Debt trap when `trap`) goes out over ring link"""
+  if ctx.slot_data is None:
+    return True
+  behavior = ctx.slot_data["ring_link_behavior"]
+  if behavior == RingLinkBehavior.option_items_and_traps:
+    return True
+  return behavior == RingLinkBehavior.option_items and not trap
 
 async def handle_ring_link(ctx: 'Sly2Context') -> None:
   """Broadcast coin changes and apply received ring link deltas"""
   if not ctx.ring_link_enabled:
+    ctx.prev_coins = None
     return
 
   # A cave payout lands over several frames; wait for it so the whole amount
@@ -1224,7 +1260,13 @@ async def handle_ring_link(ctx: 'Sly2Context') -> None:
 
   if ctx.prev_coins is None:
     ctx.prev_coins = current
+    ctx.ring_link_exempt = 0
     return
+
+  # Item and trap wallet changes the behavior option keeps private have
+  # landed by now (the payout wait above); fold them into the baseline.
+  ctx.prev_coins += ctx.ring_link_exempt
+  ctx.ring_link_exempt = 0
 
   # Re-read after applying, since add_coins clamps at 0, so the received
   # amount isn't echoed back out as a diff.

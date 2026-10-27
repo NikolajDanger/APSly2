@@ -49,6 +49,17 @@ requires:
     'false': 100
     'true': 0
 
+  # Which coin changes made by received items are shared over ring link. Coins
+  # you pick up or spend in game are always shared.
+  #
+  # - Items: Coins items are shared, Debt Traps are not.
+  # - Items and Traps: both Coins items and Debt Traps are shared.
+  # - Neither: only coins you pick up or spend in game are shared.
+  ring_link_behavior:
+    items: 100
+    items_and_traps: 0
+    neither: 0
+
   # If permissive yaml is on, incompatible yaml options will be changed to more
   # suitable ones. If turned off, these yaml options will throw an error and
   # cause generation to halt.
@@ -267,6 +278,7 @@ requires:
   # - Sugar Rush Trap: speeds the game up.
   # - Ice Trap: makes the ground slippery.
   # - Noise Trap: sounds an alarm and alerts nearby guards.
+  # - Debt Trap: takes a percentage of your coins (see Debt Trap Percentage).
   trap_weights:
     sly_1_trap: 10
     energy_drain_trap: 10
@@ -274,14 +286,26 @@ requires:
     sugar_rush_trap: 10
     ice_trap: 10
     noise_trap: 10
+    debt_trap: 10
 
   # How long each timed trap lasts, in seconds. Traps with an instant effect
-  # (Sly 1 Trap, Energy Drain Trap) have no duration.
+  # (Sly 1 Trap, Energy Drain Trap, Debt Trap) have no duration.
   trap_duration:
     slow_mo_trap: 15
     sugar_rush_trap: 15
     ice_trap: 20
     noise_trap: 10
+
+  # The percentage of your current coins a Debt Trap takes away.
+  #
+  # You can define additional values between the minimum and maximum values.
+  # Minimum value is 1
+  # Maximum value is 100
+  debt_trap_percentage:
+    10: 100
+    random: 0
+    random-low: 0
+    random-high: 0
 
   ###############
   ## Locations ##

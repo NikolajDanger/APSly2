@@ -15,6 +15,7 @@ from ..Callbacks import (
   reveal_thiefnet,
   check_clockla,
   check_jobs,
+  collect_debt,
   compute_available_episodes,
   dynamic_loot_odds,
   episode_loot,
@@ -85,7 +86,7 @@ from ..Sly2Client import (
   update_connection_status
 )
 from ..Sly2Interface import PowerUps, Sly2Episode
-from ..Sly2Options import ScoutThiefnet
+from ..Sly2Options import RingLinkBehavior, ScoutThiefnet
 from .client_base import (
   ClientTestBase,
   build_dag,
@@ -638,6 +639,143 @@ class TestPayOutCoins(ClientTestBase):
     self.assertEqual(self.pine.peek32(self.addr["coin amount"]), 40)
     self.assertEqual(self.pine.peek32(self.addr["coin pops"]), 4)
 
+  def test_items_are_shared_by_default(self) -> None:
+    self.ctx.pending_coins = 40
+    pay_out_coins(self.ctx)
+    self.assertEqual(self.ctx.ring_link_exempt, 0)
+
+
+class TestPayOutCoinsUnshared(ClientTestBase):
+  options = {"ring_link_behavior": RingLinkBehavior.option_neither}
+
+  async def asyncSetUp(self) -> None:
+    await super().asyncSetUp()
+    self.pine.poke32(self.addr["coins"], 100)
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ENTRY)
+
+  def test_queued_items_are_exempt(self) -> None:
+    self.ctx.pending_coins = 40
+    pay_out_coins(self.ctx)
+    self.assertEqual(self.ctx.pending_coins, 0)
+    self.assertEqual(self.ctx.ring_link_exempt, 40)
+
+  def test_waiting_items_are_not_yet_exempt(self) -> None:
+    self.pine.poke32(self.addr["coin pops"], 2)
+    self.ctx.pending_coins = 40
+    pay_out_coins(self.ctx)
+    self.assertEqual(self.ctx.pending_coins, 40)
+    self.assertEqual(self.ctx.ring_link_exempt, 0)
+
+  def test_direct_items_are_exempt(self) -> None:
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG)
+    self.ctx.pending_coins = 40
+    pay_out_coins(self.ctx)
+    self.assertEqual(self.interface.get_coins(), 140)
+    self.assertEqual(self.ctx.ring_link_exempt, 40)
+
+
+class TestCollectDebt(ClientTestBase):
+  async def asyncSetUp(self) -> None:
+    await super().asyncSetUp()
+    self.pine.poke32(self.addr["coins"], 100)
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ENTRY)
+
+  def amount(self) -> int:
+    value = self.pine.peek32(self.addr["coin amount"])
+    return value - (1 << 32) if value >= 1 << 31 else value
+
+  def test_nothing_pending(self) -> None:
+    self.pine.clear_writes()
+    collect_debt(self.ctx)
+    self.assertEqual(self.pine.writes, [])
+
+  def test_queues_negative_pops(self) -> None:
+    self.assertEqual(self.slot_data["debt_trap_percentage"], 10)
+    self.ctx.pending_debt_traps = 1
+    with patch.object(Callbacks, "randint", return_value=4) as randint:
+      collect_debt(self.ctx)
+    randint.assert_called_once_with(COIN_POPS_MIN, COIN_POPS_MAX)
+    self.assertEqual(self.amount(), -10)
+    self.assertEqual(self.pine.peek32(self.addr["coin pops"]), 4)
+    self.assertEqual(self.ctx.pending_debt_traps, 0)
+    self.assertEqual(self.interface.get_coins(), 100)
+    self.assertEqual(self.ctx.ring_link_exempt, -10)
+
+  def test_waits_while_paying_out(self) -> None:
+    self.pine.poke32(self.addr["coin pops"], 2)
+    self.ctx.pending_debt_traps = 1
+    collect_debt(self.ctx)
+    self.assertEqual(self.ctx.pending_debt_traps, 1)
+    self.assertFalse(self.pine.written(self.addr["coin amount"]))
+    self.assertEqual(self.ctx.ring_link_exempt, 0)
+    self.pine.poke32(self.addr["coin pops"], 0)
+    self.interface.clear_cache()
+    collect_debt(self.ctx)
+    self.assertEqual(self.ctx.pending_debt_traps, 0)
+    self.assertEqual(self.amount(), -10)
+
+  def test_stacked_traps_compound(self) -> None:
+    self.ctx.pending_debt_traps = 2
+    collect_debt(self.ctx)
+    self.assertEqual(self.amount(), -10)
+    self.assertEqual(self.ctx.pending_debt_traps, 1)
+    self.pine.poke32(self.addr["coin pops"], 0)
+    self.pine.poke32(self.addr["coins"], 90)
+    self.interface.clear_cache()
+    collect_debt(self.ctx)
+    self.assertEqual(self.amount(), -9)
+    self.assertEqual(self.ctx.pending_debt_traps, 0)
+    self.assertEqual(self.ctx.ring_link_exempt, -19)
+
+  def test_fallback_without_cave(self) -> None:
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG)
+    self.ctx.pending_debt_traps = 1
+    collect_debt(self.ctx)
+    self.assertEqual(self.interface.get_coins(), 90)
+    self.assertEqual(self.ctx.pending_debt_traps, 0)
+    self.assertFalse(self.pine.written(self.addr["coin pops"]))
+    self.assertEqual(self.ctx.ring_link_exempt, -10)
+
+  def test_empty_wallet_consumes_trap(self) -> None:
+    self.pine.poke32(self.addr["coins"], 9)
+    self.ctx.pending_debt_traps = 1
+    self.pine.clear_writes()
+    collect_debt(self.ctx)
+    self.assertEqual(self.pine.writes, [])
+    self.assertEqual(self.ctx.pending_debt_traps, 0)
+    self.assertEqual(self.ctx.ring_link_exempt, 0)
+
+  async def test_update_collects_received_trap(self) -> None:
+    self.enter(1, 2)
+    self.give(Trap.DEBT.item_name)
+    self.pine.poke32(self.addr["items received"], 0)
+    with patch.object(Callbacks, "randint", return_value=3):
+      await update(self.ctx, True)
+    self.assertEqual(self.ctx.pending_debt_traps, 0)
+    self.assertEqual(self.ctx.active_traps, {})
+    self.assertEqual(self.amount(), -10)
+    self.assertEqual(self.pine.peek32(self.addr["coin pops"]), 3)
+
+
+class TestCollectDebtShared(ClientTestBase):
+  options = {
+    "ring_link_behavior": RingLinkBehavior.option_items_and_traps,
+    "debt_trap_percentage": 50
+  }
+
+  async def asyncSetUp(self) -> None:
+    await super().asyncSetUp()
+    self.pine.poke32(self.addr["coins"], 100)
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ENTRY)
+
+  def test_debt_is_shared(self) -> None:
+    self.ctx.pending_debt_traps = 1
+    collect_debt(self.ctx)
+    self.assertEqual(
+      self.pine.peek32(self.addr["coin amount"]), (-50) & 0xFFFF_FFFF
+    )
+    self.assertEqual(self.ctx.ring_link_exempt, 0)
+
 
 class TestHandleRingLink(ClientTestBase):
   async def asyncSetUp(self) -> None:
@@ -681,6 +819,54 @@ class TestHandleRingLink(ClientTestBase):
     self.assertEqual(self.interface.get_coins(), 0)
     self.assertEqual(self.ctx.pending_ring_link, 0)
     self.assertEqual(self.ctx.prev_coins, 0)
+    self.assertEqual(self.bounces(), [])
+
+  async def test_exempt_change_is_not_shared(self) -> None:
+    await handle_ring_link(self.ctx)
+    self.pine.poke32(self.addr["coins"], 70)
+    self.ctx.ring_link_exempt = -30
+    await handle_ring_link(self.ctx)
+    self.assertEqual(self.bounces(), [])
+    self.assertEqual(self.ctx.prev_coins, 70)
+    self.assertEqual(self.ctx.ring_link_exempt, 0)
+    self.pine.poke32(self.addr["coins"], 60)
+    await handle_ring_link(self.ctx)
+    self.assertEqual(self.bounces(), [-10])
+
+  async def test_exempt_waits_for_payout(self) -> None:
+    await handle_ring_link(self.ctx)
+    self.pine.poke32(self.addr["coin pops"], 1)
+    self.ctx.ring_link_exempt = -30
+    await handle_ring_link(self.ctx)
+    self.assertEqual(self.ctx.ring_link_exempt, -30)
+    self.pine.poke32(self.addr["coin pops"], 0)
+    self.pine.poke32(self.addr["coins"], 75)
+    await handle_ring_link(self.ctx)
+    self.assertEqual(self.bounces(), [5])
+    self.assertEqual(self.ctx.prev_coins, 75)
+
+  async def test_exempt_mixed_with_pickup(self) -> None:
+    await handle_ring_link(self.ctx)
+    self.pine.poke32(self.addr["coins"], 130)
+    self.ctx.ring_link_exempt = 40
+    await handle_ring_link(self.ctx)
+    self.assertEqual(self.bounces(), [-10])
+
+  async def test_exempt_dropped_at_baseline(self) -> None:
+    self.ctx.ring_link_exempt = -30
+    await handle_ring_link(self.ctx)
+    self.assertEqual(self.ctx.prev_coins, 100)
+    self.assertEqual(self.ctx.ring_link_exempt, 0)
+
+  async def test_disabling_rebaselines(self) -> None:
+    await handle_ring_link(self.ctx)
+    self.ctx.ring_link_enabled = False
+    self.pine.poke32(self.addr["coins"], 500)
+    await handle_ring_link(self.ctx)
+    self.assertIsNone(self.ctx.prev_coins)
+    self.ctx.ring_link_enabled = True
+    await handle_ring_link(self.ctx)
+    self.assertEqual(self.ctx.prev_coins, 500)
     self.assertEqual(self.bounces(), [])
 
 

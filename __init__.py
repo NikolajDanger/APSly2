@@ -544,7 +544,9 @@ class Sly2World(World):
           "trap_chance",
           "trap_weights",
           "trap_duration",
+          "debt_trap_percentage",
           "ring_link",
+          "ring_link_behavior",
           "thiefnet_icon_theme",
           "thiefnet_text_color",
           "skip_intro"
@@ -614,6 +616,7 @@ class Sly2World(World):
     return self.options.as_dict(
       "death_link",
       "ring_link",
+      "ring_link_behavior",
       "permissive_yaml",
       "starting_episode",
       "goal",
@@ -650,6 +653,7 @@ class Sly2World(World):
       "trap_chance",
       "trap_weights",
       "trap_duration",
+      "debt_trap_percentage",
       "thiefnet_icon_theme",
       "thiefnet_text_color",
       "skip_intro"

@@ -344,7 +344,9 @@ class Sly2Context(CommonContext): # type: ignore[misc]
   ring_link_source: int = 0
   pending_ring_link: int = 0
   prev_coins: Optional[int] = None
+  ring_link_exempt: int = 0
   pending_coins: int = 0
+  pending_debt_traps: int = 0
 
   # Game state
   is_loading: bool = False
