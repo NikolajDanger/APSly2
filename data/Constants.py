@@ -705,6 +705,11 @@ ADDRESSES = {
     # text color; in each, bit 7 = "set by the player", low bits = the value.
     "thiefnet prefs": 0x3D9AF8,
     "items received": 0x3D9AFC,
+    # The game keeps no lifetime pickpocket record, only the stock per loot
+    # type, which selling lowers.
+    "loot total": 0x3D9B00,
+    "loot collected": 0x3D9B04,
+    "loot last seen": [0x3D9B08+i*4 for i in range(len(LOOT))],
     "coins": 0x3D4B00,
     "gadgets": 0x3D4AF8,
     "active character": 0x3D4A6C,

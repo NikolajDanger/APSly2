@@ -192,3 +192,45 @@ class TestEpisode8KeysLoweredWhenPermissive(OptionTestBase):
 
   def test_requirement_lowered(self) -> None:
     self.assertLessEqual(self.world.options.required_keys_episode_8.value, 10)
+
+
+class TestUniqueLootCountCoercion(OptionTestBase):
+  options = {
+    "permissive_yaml": True,
+    "include_pickpocketing": True,
+    "pickpocket_check_mode": "Unique",
+    "pickpocket_check_max": 45,
+  }
+
+  def test_max_lowered(self) -> None:
+    self.assertEqual(self.world.options.pickpocket_check_max.value, 30)
+
+  def test_strict_raises(self) -> None:
+    self.assert_option_error({**self.options, "permissive_yaml": False})
+
+
+class TestTotalLootMaxKept(OptionTestBase):
+  options = {
+    "include_pickpocketing": True,
+    "pickpocket_check_mode": "Total",
+    "pickpocket_check_max": 1000,
+  }
+
+  def test_max_kept(self) -> None:
+    self.assertEqual(self.world.options.pickpocket_check_max.value, 1000)
+
+
+class TestTotalLootMaxBelowStepCoercion(OptionTestBase):
+  options = {
+    "permissive_yaml": True,
+    "include_pickpocketing": True,
+    "pickpocket_check_mode": "Total",
+    "pickpocket_check_max": 4,
+    "pickpocket_check_step": 9,
+  }
+
+  def test_max_raised(self) -> None:
+    self.assertEqual(self.world.options.pickpocket_check_max.value, 9)
+
+  def test_strict_raises(self) -> None:
+    self.assert_option_error({**self.options, "permissive_yaml": False})

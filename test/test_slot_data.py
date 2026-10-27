@@ -29,6 +29,9 @@ PASSTHROUGH_OPTIONS = [
   "thiefnet_maximum",
   "include_vaults",
   "include_pickpocketing",
+  "pickpocket_check_mode",
+  "pickpocket_check_max",
+  "pickpocket_check_step",
   "tasksanity",
   "small_guard_loot_chance",
   "large_guard_loot_chance",
@@ -134,6 +137,8 @@ class TestRandomizedLoot(Sly2TestBase):
 
 class TestTrackerPassthrough(Sly2TestBase):
   options = {
+    "pickpocket_check_mode": "Unique",
+    "pickpocket_check_max": 20,
     "goal": "Clockwerk_Hunt",
     "keys_in_pool": 14,
     "required_keys_goal": 9,
@@ -178,6 +183,15 @@ class TestTrackerPassthrough(Sly2TestBase):
         item_dict[item.name].category for item in self.multiworld.itempool
       )
     )
+
+
+class TestTrackerPassthroughTotal(TestTrackerPassthrough):
+  options = {
+    **TestTrackerPassthrough.options,
+    "pickpocket_check_mode": "Total",
+    "pickpocket_check_max": 283,
+    "pickpocket_check_step": 7,
+  }
 
 
 OPERATION_SLUGS = [

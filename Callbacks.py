@@ -42,11 +42,13 @@ from .data.Names import (
   progressive_episode,
   task_location,
   thiefnet_location,
+  total_loot_location,
   treasure_location,
+  unique_loot_location,
   vault_location,
 )
 from .Sly2Interface import Sly2Episode, PowerUps, INFOBOX_CLIENT_STRING
-from .Sly2Options import RingLinkBehavior, ScoutThiefnet
+from .Sly2Options import PickpocketCheckMode, RingLinkBehavior, ScoutThiefnet
 
 if TYPE_CHECKING:
   from .Sly2Client import Sly2Context
@@ -202,7 +204,7 @@ def episode_loot(loot_table: dict[str, list], i: int, j: int) -> list[str]:
 
 def dynamic_loot_odds(
   loot_table: dict[str, list],
-  checked: set[int],
+  collected_loot: set[str],
   i: int,
   j: int,
   base_odds: tuple
@@ -211,10 +213,7 @@ def dynamic_loot_odds(
   if len(names) != 6:
     return base_odds
 
-  collected = [
-    Locations.location_dict[pickpocket_location(name)].code in checked
-    for name in names
-  ]
+  collected = [name in collected_loot for name in names]
   if not any(collected) or all(collected):
     return base_odds
 
@@ -241,6 +240,26 @@ def dynamic_loot_odds(
     remainders[k] -= 1
   return tuple(odds)
 
+def collected_loot(ctx: 'Sly2Context') -> set[str]:
+  """The loot types the loot tables no longer favor: checked ones under
+  Lootsanity, ever pickpocketed ones under Unique, none under Total"""
+  if ctx.slot_data is None:
+    return set()
+
+  mode = ctx.slot_data["pickpocket_check_mode"]
+  if mode == PickpocketCheckMode.option_Unique:
+    return {
+      loot for i, loot in enumerate(LOOT) if ctx.loot_collected >> i & 1
+    }
+  if mode == PickpocketCheckMode.option_Total:
+    return set()
+
+  checked = ctx.checked_locations | ctx.locations_checked
+  return {
+    loot for loot in LOOT
+    if Locations.location_dict[pickpocket_location(loot)].code in checked
+  }
+
 def loot_odds_row(ctx: 'Sly2Context', i: int, j: int) -> tuple:
   if ctx.slot_data is None:
     return PICKPOCKET_LOOT_TABLE_CHANCES[49]
@@ -250,8 +269,15 @@ def loot_odds_row(ctx: 'Sly2Context', i: int, j: int) -> tuple:
   if not ctx.slot_data["dynamic_loot_tables"]:
     return base
 
-  checked = ctx.checked_locations | ctx.locations_checked
-  return dynamic_loot_odds(ctx.slot_data["loot_table"], checked, i, j, base)
+  collected = collected_loot(ctx)
+  if (
+    ctx.slot_data["pickpocket_check_mode"] ==
+    PickpocketCheckMode.option_Unique and
+    len(collected) >= ctx.slot_data["pickpocket_check_max"]
+  ):
+    return base
+
+  return dynamic_loot_odds(ctx.slot_data["loot_table"], collected, i, j, base)
 
 def set_pickpocketing(ctx: 'Sly2Context') -> None:
   """Set pickpocketing chances to be higher"""
@@ -1061,6 +1087,49 @@ def reset_traps(ctx: 'Sly2Context') -> None:
   ctx.game_interface.release_guards()
   ctx.game_interface.stop_sound()
 
+def track_loot(ctx: 'Sly2Context') -> int:
+  """Add loot stock rises to the saved lifetime total and collected mask,
+  ignoring sales, and return the total"""
+  stock = ctx.game_interface.get_loot_stock()
+  total, collected, last_seen = ctx.game_interface.read_loot_tracking()
+  if stock != last_seen:
+    for i, (now, before) in enumerate(zip(stock, last_seen)):
+      if now > before:
+        total += now - before
+        collected |= 1 << i
+    ctx.game_interface.write_loot_tracking(total, collected, stock)
+    ctx.game_interface.logger.debug(
+      f"Loot stock changed: total {total}, collected {collected:#010x}"
+    )
+
+  if collected != ctx.loot_collected:
+    ctx.loot_collected = collected
+    if (
+      ctx.slot_data is not None and
+      ctx.slot_data["pickpocket_check_mode"] ==
+      PickpocketCheckMode.option_Unique
+    ):
+      ctx.loot_dirty = True
+  return total
+
+def reached_pickpocket_checks(ctx: 'Sly2Context', total: int) -> list[str]:
+  """The Unique or Total pickpocket locations reached so far"""
+  if ctx.slot_data is None:
+    return []
+
+  maximum = ctx.slot_data["pickpocket_check_max"]
+  if (
+    ctx.slot_data["pickpocket_check_mode"] ==
+    PickpocketCheckMode.option_Unique
+  ):
+    unique = bin(ctx.loot_collected).count("1")
+    return [unique_loot_location(k) for k in range(1, min(unique, maximum)+1)]
+
+  step = ctx.slot_data["pickpocket_check_step"]
+  return [
+    total_loot_location(n) for n in range(step, min(total, maximum)+1, step)
+  ]
+
 async def handle_checks(ctx: 'Sly2Context') -> None:
   """Send checks to the multiworld"""
   if ctx.slot_data is None:
@@ -1140,11 +1209,19 @@ async def handle_checks(ctx: 'Sly2Context') -> None:
         ctx.locations_checked.add(location_code)
 
   # Loot
-  loot_stolen = ctx.game_interface.all_loot_stolen()
-  for i, loot in enumerate(LOOT.keys()):
-    stolen = loot_stolen[i]
-    if stolen:
-      location_name = pickpocket_location(loot)
+  if (
+    ctx.slot_data["pickpocket_check_mode"] ==
+    PickpocketCheckMode.option_Lootsanity
+  ):
+    loot_stolen = ctx.game_interface.all_loot_stolen()
+    for i, loot in enumerate(LOOT.keys()):
+      stolen = loot_stolen[i]
+      if stolen:
+        location_name = pickpocket_location(loot)
+        location_code = Locations.location_dict[location_name].code
+        ctx.locations_checked.add(location_code)
+  elif ctx.slot_data["include_pickpocketing"]:
+    for location_name in reached_pickpocket_checks(ctx, track_loot(ctx)):
       location_code = Locations.location_dict[location_name].code
       ctx.locations_checked.add(location_code)
 

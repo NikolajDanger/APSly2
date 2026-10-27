@@ -10,7 +10,9 @@ from .Names import (
   pickpocket_location,
   task_location,
   thiefnet_location,
+  total_loot_location,
   treasure_location,
+  unique_loot_location,
   vault_location,
 )
 
@@ -56,6 +58,16 @@ pickpocket_list = [
   for loot in LOOT.keys()
 ]
 
+unique_loot_list = [
+  (unique_loot_location(i), LocationCategory.UNIQUE_LOOT)
+  for i in range(1, len(LOOT)+1)
+]
+
+total_loot_list = [
+  (total_loot_location(n), LocationCategory.TOTAL_LOOT)
+  for n in range(1, 1001)
+]
+
 tasksanity_list = [
   (task_location(ep, job, task), LocationCategory.TASK)
   for ep, jobs in TASKS.items()
@@ -70,7 +82,9 @@ location_list = (
   bottles_list +
   purchases_list +
   pickpocket_list +
-  tasksanity_list
+  tasksanity_list +
+  unique_loot_list +
+  total_loot_list
 )
 
 base_code = 321_000
@@ -93,6 +107,8 @@ location_groups = {
     LocationCategory.TREASURE,
     LocationCategory.PURCHASE,
     LocationCategory.PICKPOCKET,
+    LocationCategory.UNIQUE_LOOT,
+    LocationCategory.TOTAL_LOOT,
     LocationCategory.TASK
   ]
 }

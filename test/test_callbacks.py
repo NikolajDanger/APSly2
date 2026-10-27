@@ -30,6 +30,7 @@ from ..Callbacks import (
   handle_ring_link,
   handle_traps,
   classification_label,
+  collected_loot,
   init,
   loot_odds_row,
   pay_out_coins,
@@ -73,7 +74,9 @@ from ..data.Names import (
   pickpocket_location,
   progressive_episode,
   thiefnet_location,
+  total_loot_location,
   treasure_location,
+  unique_loot_location,
   vault_location,
 )
 from ..pcsx2_interface.pine import PineConnectionError
@@ -86,7 +89,7 @@ from ..Sly2Client import (
   update_connection_status
 )
 from ..Sly2Interface import PowerUps, Sly2Episode
-from ..Sly2Options import RingLinkBehavior, ScoutThiefnet
+from ..Sly2Options import PickpocketCheckMode, RingLinkBehavior, ScoutThiefnet
 from .client_base import (
   ClientTestBase,
   build_dag,
@@ -132,11 +135,11 @@ class TestLootHelpers(unittest.TestCase):
     names = episode_loot(WIRE_LOOT, 0, 0)
     self.assertEqual(dynamic_loot_odds(WIRE_LOOT, set(), 0, 0, base), base)
     self.assertEqual(
-      dynamic_loot_odds(WIRE_LOOT, pickpocket_codes(names), 0, 0, base), base
+      dynamic_loot_odds(WIRE_LOOT, set(names), 0, 0, base), base
     )
     partial = {k: v for k, v in WIRE_LOOT.items() if k != names[0]}
     self.assertEqual(
-      dynamic_loot_odds(partial, pickpocket_codes(names[1:2]), 0, 0, base),
+      dynamic_loot_odds(partial, set(names[1:2]), 0, 0, base),
       base
     )
 
@@ -147,8 +150,7 @@ class TestLootHelpers(unittest.TestCase):
         for j in range(2):
           names = episode_loot(WIRE_LOOT, i, j)
           for k in range(1, 6):
-            checked = pickpocket_codes(names[:k])
-            odds = dynamic_loot_odds(WIRE_LOOT, checked, i, j, base)
+            odds = dynamic_loot_odds(WIRE_LOOT, set(names[:k]), i, j, base)
             context = (distribution, i, j, k)
             self.assertEqual(sum(odds), 100, context)
             self.assertTrue(all(o >= 1 for o in odds), context)
@@ -180,7 +182,7 @@ class TestLootOddsRow(ClientTestBase):
     self.ctx.locations_checked = pickpocket_codes(names[1:2])
     self.assertEqual(
       loot_odds_row(self.ctx, 0, 0),
-      dynamic_loot_odds(WIRE_LOOT, pickpocket_codes(names[:2]), 0, 0, base)
+      dynamic_loot_odds(WIRE_LOOT, set(names[:2]), 0, 0, base)
     )
 
 
@@ -433,6 +435,132 @@ class TestHandleChecks(ClientTestBase):
         self.loc(vault_location(EPISODE_NAMES[1]))}
     )
     self.assertEqual(self.ctx.last_checked_locations, sent[1])
+
+
+class TestPickpocketCheckModes(ClientTestBase):
+  options = {"include_pickpocketing": True}
+
+  async def asyncSetUp(self) -> None:
+    await super().asyncSetUp()
+    self.enter(1, 2)
+    self.slot_data["pickpocket_check_max"] = 17
+    self.slot_data["pickpocket_check_step"] = 5
+
+  def sent_locations(self) -> set[int]:
+    return {
+      location
+      for message in self.ctx.sent_cmds("LocationChecks")
+      for location in message["locations"]
+    }
+
+  def stock(self, loot: str, count: int) -> None:
+    self.pine.poke32(self.addr["loot"][list(LOOT).index(loot)], count)
+
+  def tracking(self) -> tuple[int, int, list[int]]:
+    return self.interface.read_loot_tracking()
+
+  async def test_unique(self) -> None:
+    self.slot_data["pickpocket_check_mode"] = PickpocketCheckMode.option_Unique
+    self.stock("Gold Ring", 2)
+    self.stock("Topaz", 1)
+    await handle_checks(self.ctx)
+    self.assertEqual(self.sent_locations(), {
+      self.loc(unique_loot_location(1)), self.loc(unique_loot_location(2))
+    })
+    self.assertEqual(
+      collected_loot(self.ctx), {"Gold Ring", "Topaz"}
+    )
+    total, collected, last_seen = self.tracking()
+    self.assertEqual(total, 3)
+    self.assertEqual(
+      collected,
+      1 << list(LOOT).index("Gold Ring") | 1 << list(LOOT).index("Topaz")
+    )
+    self.assertEqual(last_seen[list(LOOT).index("Gold Ring")], 2)
+
+  async def test_unique_capped_at_max(self) -> None:
+    self.slot_data["pickpocket_check_mode"] = PickpocketCheckMode.option_Unique
+    self.slot_data["pickpocket_check_max"] = 3
+    for loot in list(LOOT)[:5]:
+      self.stock(loot, 1)
+    await handle_checks(self.ctx)
+    self.assertEqual(
+      self.sent_locations(),
+      {self.loc(unique_loot_location(k)) for k in range(1, 4)}
+    )
+
+  async def test_total_ignores_sales(self) -> None:
+    self.slot_data["pickpocket_check_mode"] = PickpocketCheckMode.option_Total
+    self.stock("Gold Ring", 4)
+    await handle_checks(self.ctx)
+    self.assertEqual(self.sent_locations(), set())
+    self.stock("Gold Ring", 1)
+    await handle_checks(self.ctx)
+    self.assertEqual(self.tracking()[0], 4)
+    self.stock("Gold Ring", 2)
+    await handle_checks(self.ctx)
+    self.assertEqual(self.tracking()[0], 5)
+    self.assertEqual(
+      self.sent_locations(), {self.loc(total_loot_location(5))}
+    )
+    self.assertEqual(collected_loot(self.ctx), set())
+
+  async def test_total_capped_at_max(self) -> None:
+    self.slot_data["pickpocket_check_mode"] = PickpocketCheckMode.option_Total
+    self.stock("Topaz", 40)
+    await handle_checks(self.ctx)
+    self.assertEqual(
+      self.sent_locations(),
+      {self.loc(total_loot_location(5*k)) for k in range(1, 4)}
+    )
+
+  async def test_resumes_from_saved_tracking(self) -> None:
+    self.slot_data["pickpocket_check_mode"] = PickpocketCheckMode.option_Total
+    last_seen = [0]*len(LOOT)
+    last_seen[list(LOOT).index("Topaz")] = 2
+    self.interface.write_loot_tracking(9, 0, last_seen)
+    self.stock("Topaz", 3)
+    await handle_checks(self.ctx)
+    self.assertEqual(self.tracking()[0], 10)
+    self.assertEqual(self.sent_locations(), {
+      self.loc(total_loot_location(5)), self.loc(total_loot_location(10))
+    })
+
+  async def test_no_lootsanity_checks(self) -> None:
+    self.slot_data["pickpocket_check_mode"] = PickpocketCheckMode.option_Unique
+    self.stock("Gold Ring", 1)
+    await handle_checks(self.ctx)
+    self.assertNotIn(
+      self.loc(pickpocket_location("Gold Ring")), self.sent_locations()
+    )
+
+  async def test_untracked_without_pickpocketing(self) -> None:
+    self.slot_data["pickpocket_check_mode"] = PickpocketCheckMode.option_Total
+    self.slot_data["include_pickpocketing"] = False
+    self.stock("Gold Ring", 9)
+    await handle_checks(self.ctx)
+    self.assertEqual(self.tracking()[0], 0)
+    self.assertEqual(self.sent_locations(), set())
+
+  async def test_unique_odds_favor_new_loot(self) -> None:
+    self.slot_data["pickpocket_check_mode"] = PickpocketCheckMode.option_Unique
+    self.slot_data["pickpocket_check_max"] = 3
+    self.slot_data["dynamic_loot_tables"] = True
+    self.slot_data["loot_table_distribution"] = 50
+    base = PICKPOCKET_LOOT_TABLE_CHANCES[49]
+    names = episode_loot(self.slot_data["loot_table"], 0, 0)
+    self.ctx.loot_dirty = False
+    self.stock(names[0], 1)
+    await handle_checks(self.ctx)
+    self.assertTrue(self.ctx.loot_dirty)
+    self.assertEqual(
+      loot_odds_row(self.ctx, 0, 0),
+      dynamic_loot_odds(WIRE_LOOT, {names[0]}, 0, 0, base)
+    )
+    for name in names[1:3]:
+      self.stock(name, 1)
+    await handle_checks(self.ctx)
+    self.assertEqual(loot_odds_row(self.ctx, 0, 0), base)
 
 
 class TestHandleCheckGoal(ClientTestBase):

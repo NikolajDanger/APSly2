@@ -23,7 +23,6 @@ from .data.Constants import (
 from .data.Names import (
   ItemCategory,
   LocationCategory,
-  pickpocket_location,
   thiefnet_location,
   vault_location,
 )
@@ -34,6 +33,7 @@ from .Callbacks import (
   init,
   update,
   mark_dirty,
+  collected_loot,
   compute_available_episodes,
   episode_loot,
   loot_odds_row,
@@ -217,9 +217,10 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
 
     available = compute_available_episodes(self.ctx)
 
+    collected = collected_loot(self.ctx)
+
     def loot_color(loot_name: str, accessible: bool) -> str:
-      code = Locations.location_dict[pickpocket_location(loot_name)].code
-      if code in self.ctx.checked_locations:
+      if loot_name in collected:
         return "grey"
       return "white" if accessible else "red"
 
@@ -369,6 +370,8 @@ class Sly2Context(CommonContext): # type: ignore[misc]
   loot_dirty: bool = True
   bottles_dirty: bool = True
   text_dirty: bool = True
+  # Loot types ever pickpocketed, as last read from the save (bit per LOOT)
+  loot_collected: int = 0
 
   # Items and checks
   inventory: Dict[int,int]
@@ -458,6 +461,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     self.clockwerk_parts_count = 0
     self.locations_checked = set()
     self.last_checked_locations = set()
+    self.loot_collected = 0
     self.goal_sent = False
     self.current_map = None
     self.load_pending = False
@@ -574,14 +578,14 @@ class Sly2Context(CommonContext): # type: ignore[misc]
         slot_data = ctx.slot_data
         loot_table = slot_data["loot_table"]
         show_odds = slot_data["include_pickpocketing"]
+        collected = collected_loot(ctx)
         lines = [f"== Episode {episode + 1} Loot =="]
         for j in range(2):
           lines.append(f"{ENEMIES[episode][j]}:")
           loot_odds = loot_odds_row(ctx, episode, j)
           for k, name in enumerate(episode_loot(loot_table, episode, j)):
             text = f"{name} ({loot_odds[k]}%)" if show_odds else name
-            code = Locations.location_dict[pickpocket_location(name)].code
-            if code in ctx.checked_locations:
+            if name in collected:
               text = f"[color=808080]{text}[/color]"
             lines.append(f"  {text}")
         return "\n".join(lines)

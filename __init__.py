@@ -15,7 +15,12 @@ from worlds.LauncherComponents import (
   icon_paths,
 )
 
-from .Sly2Options import Sly2Options, StartingEpisode, sly2_option_groups
+from .Sly2Options import (
+  PickpocketCheckMode,
+  Sly2Options,
+  StartingEpisode,
+  sly2_option_groups
+)
 from .Regions import create_regions
 from .data.Items import item_dict, item_groups, ordered_group, Sly2Item
 from .data.Locations import location_dict, location_groups, tasksanity_list
@@ -284,13 +289,48 @@ class Sly2World(World):
         opt.treasure_value_maximum.value, opt.treasure_value_minimum.value
       )
 
+    pickpocket_mode = opt.pickpocket_check_mode.value
+    pickpocket_max = opt.pickpocket_check_max
+    pickpocket_step = opt.pickpocket_check_step
+    if self._coerce_or_raise(
+      opt,
+      bool(opt.include_pickpocketing) and
+      pickpocket_mode == PickpocketCheckMode.option_Unique and
+      pickpocket_max.value > len(LOOT),
+      f"The Unique pickpocket_check_mode has {len(LOOT)} types of loot, but "
+      f"pickpocket_check_max is {pickpocket_max.value}.",
+      f"Lowering it to {len(LOOT)}."
+    ):
+      pickpocket_max.value = len(LOOT)
+
+    if self._coerce_or_raise(
+      opt,
+      bool(opt.include_pickpocketing) and
+      pickpocket_mode == PickpocketCheckMode.option_Total and
+      pickpocket_max.value < pickpocket_step.value,
+      f"pickpocket_check_max ({pickpocket_max.value}) is below "
+      f"pickpocket_check_step ({pickpocket_step.value}), so no loot would "
+      "give a check.",
+      "Raising pickpocket_check_max to pickpocket_check_step."
+    ):
+      pickpocket_max.value = pickpocket_step.value
+
+    if not opt.include_pickpocketing:
+      n_pickpocket = 0
+    elif pickpocket_mode == PickpocketCheckMode.option_Lootsanity:
+      n_pickpocket = len(LOOT)
+    elif pickpocket_mode == PickpocketCheckMode.option_Unique:
+      n_pickpocket = pickpocket_max.value
+    else:
+      n_pickpocket = pickpocket_max.value // pickpocket_step.value
+
     # Checking number of locations and items
     n_locations = (
       69 + # jobs
       24 + # treasures
       24 + # thiefnet
       (8 if opt.include_vaults else 0) +
-      (30 if opt.include_pickpocketing else 0) +
+      n_pickpocket +
       (len(tasksanity_list) if opt.tasksanity else 0)
     )
     if opt.bottle_location_bundle_size != 0:
@@ -372,6 +412,28 @@ class Sly2World(World):
     # The Clockwerk parts that gate Anatomy for Disaster can only come
     # from locations collectable before the sections they unlock
     if opt.episode_8_keys.value != 4:
+      ep8_pickpocket = [0]*4
+      if (
+        n_pickpocket and
+        pickpocket_mode == PickpocketCheckMode.option_Lootsanity
+      ):
+        for locations in LOOT.values():
+          for i, _, j in locations:
+            if i == 8:
+              ep8_pickpocket[ceil(j/2)-1] += 1
+      elif pickpocket_mode == PickpocketCheckMode.option_Unique:
+        ep8_only = sorted(
+          min(ceil(j/2) for _, _, j in locations)
+          for locations in LOOT.values()
+          if all(i == 8 for i, _, _ in locations)
+        )
+        outside = len(LOOT) - len(ep8_only)
+        for k in range(outside+1, n_pickpocket+1):
+          ep8_pickpocket[ep8_only[k-outside-1]-1] += 1
+      elif pickpocket_mode == PickpocketCheckMode.option_Total:
+        # The checks that need every episode's loot (see Rules)
+        ep8_pickpocket[0] = n_pickpocket - 7*n_pickpocket//8
+
       def ep8_chapter_locations(n: int) -> int:
         jobs = EPISODES[EpisodeName.ANATOMY_FOR_DISASTER][n-1]
         count = len(jobs)
@@ -386,13 +448,7 @@ class Sly2World(World):
           count += ceil(30/opt.bottle_location_bundle_size.value)
         if n == 2 and opt.include_vaults:
           count += 1
-        if opt.include_pickpocketing:
-          count += sum(
-            1 for locations in LOOT.values()
-            for i, _, j in locations
-            if i == 8 and ceil(j/2) == n
-          )
-        return count
+        return count + ep8_pickpocket[n-1]
 
       chapters = [ep8_chapter_locations(n) for n in range(1, 5)]
 
@@ -525,6 +581,9 @@ class Sly2World(World):
           "thiefnet_maximum",
           "include_vaults",
           "include_pickpocketing",
+          "pickpocket_check_mode",
+          "pickpocket_check_max",
+          "pickpocket_check_step",
           "tasksanity",
           "small_guard_loot_chance",
           "large_guard_loot_chance",
@@ -634,6 +693,9 @@ class Sly2World(World):
       "thiefnet_maximum",
       "include_vaults",
       "include_pickpocketing",
+      "pickpocket_check_mode",
+      "pickpocket_check_max",
+      "pickpocket_check_step",
       "tasksanity",
       "small_guard_loot_chance",
       "large_guard_loot_chance",

@@ -130,7 +130,9 @@ class KeysInPool(Range):
 
   Setting this to values close to 500 requires that you set tasksanity to
   true, bottle_location_bundle_size to 1, and bottle_item_bundle_size to at
-  least 3 (4 if both vault and pickpocket checks are turned off).
+  least 3 (4 if both vault and pickpocket checks are turned off). With
+  pickpocket_check_mode set to Total and at least 41 pickpocket checks (49
+  without vault checks), a bottle_item_bundle_size of 2 is enough.
   """
 
   display_name = "Clockwerk Parts in Pool"
@@ -292,7 +294,7 @@ class DynamicLootTables(Toggle):
   """
   Whether the pickpocketing loot tables update during play, making loot whose
   checks have not been collected more common than loot that has already been
-  checked.
+  checked. Has no effect if pickpocket_check_mode is Total.
   """
   display_name = "Dynamic Loot Tables"
 
@@ -400,20 +402,42 @@ class BottleSanity(DefaultOnToggle):
 
   display_name = "Bottlesanity"
 
-# This is an option planned for the future, to be able to turn off LootSanity
-# and to have loot be counted using one of a few other options: either as an
-# overall total, or as total unique loot. However, for the initial
-# implementation, LootSanity will just be on by default, along with the option
-# of turning loot as locations off, similar to vaults.
-#
-# To see OTHER possible options related to loot being considered, check out what
-# has been writen in pull request #3 for this game's AP on GitHub.
-#class LootSanity(Choice):
-#    """
-#    Each piece of loot is its own check, rather than counting the number of
-#    total loot collected.
-#    """
-#    display_name = "Lootsanity"
+class PickpocketCheckMode(Choice):
+  """
+  How pickpocketing produces checks, if include_pickpocketing is on.
+
+  - Lootsanity: Each type of loot is its own check.
+  - Unique: A check for every new type of loot pickpocketed, up to
+    pickpocket_check_max types (at most 30).
+  - Total: A check every pickpocket_check_step pieces of loot pickpocketed,
+    up to pickpocket_check_max pieces of loot.
+  """
+  display_name = "Pickpocket Check Mode"
+  option_Lootsanity = 0
+  option_Unique = 1
+  option_Total = 2
+  default = 0
+
+class PickpocketCheckMax(Range):
+  """
+  The most loot that gives a check: loot types under the Unique
+  pickpocket_check_mode (at most 30), pieces of loot under Total. Only takes
+  effect if pickpocket_check_mode is Unique or Total.
+  """
+  display_name = "Pickpocket Check Max"
+  range_start = 1
+  range_end = 1000
+  default = 30
+
+class PickpocketCheckStep(Range):
+  """
+  How many pieces of loot you need to pickpocket for each check. Only takes
+  effect if pickpocket_check_mode is Total.
+  """
+  display_name = "Pickpocket Check Step"
+  range_start = 1
+  range_end = 10
+  default = 1
 
 class ScoutThiefnet(Choice):
   """
@@ -578,6 +602,9 @@ class Sly2Options(PerGameCommonOptions):
   coins_maximum: CoinsMaximum
   include_vaults: IncludeVaults
   include_pickpocketing: IncludePickpocketing
+  pickpocket_check_mode: PickpocketCheckMode
+  pickpocket_check_max: PickpocketCheckMax
+  pickpocket_check_step: PickpocketCheckStep
   tasksanity: TaskSanity
   small_guard_loot_chance: SmallGuardLootChance
   large_guard_loot_chance: LargeGuardLootChance
@@ -595,7 +622,6 @@ class Sly2Options(PerGameCommonOptions):
   bottle_location_bundle_size: BottleLocationBundleSize
   bottle_item_bundle_size: BottleItemBundleSize
   bottlesanity: BottleSanity
-  # lootsanity:LootSanity
   scout_thiefnet: ScoutThiefnet
   trap_chance: TrapChance
   trap_weights: TrapWeights
@@ -638,6 +664,9 @@ sly2_option_groups = [
     ScoutThiefnet
   ]),
   OptionGroup("Pick-pocketing",[
+    PickpocketCheckMode,
+    PickpocketCheckMax,
+    PickpocketCheckStep,
     RandomizeLoot,
     DynamicLootTables,
     SmallGuardLootChance,

@@ -12,7 +12,9 @@ from ..data.Names import (
   job_location,
   progressive_episode,
   thiefnet_location,
+  total_loot_location,
   treasure_location,
+  unique_loot_location,
   vault_location,
 )
 from . import Sly2TestBase
@@ -138,6 +140,66 @@ class TestPickpocketing(Sly2TestBase):
         self.assertIn(
           location.name, location_groups[LocationCategory.PICKPOCKET]
         )
+
+
+class TestUniqueLoot(Sly2TestBase):
+  options = {
+    "include_pickpocketing": True,
+    "pickpocket_check_mode": "Unique",
+    "pickpocket_check_max": 30,
+  }
+
+  def placed(self) -> set[str]:
+    return {loc.name for loc in self.multiworld.get_locations(self.player)}
+
+  def test_locations(self) -> None:
+    placed = self.placed()
+    self.assertFalse(location_groups[LocationCategory.PICKPOCKET] & placed)
+    self.assertFalse(location_groups[LocationCategory.TOTAL_LOOT] & placed)
+    self.assertEqual(
+      location_groups[LocationCategory.UNIQUE_LOOT] & placed,
+      {unique_loot_location(k) for k in range(1, 31)}
+    )
+
+  def test_needs_that_many_loot_types(self) -> None:
+    # The starting chapter of episode 1 has the 3 combs, the next the watches
+    self.assertTrue(self.can_reach_location(unique_loot_location(3)))
+    self.assertFalse(self.can_reach_location(unique_loot_location(4)))
+    self.collect(
+      self.get_item_by_name(progressive_episode(EpisodeName.THE_BLACK_CHATEAU))
+    )
+    self.assertTrue(self.can_reach_location(unique_loot_location(6)))
+    self.assertFalse(self.can_reach_location(unique_loot_location(7)))
+    self.collect_all_but([])
+    self.assertTrue(self.can_reach_location(unique_loot_location(30)))
+
+
+class TestTotalLoot(Sly2TestBase):
+  options = {
+    "include_pickpocketing": True,
+    "pickpocket_check_mode": "Total",
+    "pickpocket_check_max": 115,
+    "pickpocket_check_step": 7,
+  }
+
+  def test_locations(self) -> None:
+    placed = {loc.name for loc in self.multiworld.get_locations(self.player)}
+    self.assertEqual(
+      location_groups[LocationCategory.TOTAL_LOOT] & placed,
+      {total_loot_location(7*k) for k in range(1, 17)}
+    )
+    self.assertFalse(location_groups[LocationCategory.UNIQUE_LOOT] & placed)
+
+  def test_scales_with_episodes(self) -> None:
+    # Check k of 16 needs loot in ceil(k/2) episodes
+    self.collect_by_name(progressive_episode(EpisodeName.THE_BLACK_CHATEAU))
+    self.assertTrue(self.can_reach_location(total_loot_location(14)))
+    self.assertFalse(self.can_reach_location(total_loot_location(21)))
+    self.collect_by_name(progressive_episode(EpisodeName.JAILBREAK))
+    self.assertTrue(self.can_reach_location(total_loot_location(28)))
+    self.assertFalse(self.can_reach_location(total_loot_location(35)))
+    self.collect_all_but([])
+    self.assertTrue(self.can_reach_location(total_loot_location(112)))
 
 
 class GoalTestBase(Sly2TestBase):

@@ -15,15 +15,54 @@ from .data.Names import (
   bottle_item,
   bottle_location,
   bottles_collected_location,
+  episode_region,
   job_location,
   task_location,
   thiefnet_location,
   treasure_location,
   vault_location,
 )
+from .Regions import loot_regions, pickpocket_check_locations, tracking
+from .Sly2Options import PickpocketCheckMode
 
 if typing.TYPE_CHECKING:
   from . import Sly2World
+
+def set_pickpocket_check_rules(world: "Sly2World") -> None:
+  """Unique check k needs k loot types reachable; Total check k of n needs
+  loot reachable in ceil(8k/n) episodes"""
+  player = world.player
+  locations = pickpocket_check_locations(world)
+
+  if world.options.pickpocket_check_mode == PickpocketCheckMode.option_Unique:
+    type_regions = [
+      loot_regions(world, eps) for eps in world.loot_table.values()
+    ]
+
+    def loot_types(state: CollectionState) -> int:
+      return sum(
+        any(state.can_reach_region(r, player) for r in regions)
+        for regions in type_regions
+      )
+
+    for k, name in enumerate(locations, 1):
+      add_rule(
+        world.get_location(name),
+        lambda state, k=k: loot_types(state) >= k
+      )
+    return
+
+  # The tracker only needs some loot reachable, since any amount can be
+  # farmed from one episode's guards
+  episodes = [episode_region(i+1, 1) for i in range(len(EPISODES))]
+  for k, name in enumerate(locations, 1):
+    need = 1 if tracking(world) else ceil(len(episodes)*k/len(locations))
+    add_rule(
+      world.get_location(name),
+      lambda state, need=need: sum(
+        state.can_reach_region(r, player) for r in episodes
+      ) >= need
+    )
 
 def set_rules(world: "Sly2World") -> None:
   player = world.player
@@ -185,6 +224,12 @@ def set_rules(world: "Sly2World") -> None:
         )
       )
 
+
+  if (
+    world.options.include_pickpocketing and
+    world.options.pickpocket_check_mode != PickpocketCheckMode.option_Lootsanity
+  ):
+    set_pickpocket_check_rules(world)
 
   if world.options.goal.value < 5:
     victory_condition = boss_victory_location(

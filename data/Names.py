@@ -61,6 +61,8 @@ class LocationCategory:
   TREASURE = "Treasure"
   PURCHASE = "Purchase"
   PICKPOCKET = "Pickpocket"
+  UNIQUE_LOOT = "Unique Loot"
+  TOTAL_LOOT = "Total Loot"
   TASK = "Task"
 
 class EpisodeName:
@@ -118,6 +120,12 @@ def thiefnet_location(number: int) -> str:
 
 def pickpocket_location(loot: str) -> str:
   return f"Pickpocket {loot}"
+
+def unique_loot_location(count: int) -> str:
+  return f"Pickpocket {count} unique loot"
+
+def total_loot_location(count: int) -> str:
+  return f"Pickpocket {count} loot"
 
 def bottle_location(episode: str, number: int) -> str:
   return f"{episode} - Bottle #{number:02}"

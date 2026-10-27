@@ -18,16 +18,18 @@ from .data.Names import (
   progressive_episode,
   task_location,
   thiefnet_location,
+  total_loot_location,
   treasure_location,
+  unique_loot_location,
   vault_location,
 )
+from .Sly2Options import PickpocketCheckMode, Sly2Options
 
 if typing.TYPE_CHECKING:
   from . import Sly2World
-  from .Sly2Options import Sly2Options
 
 def create_access_rule(
-  episode: str, n: int, options: "Sly2Options", player: int
+  episode: str, n: int, options: Sly2Options, player: int
 ) -> typing.Callable[[CollectionState], bool]:
   """Returns a function that checks if the player has access to a specific
   region"""
@@ -79,6 +81,28 @@ def create_access_rule(
     return access
 
   return rule
+
+def tracking(world: "Sly2World") -> bool:
+  """Whether this is a Universal Tracker generation, not the fuzzer's"""
+  return (
+    getattr(world.multiworld, "generation_is_fake", False) and
+    not world.fuzzing
+  )
+
+def loot_regions(world: "Sly2World", eps: typing.Sequence) -> list[str]:
+  """The episode regions where loot with these table entries is found"""
+  if tracking(world):
+    return sorted(set(episode_region(i, 1) for i,_,_ in eps))
+  return sorted(set(episode_region(i, ceil(j/2)) for i,_,j in eps))
+
+def pickpocket_check_locations(world: "Sly2World") -> list[str]:
+  """The Unique or Total pickpocket locations, in check order"""
+  options = world.options
+  maximum = options.pickpocket_check_max.value
+  if options.pickpocket_check_mode == PickpocketCheckMode.option_Unique:
+    return [unique_loot_location(k) for k in range(1, maximum+1)]
+  step = options.pickpocket_check_step.value
+  return [total_loot_location(n) for n in range(step, maximum+1, step)]
 
 def create_regions(world: "Sly2World") -> None:
   """Creates a region for each chapter of each episode"""
@@ -169,47 +193,50 @@ def create_regions(world: "Sly2World") -> None:
         {location_name: location_dict[location_name].code}
       )
 
-  if world.options.include_pickpocketing:
-    # Because loot can be found in multiple episodes but AP locations can only
-    # be in 1 region, we make "hybrid-regions" for these loot locations that
-    # can be accessed if the player has access to any 1 of the "base regions"
-    hybrid_region_names = []
-    for loot, eps in world.loot_table.items():
-      location_name = pickpocket_location(loot)
-      if (
-        getattr(world.multiworld, "generation_is_fake", False)
-        and not world.fuzzing
-      ):
-        regions = sorted(set(episode_region(i, 1) for i,_,_ in eps))
-      else:
-        regions = sorted(set(
-          episode_region(i, ceil(j/2)) for i,_,j in eps
-        ))
+  if not world.options.include_pickpocketing:
+    return
 
-      region_name = "/".join(regions)
+  if (
+    world.options.pickpocket_check_mode.value !=
+    PickpocketCheckMode.option_Lootsanity
+  ):
+    menu.add_locations({
+      name: location_dict[name].code
+      for name in pickpocket_check_locations(world)
+    })
+    return
 
-      # If it is in only 1 episode or a hybrid region that's already made,
-      # then add that location to that region.
-      if len(regions) == 1 or region_name in hybrid_region_names:
-        world.get_region(region_name).add_locations(
-          {location_name: location_dict[location_name].code}
-        )
+  # Because loot can be found in multiple episodes but AP locations can only
+  # be in 1 region, we make "hybrid-regions" for these loot locations that
+  # can be accessed if the player has access to any 1 of the "base regions"
+  hybrid_region_names = []
+  for loot, eps in world.loot_table.items():
+    location_name = pickpocket_location(loot)
+    regions = loot_regions(world, eps)
+    region_name = "/".join(regions)
 
-      # If it is in multiple episodes & that hybrid region has not been made
-      # yet, then create that hybrid region, add the location to it, and
-      # connect that hybrid region to each of the episodes that this loot can
-      # be found in.
-      else:
-        region = Region(region_name, world.player, world.multiworld)
-        region.add_locations(
-          {location_name: location_dict[location_name].code}
-        )
+    # If it is in only 1 episode or a hybrid region that's already made,
+    # then add that location to that region.
+    if len(regions) == 1 or region_name in hybrid_region_names:
+      world.get_region(region_name).add_locations(
+        {location_name: location_dict[location_name].code}
+      )
 
-        # Connect that hybrid region to each of the episodes' regions that
-        # this loot can be found in
-        world.multiworld.regions.append(region)
-        for r in regions:
-          other_region = world.get_region(r)
-          other_region.connect(region)
+    # If it is in multiple episodes & that hybrid region has not been made
+    # yet, then create that hybrid region, add the location to it, and
+    # connect that hybrid region to each of the episodes that this loot can
+    # be found in.
+    else:
+      region = Region(region_name, world.player, world.multiworld)
+      region.add_locations(
+        {location_name: location_dict[location_name].code}
+      )
 
-        hybrid_region_names.append(region_name)
+      # Connect that hybrid region to each of the episodes' regions that
+      # this loot can be found in
+      world.multiworld.regions.append(region)
+      for r in regions:
+        other_region = world.get_region(r)
+        other_region.connect(region)
+
+      hybrid_region_names.append(region_name)

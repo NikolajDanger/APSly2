@@ -620,7 +620,7 @@ class Sly2Interface(GameInterface):
       "savefile last world", "unload mega jump", "DAG root",
       "clock-la defeated", "hackpack", "sly pointer", "clock speed",
       "friction", "string table", "skip cutscene", "cave hook",
-      "coin pops"
+      "coin pops", "loot total", "loot collected"
     ]
     reads = [(4, a[name]) for name in words]
     reads += [(4, CAVE_HOOK_ORIG)]
@@ -629,7 +629,10 @@ class Sly2Interface(GameInterface):
     reads += [(4, a["sly bindings"] + 4*i) for i in range(3)]
     reads += [
       (4, address)
-      for table in ("bottle flags", "vaults", "loot", "operation completion")
+      for table in (
+        "bottle flags", "vaults", "loot", "loot last seen",
+        "operation completion"
+      )
       for address in a[table]
     ]
     reads += [(4, address) for ep in a["treasures"] for address in ep]
@@ -1117,11 +1120,31 @@ class Sly2Interface(GameInterface):
     ]
     self._batch_write32(write_operations)
 
+  def get_loot_stock(self) -> list[int]:
+    return self._batch_read32(self.addresses["loot"])
+
   def all_loot_stolen(self) -> list[bool]:
     """Batch read all loot statuses"""
-    loot_addresses = self.addresses["loot"]
-    values = self._batch_read32(loot_addresses)
-    return [value > 0 for value in values]
+    return [value > 0 for value in self.get_loot_stock()]
+
+  def read_loot_tracking(self) -> tuple[int, int, list[int]]:
+    """The lifetime pickpocket total, the mask of loot types ever
+    pickpocketed and the stock per type last seen, from the save"""
+    a = self.addresses
+    return (
+      self._read32(a["loot total"]),
+      self._read32(a["loot collected"]),
+      self._batch_read32(a["loot last seen"])
+    )
+
+  def write_loot_tracking(
+    self, total: int, collected: int, last_seen: list[int]
+  ) -> None:
+    a = self.addresses
+    self._batch_write32(
+      [(a["loot total"], total), (a["loot collected"], collected)] +
+      list(zip(a["loot last seen"], last_seen))
+    )
 
   def all_treasures_stolen(self) -> list[list[bool]]:
     """Batch read all treasure statuses across all episodes"""

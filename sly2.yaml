@@ -146,7 +146,9 @@ requires:
   #
   # Setting this to values close to 500 requires that you set tasksanity to
   # true, bottle_location_bundle_size to 1, and bottle_item_bundle_size to at
-  # least 3 (4 if both vault and pickpocket checks are turned off).
+  # least 3 (4 if both vault and pickpocket checks are turned off). With
+  # pickpocket_check_mode set to Total and at least 41 pickpocket checks (49
+  # without vault checks), a bottle_item_bundle_size of 2 is enough.
   #
   # You can define additional values between the minimum and maximum values.
   # Minimum value is 1
@@ -383,6 +385,43 @@ requires:
   ## Pick-pocketing ##
   ####################
 
+  # How pickpocketing produces checks, if include_pickpocketing is on.
+  #
+  # - Lootsanity: Each type of loot is its own check.
+  # - Unique: A check for every new type of loot pickpocketed, up to
+  #   pickpocket_check_max types (at most 30).
+  # - Total: A check every pickpocket_check_step pieces of loot pickpocketed,
+  #   up to pickpocket_check_max pieces of loot.
+  pickpocket_check_mode:
+    lootsanity: 100
+    unique: 0
+    total: 0
+
+  # The most loot that gives a check: loot types under the Unique
+  # pickpocket_check_mode (at most 30), pieces of loot under Total. Only takes
+  # effect if pickpocket_check_mode is Unique or Total.
+  #
+  # You can define additional values between the minimum and maximum values.
+  # Minimum value is 1
+  # Maximum value is 1000
+  pickpocket_check_max:
+    30: 100
+    random: 0
+    random-low: 0
+    random-high: 0
+
+  # How many pieces of loot you need to pickpocket for each check. Only takes
+  # effect if pickpocket_check_mode is Total.
+  #
+  # You can define additional values between the minimum and maximum values.
+  # Minimum value is 1
+  # Maximum value is 10
+  pickpocket_check_step:
+    1: 100
+    random: 0
+    random-low: 0
+    random-high: 0
+
   # Whether to shuffle all pickpocketing loot locations. A guard could have the
   # same piece of loot multiple times on their table, so there is no
   # guaranteeing that each guard will have exactly 6 different pieces of loot.
@@ -392,7 +431,7 @@ requires:
 
   # Whether the pickpocketing loot tables update during play, making loot whose
   # checks have not been collected more common than loot that has already been
-  # checked.
+  # checked. Has no effect if pickpocket_check_mode is Total.
   dynamic_loot_tables:
     'false': 100
     'true': 0
