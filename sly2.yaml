@@ -281,6 +281,7 @@ requires:
   # - Ice Trap: makes the ground slippery.
   # - Noise Trap: sounds an alarm and alerts nearby guards.
   # - Debt Trap: takes a percentage of your coins (see Debt Trap Percentage).
+  # - Bottle Sound Trap: plays the clink of a nearby bottle that isn't there.
   trap_weights:
     sly_1_trap: 10
     energy_drain_trap: 10
@@ -289,6 +290,7 @@ requires:
     ice_trap: 10
     noise_trap: 10
     debt_trap: 10
+    bottle_sound_trap: 10
 
   # How long each timed trap lasts, in seconds. Traps with an instant effect
   # (Sly 1 Trap, Energy Drain Trap, Debt Trap) have no duration.
@@ -297,6 +299,7 @@ requires:
     sugar_rush_trap: 15
     ice_trap: 20
     noise_trap: 10
+    bottle_sound_trap: 15
 
   # The percentage of your current coins a Debt Trap takes away.
   #

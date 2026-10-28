@@ -41,7 +41,9 @@
 #     functions. With interval 0 the sound plays once and the id is cleared;
 #     with interval N it replays every N frames until the client clears the id,
 #     so a rhythmic effect keeps frame-accurate timing without the client
-#     driving each hit.
+#     driving each hit. While a pitch range is set, each play gets a random
+#     pitch in [min, min + range) from the cave's own generator (xorshift),
+#     so a fast repeat doesn't need the client to rewrite it every hit.
 #   guards: when the remove-guards flag is set, despawns every guard in the
 #     world through the game's own removal (remove_guards below) and clears
 #     the flag.
@@ -412,7 +414,32 @@ splay:
 sfire:
 	jal   0x1fbb90             # new sound instance, id = k1
 	move  $a0, $k1
+	lui   $k0, 0x0042
+	ori   $k0, $k0, 0xcf0c
+	lw    $a1, 0x28($k0)        # SOUND_PITCH_RANGE (0x0042CF34), float
+	beq   $a1, $zero, sstart    # no range: keep the default pitch
 	move  $a0, $v0
+	lw    $a2, 0x30($k0)        # SOUND_SEED (0x0042CF3C)
+	sll   $a3, $a2, 13
+	xor   $a2, $a2, $a3
+	srl   $a3, $a2, 17
+	xor   $a2, $a2, $a3
+	sll   $a3, $a2, 5
+	xor   $a2, $a2, $a3
+	sw    $a2, 0x30($k0)
+	srl   $a3, $a2, 9
+	lui   $a2, 0x3f80           # 1.0
+	or    $a3, $a3, $a2         # random float in [1, 2)
+	mtc1  $a3, $f0
+	mtc1  $a2, $f1
+	sub.s $f0, $f0, $f1
+	mtc1  $a1, $f1
+	mul.s $f0, $f0, $f1
+	lw    $a3, 0x2c($k0)        # SOUND_PITCH_MIN (0x0042CF38), float
+	mtc1  $a3, $f1
+	add.s $f0, $f0, $f1
+	swc1  $f0, 0x18($v0)        # the instance's pitch
+sstart:
 	jal   0x1fb2f8             # play it
 	move  $a1, $zero
 done:

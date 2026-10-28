@@ -2,6 +2,7 @@ from enum import IntEnum
 from typing import (
   Optional, NamedTuple, Tuple, Dict, List, Iterator, Generator, Deque
 )
+import random
 import struct
 import sys
 from contextlib import contextmanager
@@ -1359,9 +1360,18 @@ class Sly2Interface(GameInterface):
   def get_coins(self) -> int:
     return self._read32(self.addresses["coins"])
 
-  def play_sound(self, sound_id: int, interval: int = 0) -> bool:
+  def play_sound(
+    self, sound_id: int, interval: int = 0,
+    pitch: Optional[tuple[float, float]] = None
+  ) -> bool:
+    """Have the cave play `sound_id`, every `interval` + 1 frames when
+    nonzero, at a random pitch in the `pitch` (min, max) range if given"""
     if not self.cave_live():
       return False
+    low, high = pitch or (0.0, 0.0)
+    self._write_float(self.addresses["sound pitch min"], low)
+    self._write_float(self.addresses["sound pitch range"], high - low)
+    self._write32(self.addresses["sound seed"], random.getrandbits(32) | 1)
     self._write32(self.addresses["sound timer"], 0)
     self._write32(self.addresses["sound interval"], interval)
     self._write32(self.addresses["sound id"], sound_id)
@@ -1413,12 +1423,18 @@ class Sly2Interface(GameInterface):
   def set_thiefnet_row_chars(self, classes: Optional[list[str]]) -> None:
     self.menu_icon_installer.set_row_chars(classes)
 
-  def stop_sound(self) -> None:
+  def stop_sound(self, sound_id: Optional[int] = None) -> None:
+    """Stop the cave's sound, or only if it is `sound_id`"""
+    if sound_id is not None and self.current_sound() != sound_id:
+      return
     self._write32(self.addresses["sound id"], 0)
     self._write32(self.addresses["sound interval"], 0)
 
+  def current_sound(self) -> int:
+    return self._read32(self.addresses["sound id"])
+
   def sound_playing(self) -> bool:
-    return self._read32(self.addresses["sound id"]) != 0
+    return self.current_sound() != 0
 
   def set_items_received(self, n:int) -> None:
     self._write32(self.addresses["items received"], n)
@@ -1505,8 +1521,8 @@ class Sly2Interface(GameInterface):
         self.logger.debug("Replacing an old code cave left in memory")
       self._write_bytes(cave, blob)
     for name in ("death flag", "coin pops", "coin amount", "coin timer",
-                 "sound id", "sound interval", "sound timer", "cave call",
-                 "remove guards"):
+                 "sound id", "sound interval", "sound timer",
+                 "sound pitch range", "cave call", "remove guards"):
       self._write32(self.addresses[name], 0)
     self.loot_installer.reset()
     self._write32(self.addresses["coin interval"], COIN_POP_INTERVAL)

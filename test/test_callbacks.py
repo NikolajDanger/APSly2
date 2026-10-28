@@ -44,6 +44,9 @@ from ..Callbacks import (
 from ..data.Constants import (
   ALARM_INTERVAL,
   ALARM_SOUND_ID,
+  BOTTLE_CLINK_INTERVAL,
+  BOTTLE_CLINK_PITCH,
+  BOTTLE_CLINK_SOUND_ID,
   CAVE_HOOK_ENTRY,
   CAVE_HOOK_ORIG,
   CAVE_HOOK_ORIG_WORD,
@@ -1314,7 +1317,7 @@ class TestTraps(ClientTestBase):
     ):
       activate_trap(self.ctx, Trap.NOISE)
     alert.assert_called_once()
-    play.assert_called_once_with(ALARM_SOUND_ID, ALARM_INTERVAL)
+    play.assert_called_once_with(ALARM_SOUND_ID, ALARM_INTERVAL, None)
     # A map reload clears the cave, so the alarm is re-armed while active.
     with (
       patch.object(self.interface, "sound_playing", return_value=False),
@@ -1322,7 +1325,7 @@ class TestTraps(ClientTestBase):
       patch.object(Callbacks, "time", return_value=1005.0)
     ):
       handle_traps(self.ctx)
-    replay.assert_called_once_with(ALARM_SOUND_ID, ALARM_INTERVAL)
+    replay.assert_called_once_with(ALARM_SOUND_ID, ALARM_INTERVAL, None)
     # A still-running alarm is left alone so its rhythm is not reset.
     with (
       patch.object(self.interface, "sound_playing", return_value=True),
@@ -1338,7 +1341,45 @@ class TestTraps(ClientTestBase):
     ):
       handle_traps(self.ctx)
     release.assert_called_once()
-    stop.assert_called_once()
+    stop.assert_called_once_with(ALARM_SOUND_ID)
+
+  async def test_bottle_sound(self) -> None:
+    clink = (BOTTLE_CLINK_SOUND_ID, BOTTLE_CLINK_INTERVAL, BOTTLE_CLINK_PITCH)
+    with (
+      patch.object(self.interface, "alert_guards") as alert,
+      patch.object(self.interface, "play_sound") as play,
+      patch.object(Callbacks, "time", return_value=1000.0)
+    ):
+      activate_trap(self.ctx, Trap.BOTTLE_SOUND)
+    alert.assert_not_called()
+    play.assert_called_once_with(*clink)
+    with (
+      patch.object(self.interface, "release_guards") as release,
+      patch.object(self.interface, "stop_sound") as stop,
+      patch.object(Callbacks, "time", return_value=1015.0)
+    ):
+      handle_traps(self.ctx)
+    release.assert_not_called()
+    stop.assert_called_once_with(BOTTLE_CLINK_SOUND_ID)
+
+  async def test_sound_traps_share_the_slot(self) -> None:
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ENTRY)
+    sound = self.addr["sound id"]
+    with patch.object(Callbacks, "time", return_value=1000.0):
+      activate_trap(self.ctx, Trap.BOTTLE_SOUND)
+      activate_trap(self.ctx, Trap.NOISE)
+    self.assertEqual(self.pine.peek32(sound), ALARM_SOUND_ID)
+    with patch.object(Callbacks, "time", return_value=1010.0):
+      handle_traps(self.ctx)
+    self.assertEqual(self.pine.peek32(sound), 0)
+    self.interface.clear_cache()
+    with patch.object(Callbacks, "time", return_value=1011.0):
+      handle_traps(self.ctx)
+    self.assertEqual(self.pine.peek32(sound), BOTTLE_CLINK_SOUND_ID)
+    self.interface.clear_cache()
+    with patch.object(Callbacks, "time", return_value=1015.0):
+      handle_traps(self.ctx)
+    self.assertEqual(self.pine.peek32(sound), 0)
 
   async def test_reset(self) -> None:
     self.ctx.active_traps[Trap.ICE] = 5000.0

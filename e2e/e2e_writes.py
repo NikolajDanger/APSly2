@@ -6,6 +6,9 @@ import time
 from ..data.Constants import (
   ALARM_INTERVAL,
   ALARM_SOUND_ID,
+  BOTTLE_CLINK_INTERVAL,
+  BOTTLE_CLINK_PITCH,
+  BOTTLE_CLINK_SOUND_ID,
   CAVE_BLOB,
   CAVE_HOOK_ENTRY,
   POWERUP_TEXT,
@@ -139,3 +142,22 @@ class TestWrites(E2ETestBase):
     self.interface.stop_sound()
     self.interface.clear_cache()
     self.assertFalse(self.interface.sound_playing())
+
+  def test_cave_sound_pitch(self) -> None:
+    self.interface.install_cave()
+    self.interface.clear_cache()
+    self.assertTrue(self.interface.play_sound(
+      BOTTLE_CLINK_SOUND_ID, BOTTLE_CLINK_INTERVAL, BOTTLE_CLINK_PITCH
+    ))
+    seed = self.raw32(self.addr["sound seed"])
+    time.sleep(1.2)
+    self.interface.stop_sound()
+    after = self.raw32(self.addr["sound seed"])
+    # One xorshift step per clink: ~2-3 plays at one every 30 frames.
+    steps = []
+    for _ in range(6):
+      seed ^= (seed << 13) & 0xFFFFFFFF
+      seed ^= seed >> 17
+      seed ^= (seed << 5) & 0xFFFFFFFF
+      steps.append(seed)
+    self.assertIn(after, steps[1:4])

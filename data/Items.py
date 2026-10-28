@@ -24,6 +24,7 @@ class Trap(Enum):
   ICE          = ("Ice Trap",          20)
   NOISE        = ("Noise Trap",        10)
   DEBT         = ("Debt Trap",         None)
+  BOTTLE_SOUND = ("Bottle Sound Trap", 15)
 
   def __init__(self, item_name: str, duration: Optional[int]) -> None:
     self.item_name = item_name

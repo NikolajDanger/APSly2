@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 from time import time
 from random import choice, randint
 from math import ceil
@@ -22,6 +22,9 @@ from .data.Constants import (
   MEGA_JUMP_GADGET_ID,
   ALARM_SOUND_ID,
   ALARM_INTERVAL,
+  BOTTLE_CLINK_SOUND_ID,
+  BOTTLE_CLINK_INTERVAL,
+  BOTTLE_CLINK_PITCH,
   THIEFNET_TABLE_LIMIT,
   THIEFNET_DESCRIPTION_LIMIT,
   THIEFNET_TEXT_COLORS,
@@ -1014,6 +1017,15 @@ async def handle_received(ctx: 'Sly2Context', in_safehouse: bool) -> None:
     ctx.trap_cursor = len(network_items)
   ctx.available_episodes = available_episodes
 
+TRAP_SOUNDS: dict[
+  Items.Trap, tuple[int, int, Optional[tuple[float, float]]]
+] = {
+  Items.Trap.NOISE: (ALARM_SOUND_ID, ALARM_INTERVAL, None),
+  Items.Trap.BOTTLE_SOUND: (
+    BOTTLE_CLINK_SOUND_ID, BOTTLE_CLINK_INTERVAL, BOTTLE_CLINK_PITCH
+  ),
+}
+
 def activate_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
   """Fires a trap when its item is received"""
   ctx.game_interface.logger.debug(f"Activating trap: {trap}")
@@ -1034,7 +1046,8 @@ def activate_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
   ctx.active_traps[trap] = time() + duration
   if trap is Items.Trap.NOISE:
     ctx.game_interface.alert_guards()
-    ctx.game_interface.play_sound(ALARM_SOUND_ID, ALARM_INTERVAL)
+  if trap in TRAP_SOUNDS:
+    ctx.game_interface.play_sound(*TRAP_SOUNDS[trap])
 
 def handle_traps(ctx: 'Sly2Context') -> None:
   """Applies active timed traps each tick and expires finished ones"""
@@ -1061,10 +1074,11 @@ def apply_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
     ctx.game_interface.set_clock_speed(1.5)
   elif trap is Items.Trap.ICE:
     ctx.game_interface.set_friction(0.2)
-  elif trap is Items.Trap.NOISE and not ctx.game_interface.sound_playing():
+  elif trap in TRAP_SOUNDS and not ctx.game_interface.sound_playing():
     # A map reload clears the cave's request; re-arm without resetting the
-    # rhythm of an alarm that is still going.
-    ctx.game_interface.play_sound(ALARM_SOUND_ID, ALARM_INTERVAL)
+    # rhythm of a sound that is still going. Two sound traps share the one
+    # slot, so the other takes over once the newer one ends.
+    ctx.game_interface.play_sound(*TRAP_SOUNDS[trap])
 
 def end_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
   """Restores default state when a timed trap expires"""
@@ -1072,9 +1086,10 @@ def end_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
     ctx.game_interface.set_clock_speed(1.0)
   elif trap is Items.Trap.ICE:
     ctx.game_interface.set_friction(1.5)
-  elif trap is Items.Trap.NOISE:
-    ctx.game_interface.release_guards()
-    ctx.game_interface.stop_sound()
+  elif trap in TRAP_SOUNDS:
+    if trap is Items.Trap.NOISE:
+      ctx.game_interface.release_guards()
+    ctx.game_interface.stop_sound(TRAP_SOUNDS[trap][0])
 
 def reset_traps(ctx: 'Sly2Context') -> None:
   """
