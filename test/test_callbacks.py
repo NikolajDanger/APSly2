@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 from NetUtils import ClientStatus, NetworkItem
 
-from .. import Callbacks, Sly2Client
-from ..Callbacks import (
+from .. import Sly2Callbacks, Sly2Client
+from ..Sly2Callbacks import (
   activate_trap,
   apply_thiefnet_text,
   boot_from_invalid_episode,
@@ -317,7 +317,7 @@ class TestHandleReceived(ClientTestBase):
     self.pine.poke32(self.addr["coins"], 10)
     self.give(ItemName.COINS, ItemName.COINS)
     self.pine.poke32(self.addr["items received"], 1)
-    with patch.object(Callbacks, "randint", return_value=40) as randint:
+    with patch.object(Sly2Callbacks, "randint", return_value=40) as randint:
       await handle_received(self.ctx, False)
     randint.assert_called_once_with(
       self.slot_data["coins_minimum"], self.slot_data["coins_maximum"]
@@ -328,25 +328,25 @@ class TestHandleReceived(ClientTestBase):
   async def test_trap_baseline_skips_backlog(self) -> None:
     self.give(Trap.SLOW_MO.item_name)
     self.ctx.trap_baseline_pending = True
-    with patch.object(Callbacks, "time", return_value=1000.0):
+    with patch.object(Sly2Callbacks, "time", return_value=1000.0):
       await handle_received(self.ctx, False)
     self.assertFalse(self.ctx.trap_baseline_pending)
     self.assertEqual(self.ctx.active_traps, {})
     self.assertEqual(self.ctx.trap_cursor, 1)
 
     self.give(Trap.ICE.item_name)
-    with patch.object(Callbacks, "time", return_value=1000.0):
+    with patch.object(Sly2Callbacks, "time", return_value=1000.0):
       await handle_received(self.ctx, False)
     self.assertEqual(self.ctx.active_traps, {Trap.ICE: 1020.0})
     self.assertEqual(self.ctx.trap_cursor, 2)
 
   async def test_traps_wait_for_safehouse_exit(self) -> None:
     self.give(Trap.ICE.item_name)
-    with patch.object(Callbacks, "time", return_value=1000.0):
+    with patch.object(Sly2Callbacks, "time", return_value=1000.0):
       await handle_received(self.ctx, True)
     self.assertEqual(self.ctx.active_traps, {})
     self.assertEqual(self.ctx.trap_cursor, 0)
-    with patch.object(Callbacks, "time", return_value=1000.0):
+    with patch.object(Sly2Callbacks, "time", return_value=1000.0):
       await handle_received(self.ctx, False)
     self.assertIn(Trap.ICE, self.ctx.active_traps)
 
@@ -657,7 +657,7 @@ class TestHandleDeathlink(ClientTestBase):
     self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ENTRY)
 
   async def run_at(self, now: float) -> None:
-    with patch.object(Callbacks, "time", return_value=now):
+    with patch.object(Sly2Callbacks, "time", return_value=now):
       await handle_deathlink(self.ctx)
 
   async def test_disabled(self) -> None:
@@ -671,7 +671,7 @@ class TestHandleDeathlink(ClientTestBase):
     self.ctx.deathlink_timestamp = 990.0
     await self.run_at(1000.0)
     self.assertFalse(self.pine.written(self.addr["death flag"]))
-    with patch.object(Callbacks, "choice", return_value=0x2000):
+    with patch.object(Sly2Callbacks, "choice", return_value=0x2000):
       await self.run_at(1011.0)
     self.assertEqual(self.pine.peek32(self.addr["death flag"]), 1)
     struct_addr = self.addr["death struct"]
@@ -729,7 +729,7 @@ class TestPayOutCoins(ClientTestBase):
   def test_queues_pops(self) -> None:
     self.ctx.pending_coins = 40
     self.ctx.prev_coins = 100
-    with patch.object(Callbacks, "randint", return_value=4) as randint:
+    with patch.object(Sly2Callbacks, "randint", return_value=4) as randint:
       pay_out_coins(self.ctx)
     randint.assert_called_once_with(COIN_POPS_MIN, COIN_POPS_MAX)
     self.assertEqual(self.pine.peek32(self.addr["coin amount"]), 40)
@@ -764,7 +764,7 @@ class TestPayOutCoins(ClientTestBase):
     self.enter(1, 2)
     self.give(ItemName.COINS)
     self.pine.poke32(self.addr["items received"], 0)
-    with patch.object(Callbacks, "randint", side_effect=[40, 4]):
+    with patch.object(Sly2Callbacks, "randint", side_effect=[40, 4]):
       await update(self.ctx, True)
     self.assertEqual(self.ctx.pending_coins, 0)
     self.assertEqual(self.pine.peek32(self.addr["coin amount"]), 40)
@@ -823,7 +823,7 @@ class TestCollectDebt(ClientTestBase):
   def test_queues_negative_pops(self) -> None:
     self.assertEqual(self.slot_data["debt_trap_percentage"], 10)
     self.ctx.pending_debt_traps = 1
-    with patch.object(Callbacks, "randint", return_value=4) as randint:
+    with patch.object(Sly2Callbacks, "randint", return_value=4) as randint:
       collect_debt(self.ctx)
     randint.assert_called_once_with(COIN_POPS_MIN, COIN_POPS_MAX)
     self.assertEqual(self.amount(), -10)
@@ -880,7 +880,7 @@ class TestCollectDebt(ClientTestBase):
     self.enter(1, 2)
     self.give(Trap.DEBT.item_name)
     self.pine.poke32(self.addr["items received"], 0)
-    with patch.object(Callbacks, "randint", return_value=3):
+    with patch.object(Sly2Callbacks, "randint", return_value=3):
       await update(self.ctx, True)
     self.assertEqual(self.ctx.pending_debt_traps, 0)
     self.assertEqual(self.ctx.active_traps, {})
@@ -1011,7 +1011,7 @@ class TestHandleNotifications(ClientTestBase):
     self.ctx.notification("hello")
 
   async def run_at(self, now: float) -> None:
-    with patch.object(Callbacks, "time", return_value=now):
+    with patch.object(Sly2Callbacks, "time", return_value=now):
       await handle_notifications(self.ctx)
 
   def shown_text(self) -> bytes:
@@ -1256,18 +1256,18 @@ class TestTraps(ClientTestBase):
 
   async def test_timed_trap_lifecycle(self) -> None:
     clock = self.addr["clock speed"]
-    with patch.object(Callbacks, "time", return_value=1000.0):
+    with patch.object(Sly2Callbacks, "time", return_value=1000.0):
       activate_trap(self.ctx, Trap.SLOW_MO)
       handle_traps(self.ctx)
     self.assertEqual(self.ctx.active_traps, {Trap.SLOW_MO: 1015.0})
     self.assertEqual(self.pine.peek_float(clock), 0.5)
-    with patch.object(Callbacks, "time", return_value=1015.0):
+    with patch.object(Sly2Callbacks, "time", return_value=1015.0):
       handle_traps(self.ctx)
     self.assertEqual(self.ctx.active_traps, {})
     self.assertEqual(self.pine.peek_float(clock), 1.0)
 
   async def test_sugar_rush_and_ice(self) -> None:
-    with patch.object(Callbacks, "time", return_value=1000.0):
+    with patch.object(Sly2Callbacks, "time", return_value=1000.0):
       activate_trap(self.ctx, Trap.SUGAR_RUSH)
       activate_trap(self.ctx, Trap.ICE)
       handle_traps(self.ctx)
@@ -1275,11 +1275,11 @@ class TestTraps(ClientTestBase):
     self.assertAlmostEqual(
       self.pine.peek_float(self.addr["friction"]), 0.2, places=6
     )
-    with patch.object(Callbacks, "time", return_value=1016.0):
+    with patch.object(Sly2Callbacks, "time", return_value=1016.0):
       handle_traps(self.ctx)
     self.assertEqual(self.ctx.active_traps, {Trap.ICE: 1020.0})
     self.assertEqual(self.pine.peek_float(self.addr["clock speed"]), 1.0)
-    with patch.object(Callbacks, "time", return_value=1020.0):
+    with patch.object(Sly2Callbacks, "time", return_value=1020.0):
       handle_traps(self.ctx)
     self.assertEqual(self.pine.peek_float(self.addr["friction"]), 1.5)
 
@@ -1288,24 +1288,24 @@ class TestTraps(ClientTestBase):
     # 1.0 itself; overwriting the zero resumes the scripted sequence early
     # and crashes the game.
     clock = self.addr["clock speed"]
-    with patch.object(Callbacks, "time", return_value=1000.0):
+    with patch.object(Sly2Callbacks, "time", return_value=1000.0):
       activate_trap(self.ctx, Trap.SUGAR_RUSH)
       handle_traps(self.ctx)
     self.assertEqual(self.pine.peek_float(clock), 1.5)
     self.pine.poke_float(clock, 0.0)
     self.interface.clear_cache()
-    with patch.object(Callbacks, "time", return_value=1005.0):
+    with patch.object(Sly2Callbacks, "time", return_value=1005.0):
       handle_traps(self.ctx)
     self.assertEqual(self.pine.peek_float(clock), 0.0)
     self.pine.poke_float(clock, 1.0)
     self.interface.clear_cache()
-    with patch.object(Callbacks, "time", return_value=1006.0):
+    with patch.object(Sly2Callbacks, "time", return_value=1006.0):
       handle_traps(self.ctx)
     self.assertEqual(self.pine.peek_float(clock), 1.5)
 
   async def test_custom_duration(self) -> None:
     self.slot_data["trap_duration"][Trap.SLOW_MO.key] = 3
-    with patch.object(Callbacks, "time", return_value=1000.0):
+    with patch.object(Sly2Callbacks, "time", return_value=1000.0):
       activate_trap(self.ctx, Trap.SLOW_MO)
     self.assertEqual(self.ctx.active_traps, {Trap.SLOW_MO: 1003.0})
 
@@ -1313,7 +1313,7 @@ class TestTraps(ClientTestBase):
     with (
       patch.object(self.interface, "alert_guards") as alert,
       patch.object(self.interface, "play_sound") as play,
-      patch.object(Callbacks, "time", return_value=1000.0)
+      patch.object(Sly2Callbacks, "time", return_value=1000.0)
     ):
       activate_trap(self.ctx, Trap.NOISE)
     alert.assert_called_once()
@@ -1322,7 +1322,7 @@ class TestTraps(ClientTestBase):
     with (
       patch.object(self.interface, "sound_playing", return_value=False),
       patch.object(self.interface, "play_sound") as replay,
-      patch.object(Callbacks, "time", return_value=1005.0)
+      patch.object(Sly2Callbacks, "time", return_value=1005.0)
     ):
       handle_traps(self.ctx)
     replay.assert_called_once_with(ALARM_SOUND_ID, ALARM_INTERVAL, None)
@@ -1330,14 +1330,14 @@ class TestTraps(ClientTestBase):
     with (
       patch.object(self.interface, "sound_playing", return_value=True),
       patch.object(self.interface, "play_sound") as steady,
-      patch.object(Callbacks, "time", return_value=1006.0)
+      patch.object(Sly2Callbacks, "time", return_value=1006.0)
     ):
       handle_traps(self.ctx)
     steady.assert_not_called()
     with (
       patch.object(self.interface, "release_guards") as release,
       patch.object(self.interface, "stop_sound") as stop,
-      patch.object(Callbacks, "time", return_value=1010.0)
+      patch.object(Sly2Callbacks, "time", return_value=1010.0)
     ):
       handle_traps(self.ctx)
     release.assert_called_once()
@@ -1348,7 +1348,7 @@ class TestTraps(ClientTestBase):
     with (
       patch.object(self.interface, "alert_guards") as alert,
       patch.object(self.interface, "play_sound") as play,
-      patch.object(Callbacks, "time", return_value=1000.0)
+      patch.object(Sly2Callbacks, "time", return_value=1000.0)
     ):
       activate_trap(self.ctx, Trap.BOTTLE_SOUND)
     alert.assert_not_called()
@@ -1356,7 +1356,7 @@ class TestTraps(ClientTestBase):
     with (
       patch.object(self.interface, "release_guards") as release,
       patch.object(self.interface, "stop_sound") as stop,
-      patch.object(Callbacks, "time", return_value=1015.0)
+      patch.object(Sly2Callbacks, "time", return_value=1015.0)
     ):
       handle_traps(self.ctx)
     release.assert_not_called()
@@ -1365,19 +1365,19 @@ class TestTraps(ClientTestBase):
   async def test_sound_traps_share_the_slot(self) -> None:
     self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ENTRY)
     sound = self.addr["sound id"]
-    with patch.object(Callbacks, "time", return_value=1000.0):
+    with patch.object(Sly2Callbacks, "time", return_value=1000.0):
       activate_trap(self.ctx, Trap.BOTTLE_SOUND)
       activate_trap(self.ctx, Trap.NOISE)
     self.assertEqual(self.pine.peek32(sound), ALARM_SOUND_ID)
-    with patch.object(Callbacks, "time", return_value=1010.0):
+    with patch.object(Sly2Callbacks, "time", return_value=1010.0):
       handle_traps(self.ctx)
     self.assertEqual(self.pine.peek32(sound), 0)
     self.interface.clear_cache()
-    with patch.object(Callbacks, "time", return_value=1011.0):
+    with patch.object(Sly2Callbacks, "time", return_value=1011.0):
       handle_traps(self.ctx)
     self.assertEqual(self.pine.peek32(sound), BOTTLE_CLINK_SOUND_ID)
     self.interface.clear_cache()
-    with patch.object(Callbacks, "time", return_value=1015.0):
+    with patch.object(Sly2Callbacks, "time", return_value=1015.0):
       handle_traps(self.ctx)
     self.assertEqual(self.pine.peek32(sound), 0)
 
@@ -1727,7 +1727,7 @@ class TestUpdate(ClientTestBase):
 
   async def tick(self) -> None:
     self.interface.clear_cache()
-    with patch.object(Callbacks, "time", return_value=1000.0):
+    with patch.object(Sly2Callbacks, "time", return_value=1000.0):
       await update(self.ctx, True)
 
   async def test_title_screen(self) -> None:
@@ -2122,7 +2122,7 @@ class TickHarness(ClientTestBase):
   async def tick(self) -> None:
     with (
       patch.object(Sly2Client.asyncio, "sleep"),
-      patch.object(Callbacks, "time", return_value=1000.0)
+      patch.object(Sly2Callbacks, "time", return_value=1000.0)
     ):
       await _handle_game_ready(self.ctx)
 

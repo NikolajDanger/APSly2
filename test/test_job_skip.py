@@ -1,8 +1,8 @@
 from typing import Optional
 from unittest.mock import patch
 
-from .. import Callbacks, Sly2Client
-from ..Callbacks import (
+from .. import Sly2Callbacks, Sly2Client
+from ..Sly2Callbacks import (
   SKIP_SETTLE,
   SKIP_STALL,
   JobSkip,
@@ -56,7 +56,7 @@ class JobSkipTestBase(ClientTestBase):
   def tick(self, seconds: float = 0.0) -> None:
     self.now += seconds
     self.interface.clear_cache()
-    with patch.object(Callbacks, "time", return_value=self.now):
+    with patch.object(Sly2Callbacks, "time", return_value=self.now):
       handle_job_skips(self.ctx)
 
   def called(self) -> Optional[tuple[int, int]]:

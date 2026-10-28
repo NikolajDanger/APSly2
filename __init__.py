@@ -21,7 +21,7 @@ from .Sly2Options import (
   StartingEpisode,
   sly2_option_groups
 )
-from .Regions import create_regions
+from .Sly2Regions import create_regions
 from .data.Items import item_dict, item_groups, ordered_group, Sly2Item
 from .data.Locations import location_dict, location_groups
 from .data.Names import (
@@ -39,8 +39,8 @@ from .data.Constants import (
   BOSS_GOALS,
   goal_job_locations
 )
-from .ItemPool import gen_pool
-from .Rules import set_rules
+from .Sly2Pool import gen_pool
+from .Sly2Rules import set_rules
 
 
 ## Client stuff
@@ -460,7 +460,7 @@ class Sly2World(World):
         for k in range(outside+1, n_pickpocket+1):
           ep8_pickpocket[ep8_only[k-outside-1]-1] += 1
       elif pickpocket_mode == PickpocketCheckMode.option_Total:
-        # The checks that need every episode's loot (see Rules)
+        # The checks that need every episode's loot (see Sly2Rules)
         ep8_pickpocket[0] = n_pickpocket - 7*n_pickpocket//8
 
       def ep8_chapter_locations(n: int) -> int:

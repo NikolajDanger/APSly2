@@ -22,7 +22,7 @@ from .data.Names import (
   treasure_location,
   vault_location,
 )
-from .Regions import loot_regions, pickpocket_check_locations, tracking
+from .Sly2Regions import loot_regions, pickpocket_check_locations, tracking
 from .Sly2Options import PickpocketCheckMode
 
 if typing.TYPE_CHECKING:

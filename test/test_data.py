@@ -155,7 +155,7 @@ class TestLocationNames(unittest.TestCase):
 
   def test_rule_item_literals(self) -> None:
     src = ""
-    for module in ("Rules.py", "Regions.py"):
+    for module in ("Sly2Rules.py", "Sly2Regions.py"):
       with open(os.path.join(REPO_ROOT, module)) as f:
         src += f.read()
     self.assertEqual(re.findall(r'state\.has(?:_group)?\("', src), [])

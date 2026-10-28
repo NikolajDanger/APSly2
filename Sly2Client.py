@@ -30,7 +30,7 @@ from .data.Names import (
 from .Sly2Interface import (
   Sly2Interface, Sly2Episode, PowerUps, CycleCounts
 )
-from .Callbacks import (
+from .Sly2Callbacks import (
   init,
   update,
   mark_dirty,
