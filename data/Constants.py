@@ -176,6 +176,19 @@ BOSS_GOALS = [
 def boss_victory_location(episode: str) -> str:
   return job_location(episode, EPISODES[episode][-1][-1])
 
+def goal_job_locations(goal: int, pick_and_mix: dict[str, int]) -> set[str]:
+  """The job locations the goal needs completed"""
+  if goal < 5:
+    return {boss_victory_location(BOSS_GOALS[goal][0])}
+  if goal == 5:
+    return {boss_victory_location(episode) for episode, _ in BOSS_GOALS}
+  if goal == 8:
+    return {
+      boss_victory_location(episode) for episode in EPISODES
+      if pick_and_mix.get(episode_key(episode))
+    }
+  return set()
+
 # TaskSanity per-task checks: {episode: {job: [(dag_node_index, task_name)]}}.
 # Episode/job names key into EPISODES; jobs with no task checks are omitted.
 TASKS = {
@@ -699,6 +712,7 @@ ADDRESSES = {
     "reload values": 0x3E1088,
     "world record": 0x3E10D0,
     "abort mission": 0x3E0FA8,
+    "current mission": 0x3E0F9C,
     "camera focus": 0x2DE258,
     "fade type": 0x443798,
     # Unused savefile data. ThiefNet prefs: byte 0 = ThiefNet theme, byte 1 =
@@ -826,7 +840,7 @@ ADDRESSES = {
     # whole job is finished.
     "jobs": [
       [
-        [4,10],
+        [4,9],
         [36,43,75],
         [31,48,60,63],
         [83]
@@ -841,7 +855,7 @@ ADDRESSES = {
         [2],
         [14,17,35],
         [27,46,56,58],
-        [(67,76)]
+        [(66,76)]
       ],
       [
         [1,8,21],
@@ -1404,6 +1418,40 @@ STALE_JOB_TRIGGERS: dict[int, list[tuple[int, int]]] = {
   7: [(40, 42)],
 }
 
+# Special jobs. Keyed by (episode, first node)
+JOB_SKIP_STEPS: dict[tuple[int, int], list[tuple[str, int]]] = {
+  (1, 83): [("skip", 83), ("skip", 94)],
+  (2, 37): [("skip", 36), ("skip", 37)],
+  (2, 65): [("skip", 65), ("skip", 87), ("skip", 90)],
+  (8, 1): [("skip", 1), ("go", 23)],
+  (8, 86): [("skip", 86), ("skip", 89), ("end", 98)],
+}
+
+def job_skip_steps(
+  episode: int, job: int | tuple[int, int]
+) -> list[tuple[str, int]]:
+  nodes = job if isinstance(job, tuple) else (job,)
+  return JOB_SKIP_STEPS.get(
+    (episode, nodes[0]), [("skip", node) for node in nodes]
+  )
+
+# A DAG node's mission, and the mission's job-complete screen object (one
+# shared object per map; +0x58 is 2 while it shows). Missions without a
+# screen have screen id -1.
+NODE_MISSION = 0x7C
+MISSION_SCREEN_ID = 0xAC
+MISSION_SCREEN = 0xB8
+SCREEN_STATE = 0x58
+SCREEN_SHOWING = 2
+# The game's go-to-job (node): loads the node's mission at its start point.
+# On a finished job it restarts the job.
+GO_TO_JOB = 0x00165538
+# Chalk talks and chapter gates are trigger objects attached to a DAG node
+# (+0x24), allocated among the DAG nodes. Firing one plays its cutscene.
+ENDING_TRIGGER_VTABLE = 0x002DC6F0
+ENDING_TRIGGER_NODE = 0x24
+FIRE_ENDING_TRIGGER = 0x002283D0
+
 # Function-call framework. PINE can't call functions, so a small MIPS code
 # cave is written into free EE RAM and hooked in as a per-frame update method
 # (see CAVE_HOOK_ENTRY); the client writes a request and the cave makes the
@@ -1479,7 +1527,10 @@ CAVE_BLOB = (
   "000000002400abad04004b8d0800598d0000ebad1000f9ad3018ebad4018f9ad"+
   "2000c18d03002c100000000003002d14000000000000cbad1000d9ad08002925"+
   "80008c258000ad25e000ce258000ef25010018274804012fd5ff201400000000"+
-  "0800e00300000000"
+  "0800e00300000000e0ffbd270000bfaf6800888c0400a4af0800a8af5000898c"+
+  "0c00a9af5000098d1000a9af500080ac500000ad252000017c93050c03000524"+
+  "0400a48f0800a88f0c00a98f500089ac1000a98f500009ad0000bf8f0800e003"+
+  "2000bd27"
 )
 CAVE_VAULT_MARKER = 0x0042B520
 VAULT_MARKER_PATCH_SITE = 0x0022AACC
@@ -1530,6 +1581,9 @@ THIEFNET_TEXT_COLORS = {
 # the client bumping it over PINE races those allocations; the cave bumps it
 # between frames (build/cave.s heap_alloc).
 CAVE_HEAP_ALLOC = 0x0042B610
+# Completes the job of the mission in CALL_A0 with its ending, run through
+# the call slot (build/cave.s skip_job).
+CAVE_SKIP_JOB = 0x0042B828
 # damage_info struct; +0x00/+0x04 skeleton, +0x08 entity and +0x0C damage
 # type are patched from the live character at kill time. +0x10 = -2000
 # (lethal), +0x20.. a location/dir, +0x44 = 8.

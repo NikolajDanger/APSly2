@@ -23,8 +23,10 @@ from .Sly2Options import (
 )
 from .Regions import create_regions
 from .data.Items import item_dict, item_groups, ordered_group, Sly2Item
-from .data.Locations import location_dict, location_groups, tasksanity_list
-from .data.Names import EpisodeName, ItemCategory, thiefnet_location
+from .data.Locations import location_dict, location_groups
+from .data.Names import (
+  EpisodeName, ItemCategory, job_location, thiefnet_location
+)
 from .data.Constants import (
   EPISODES,
   TASKS,
@@ -34,7 +36,8 @@ from .data.Constants import (
   TREASURE_PRICES,
   ENEMIES,
   PICKPOCKET_LOOT_TABLE_CHANCES,
-  BOSS_GOALS
+  BOSS_GOALS,
+  goal_job_locations
 )
 from .ItemPool import gen_pool
 from .Rules import set_rules
@@ -289,6 +292,29 @@ class Sly2World(World):
         opt.treasure_value_maximum.value, opt.treasure_value_minimum.value
       )
 
+    skipped_goal_jobs = opt.skip_jobs.value & goal_job_locations(
+      opt.goal.value, opt.pick_and_mix.value
+    )
+    if skipped_goal_jobs:
+      if not opt.permissive_yaml:
+        raise OptionError(
+          "skip_jobs can't skip the jobs the goal needs: "
+          f"{', '.join(sorted(skipped_goal_jobs))}."
+        )
+      opt.skip_jobs.value -= skipped_goal_jobs
+
+    def job_locations(jobs: List[str], episode: str) -> int:
+      """The checks of these jobs of an episode that aren't skipped"""
+      kept = [
+        job for job in jobs
+        if job_location(episode, job) not in opt.skip_jobs.value
+      ]
+      count = len(kept)
+      if opt.tasksanity:
+        tasks = TASKS.get(episode, {})
+        count += sum(len(tasks.get(job, [])) for job in kept)
+      return count
+
     pickpocket_mode = opt.pickpocket_check_mode.value
     pickpocket_max = opt.pickpocket_check_max
     pickpocket_step = opt.pickpocket_check_step
@@ -326,12 +352,15 @@ class Sly2World(World):
 
     # Checking number of locations and items
     n_locations = (
-      69 + # jobs
+      sum(
+        job_locations(jobs, episode)
+        for episode, chapters in EPISODES.items()
+        for jobs in chapters
+      ) +
       24 + # treasures
       24 + # thiefnet
       (8 if opt.include_vaults else 0) +
-      n_pickpocket +
-      (len(tasksanity_list) if opt.tasksanity else 0)
+      n_pickpocket
     )
     if opt.bottle_location_bundle_size != 0:
       n_locations += ceil(30/opt.bottle_location_bundle_size)*8
@@ -435,11 +464,10 @@ class Sly2World(World):
         ep8_pickpocket[0] = n_pickpocket - 7*n_pickpocket//8
 
       def ep8_chapter_locations(n: int) -> int:
-        jobs = EPISODES[EpisodeName.ANATOMY_FOR_DISASTER][n-1]
-        count = len(jobs)
-        if opt.tasksanity:
-          tasks = TASKS.get(EpisodeName.ANATOMY_FOR_DISASTER, {})
-          count += sum(len(tasks.get(job, [])) for job in jobs)
+        count = job_locations(
+          EPISODES[EpisodeName.ANATOMY_FOR_DISASTER][n-1],
+          EpisodeName.ANATOMY_FOR_DISASTER
+        )
         count += sum(
           1 for _, chapter in TREASURES[EpisodeName.ANATOMY_FOR_DISASTER]
           if chapter == n
@@ -611,6 +639,7 @@ class Sly2World(World):
           "skip_intro"
         ]:
           getattr(self.options, name).value = slot_data[name]
+        self.options.skip_jobs.value = set(slot_data["skip_jobs"])
         self.tracker_world = self._build_tracker_world()
       return
 
@@ -697,6 +726,7 @@ class Sly2World(World):
       "pickpocket_check_max",
       "pickpocket_check_step",
       "tasksanity",
+      "skip_jobs",
       "small_guard_loot_chance",
       "large_guard_loot_chance",
       "loot_table_distribution",

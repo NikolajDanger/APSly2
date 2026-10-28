@@ -359,6 +359,12 @@ requires:
     'false': 100
     'true': 0
 
+  # Jobs to skip. A skipped job has no check (nor, with Task Sanity, any task
+  # checks), and the client completes it in-game as soon as it becomes
+  # available, playing its ending as if you had finished it. Use the job's
+  # location name, e.g. "The Black Chateau - Satellite Sabotage".
+  skip_jobs: []
+
   # How many bottles you need to collect for each check. Set to 0 to disable
   # bottles as checks. Both this and bottle_item_bundle_size must be non-zero
   # for bottles to appear; setting only one is invalid.

@@ -1270,7 +1270,7 @@ class TestTickCache(InterfaceTestBase):
     self.interface.read_powerups()
     self.interface.get_sly_bindings()
     self.interface.get_bottles(Sly2Episode.Jailbreak)
-    self.interface.jobs_completed([4, 10, 36])
+    self.interface.jobs_completed([4, 9, 36])
     self.interface.tasks_completed([5, 6])
     self.assertEqual((self.pine.reads, self.pine.batches), (0, 0))
 

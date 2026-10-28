@@ -122,12 +122,16 @@ def create_regions(world: "Sly2World") -> None:
       region = Region(
         episode_region(i+1, n), world.player, world.multiworld
       )
+      jobs = [
+        job for job in EPISODES[episode][n-1]
+        if job_location(episode, job) not in world.options.skip_jobs.value
+      ]
       locations = {}
-      for job in EPISODES[episode][n-1]:
+      for job in jobs:
         name = job_location(episode, job)
         locations[name] = location_dict[name].code
       if world.options.tasksanity:
-        for job in EPISODES[episode][n-1]:
+        for job in jobs:
           for _, task in TASKS.get(episode, {}).get(job, []):
             name = task_location(episode, job, task)
             locations[name] = location_dict[name].code

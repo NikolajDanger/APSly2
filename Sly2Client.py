@@ -12,6 +12,7 @@ import traceback
 from datetime import datetime
 
 from CommonClient import get_base_parser, server_loop, gui_enabled
+from MultiServer import mark_raw
 import NetUtils
 import Utils
 
@@ -38,7 +39,11 @@ from .Callbacks import (
   episode_loot,
   loot_odds_row,
   apply_menu_icons,
-  apply_thiefnet_text
+  apply_thiefnet_text,
+  skip_blocker,
+  skip_command_target,
+  JobSkip,
+  JOB_INDICES
 )
 
 # Child of CommonClient's "Client" logger so records propagate to the UI log
@@ -161,6 +166,29 @@ class Sly2CommandProcessor(ClientCommandProcessor): # type: ignore[misc]
     message = f"ThiefNet text color turned {state}"
     logger.info(message)
     self.ctx.notification(message)
+
+  @mark_raw
+  def _cmd_skip_job(self, job: str = "") -> None:
+    """Skip a job of the current episode, as if you had finished it, and
+    send its checks. Without a job name, lists the jobs you can skip now."""
+    if not isinstance(self.ctx, Sly2Context):
+      return
+    if not job:
+      skippable = [
+        location.split(" - ", 1)[1] for location in JOB_INDICES
+        if skip_command_target(self.ctx, location)[0] is not None and
+        skip_blocker(self.ctx, location) is None
+      ]
+      logger.info(
+        "Usage: /skip_job <job name>. Jobs you can skip now: " +
+        (", ".join(skippable) or "none")
+      )
+      return
+    location, reason = skip_command_target(self.ctx, job)
+    if location is None:
+      logger.info(f"Can't skip {job}: {reason}")
+      return
+    self.ctx.job_skip_request = location
 
   def _episode_loot(
     self, loot_table: dict[str, list], i: int, j: int
@@ -399,6 +427,11 @@ class Sly2Context(CommonContext): # type: ignore[misc]
   goal_sent: bool = False
   active_traps: dict[Items.Trap, float]  # Active trap -> time it expires
   health_trap_check: Optional[int] = None
+  job_skip: Optional[JobSkip] = None
+  # A job location /skip_job asked to skip, picked up by the next tick
+  job_skip_request: Optional[str] = None
+  # No job skip step runs before this time
+  job_skip_ready_at: float = 0
 
   def __init__(
     self, server_address: Optional[str], password: Optional[str]
@@ -469,6 +502,8 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     self.guards_despawned_episode = None
     self.active_traps.clear()
     self.health_trap_check = None
+    self.job_skip = None
+    self.job_skip_request = None
     self.bottle_flags = []
     self.job_statuses = []
     self.tick_stats.clear()

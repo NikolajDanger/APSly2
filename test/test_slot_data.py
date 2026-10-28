@@ -33,6 +33,7 @@ PASSTHROUGH_OPTIONS = [
   "pickpocket_check_max",
   "pickpocket_check_step",
   "tasksanity",
+  "skip_jobs",
   "small_guard_loot_chance",
   "large_guard_loot_chance",
   "loot_table_distribution",
@@ -150,6 +151,10 @@ class TestTrackerPassthrough(Sly2TestBase):
     "randomize_loot": True,
     "tasksanity": True,
     "starting_episode": "A_Tangled_Web",
+    "skip_jobs": [
+      "The Black Chateau - Breaking and Entering",
+      "Anatomy for Disaster - Blimp HQ Recon",
+    ],
   }
 
   def test_regenerates_from_slot_data(self) -> None:

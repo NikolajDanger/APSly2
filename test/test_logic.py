@@ -77,6 +77,35 @@ class TestGadgetGates(Sly2TestBase):
       self.assertTrue(self.can_reach_region(episode_region(7, 4)))
 
 
+class TestSkipJobs(Sly2TestBase):
+  options = {
+    "tasksanity": True,
+    "skip_jobs": [
+      job_location(EpisodeName.THE_BLACK_CHATEAU, "Satellite Sabotage"),
+      job_location(EpisodeName.HE_WHO_TAMES_THE_IRON_HORSE, "Spice in the Sky"),
+    ],
+  }
+
+  def test_skipped_jobs_have_no_checks(self) -> None:
+    names = {
+      location.name
+      for location in self.multiworld.get_locations(self.player)
+    }
+    for job in self.options["skip_jobs"]:
+      self.assertNotIn(job, names)
+      self.assertFalse(any(name.startswith(f"{job} - ") for name in names))
+    self.assertIn(
+      job_location(EpisodeName.THE_BLACK_CHATEAU, "Breaking and Entering"),
+      names
+    )
+
+  def test_other_paraglider_jobs_keep_their_gate(self) -> None:
+    self.assertAccessDependency(
+      [job for job in PARAGLIDER_JOBS if job not in self.options["skip_jobs"]],
+      [[ItemName.PARAGLIDER]], only_check_listed=True
+    )
+
+
 class TestThiefNetGating(Sly2TestBase):
   options = {"starting_episode": "The_Black_Chateau"}
 

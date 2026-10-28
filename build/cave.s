@@ -717,3 +717,36 @@ tc_next:
 tc_done:
 	jr    $ra
 	nop
+
+# Extra function, not part of the per-frame routine: completes a job for the
+# client's job skip, the way finishing its last task does. Takes the job's
+# mission and runs SetNodeStatus(the mission's last DAG node, 3), which marks
+# every node of the job done, makes the next ones available and plays the
+# job's ending (job-complete screen, and the chalk talk that follows it). The
+# game only plays that ending for a job local to the current map, so the
+# node's and the mission's "lives in another map" flags (+0x50) are cleared
+# around the call and restored after it.
+skip_job:
+	addiu $sp, $sp, -0x20
+	sw    $ra, 0($sp)
+	lw    $t0, 0x68($a0)        # the mission's last node
+	sw    $a0, 4($sp)
+	sw    $t0, 8($sp)
+	lw    $t1, 0x50($a0)
+	sw    $t1, 0xc($sp)
+	lw    $t1, 0x50($t0)
+	sw    $t1, 0x10($sp)
+	sw    $zero, 0x50($a0)
+	sw    $zero, 0x50($t0)
+	move  $a0, $t0
+	jal   0x164df0              # SetNodeStatus
+	addiu $a1, $zero, 3
+	lw    $a0, 4($sp)
+	lw    $t0, 8($sp)
+	lw    $t1, 0xc($sp)
+	sw    $t1, 0x50($a0)
+	lw    $t1, 0x10($sp)
+	sw    $t1, 0x50($t0)
+	lw    $ra, 0($sp)
+	jr    $ra
+	addiu $sp, $sp, 0x20

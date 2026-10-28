@@ -7,12 +7,14 @@ from Options import (
   DefaultOnToggle,
   Range,
   OptionCounter,
-  OptionGroup
+  OptionGroup,
+  OptionSet
 )
 from dataclasses import dataclass
 
 from .data.Items import Trap
 from .data.Constants import EPISODES, episode_key
+from .data.Names import job_location
 
 class PermissiveYaml(Toggle):
   """
@@ -257,6 +259,21 @@ class TaskSanity(Toggle):
   Whether to include the individual tasks that make up each job as checks.
   """
   display_name = "Task Sanity"
+
+class SkipJobs(OptionSet):
+  """
+  Jobs to skip. A skipped job has no check (nor, with Task Sanity, any task
+  checks), and the client completes it in-game as soon as it becomes
+  available, playing its ending as if you had finished it. Use the job's
+  location name, e.g. "The Black Chateau - Satellite Sabotage".
+  """
+  display_name = "Skip Jobs"
+  valid_keys = frozenset(
+    job_location(episode, job)
+    for episode, chapters in EPISODES.items()
+    for chapter in chapters
+    for job in chapter
+  )
 
 class SmallGuardLootChance(Range):
   """
@@ -613,6 +630,7 @@ class Sly2Options(PerGameCommonOptions):
   pickpocket_check_max: PickpocketCheckMax
   pickpocket_check_step: PickpocketCheckStep
   tasksanity: TaskSanity
+  skip_jobs: SkipJobs
   small_guard_loot_chance: SmallGuardLootChance
   large_guard_loot_chance: LargeGuardLootChance
   loot_table_distribution: LootTableDistribution
@@ -666,6 +684,7 @@ sly2_option_groups = [
     IncludeVaults,
     IncludePickpocketing,
     TaskSanity,
+    SkipJobs,
     BottleLocationBundleSize,
     BottleSanity,
     ScoutThiefnet

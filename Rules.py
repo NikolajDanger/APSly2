@@ -70,6 +70,8 @@ def set_rules(world: "Sly2World") -> None:
   def add_job_rule(
     ep: str, job: str, rule: typing.Callable[[CollectionState], bool]
   ) -> None:
+    if job_location(ep, job) in world.options.skip_jobs.value:
+      return
     add_rule(world.get_location(job_location(ep, job)), rule)
     if world.options.tasksanity:
       for _, task in TASKS.get(ep, {}).get(job, []):

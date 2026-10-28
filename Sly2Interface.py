@@ -26,6 +26,16 @@ from .data.Constants import (
   MEGA_JUMP_GADGET_ID,
   MEGA_JUMP_UNLOAD_CALL,
   STALE_JOB_TRIGGERS,
+  NODE_MISSION,
+  MISSION_SCREEN_ID,
+  MISSION_SCREEN,
+  SCREEN_STATE,
+  SCREEN_SHOWING,
+  GO_TO_JOB,
+  ENDING_TRIGGER_VTABLE,
+  ENDING_TRIGGER_NODE,
+  FIRE_ENDING_TRIGGER,
+  CAVE_SKIP_JOB,
   PEDESTAL_VTABLE,
   INTERACTABLE_NEXT,
   PEDESTAL_USERS,
@@ -139,6 +149,7 @@ CACHE_STORE_LIMIT = 0x100
 MAX_GUARDS = 512
 MAX_INTERACTABLES = 64
 MAX_ENTITY_CHILDREN = 64
+MAX_DAG_NODES = 400
 
 INFOBOX_SECONDS = 10.0
 # The string id set_infobox writes; the game uses -1 for none and its own
@@ -623,7 +634,7 @@ class Sly2Interface(GameInterface):
       "savefile last world", "unload mega jump", "DAG root",
       "clock-la defeated", "hackpack", "sly pointer", "clock speed",
       "friction", "string table", "skip cutscene", "cave hook",
-      "coin pops", "loot total", "loot collected"
+      "coin pops", "loot total", "loot collected", "current mission"
     ]
     reads = [(4, a[name]) for name in words]
     reads += [(4, CAVE_HOOK_ORIG)]
@@ -984,6 +995,69 @@ class Sly2Interface(GameInterface):
     if status == 1:
       self.logger.debug(f"Deactivating job {task}")
       self._write_job_status(task,0)
+
+  def current_mission(self) -> int:
+    return self._read32(self.addresses["current mission"])
+
+  def skip_mission(self, node: int) -> bool:
+    """Has the cave complete the mission holding DAG node `node`, playing
+    its ending"""
+    mission = self._read32(self._get_job_address(node) + NODE_MISSION)
+    if not in_ee_ram(mission, MISSION_SCREEN + 4):
+      return False
+    return self.call_function(CAVE_SKIP_JOB, [mission])
+
+  def go_to_job(self, node: int) -> bool:
+    return self.call_function(GO_TO_JOB, [self._get_job_address(node)])
+
+  def _dag_span(self) -> tuple[int, int]:
+    """The lowest and highest node address of the current DAG"""
+    self._get_job_address(0)
+    while len(self._dag_nodes) < MAX_DAG_NODES:
+      following = self._read32(self._dag_nodes[-1] + 0x20)
+      if not in_ee_ram(following):
+        break
+      self._dag_nodes.append(following)
+    return min(self._dag_nodes), max(self._dag_nodes)
+
+  def fire_ending_trigger(self, node: int) -> bool:
+    """Plays the cutscene of the trigger attached to DAG node `node`"""
+    address = self._get_job_address(node)
+    start, end = self._dag_span()
+    data = self._read_bytes(start, end - start)
+    vtable = struct.pack("<I", ENDING_TRIGGER_VTABLE)
+    hit = data.find(vtable)
+    while hit != -1:
+      trigger = hit - 0xC
+      if (
+        trigger % 4 == 0 and
+        trigger + ENDING_TRIGGER_NODE + 4 <= len(data) and
+        struct.unpack_from("<I", data, trigger + ENDING_TRIGGER_NODE)[0] ==
+        address
+      ):
+        return self.call_function(FIRE_ENDING_TRIGGER, [start + trigger])
+      hit = data.find(vtable, hit + 1)
+    self.logger.warning(f"No ending trigger found for DAG node {node}")
+    return False
+
+  def job_screen_showing(self) -> bool:
+    """Whether the job-complete screen is up. It is one object per map,
+    shared by every mission that shows it."""
+    episode = self.get_current_episode()
+    if not 1 <= episode <= 8:
+      return False
+    node = self._get_job_address(self.addresses["jobs"][episode-1][0][0])
+    mission = self._read32(node + NODE_MISSION)
+    if (
+      not in_ee_ram(mission, MISSION_SCREEN + 4) or
+      self._read32(mission + MISSION_SCREEN_ID) == 0xFFFFFFFF
+    ):
+      return False
+    screen = self._read32(mission + MISSION_SCREEN)
+    return (
+      in_ee_ram(screen, SCREEN_STATE + 4) and
+      self._read32(screen + SCREEN_STATE) == SCREEN_SHOWING
+    )
 
   def job_completed(self, task: int) -> bool:
     return self._read_job_status(task) == 3

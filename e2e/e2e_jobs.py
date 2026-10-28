@@ -1,7 +1,7 @@
 """Job DAG writes against the ep1_hub savestate, and the client's
 job-completed -> location check flow. Episode 1 opens with Satellite
-Sabotage (node 4 -> tasks 5, 6, 7 -> job end 8) gating node 9, which gates
-Breaking and Entering (node 10)."""
+Sabotage (node 4 -> tasks 5, 6, 7 -> job end 8) gating Breaking and
+Entering (node 9)."""
 
 import asyncio
 import time
@@ -15,8 +15,8 @@ from .tick_base import TickTestBase
 
 FIRST_JOB = 4
 FIRST_JOB_TASKS = [5, 6, 7]
-FIRST_JOB_CLOSURE = range(4, 10)
-SECOND_JOB = 10
+FIRST_JOB_CLOSURE = range(4, 9)
+SECOND_JOB = 9
 SECOND_CHAPTER_JOB = 36
 LOCKED, AVAILABLE, IN_PROGRESS, DONE = range(4)
 SETTLED = 3

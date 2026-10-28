@@ -234,3 +234,51 @@ class TestTotalLootMaxBelowStepCoercion(OptionTestBase):
 
   def test_strict_raises(self) -> None:
     self.assert_option_error({**self.options, "permissive_yaml": False})
+
+
+SKIPPED_GOAL_JOB = "The Black Chateau - Operation: Thunder Beak"
+SKIPPED_JOB = "The Black Chateau - Breaking and Entering"
+
+
+class TestSkipJobsGoalCoercion(OptionTestBase):
+  options = {
+    "permissive_yaml": True,
+    "goal": "Dimitri",
+    "skip_jobs": [SKIPPED_GOAL_JOB, SKIPPED_JOB],
+  }
+
+  def test_goal_job_dropped(self) -> None:
+    self.assertEqual(self.world.options.skip_jobs.value, {SKIPPED_JOB})
+
+  def test_strict_raises(self) -> None:
+    self.assert_option_error({**self.options, "permissive_yaml": False})
+
+
+class TestSkipJobsPickAndMixGoal(OptionTestBase):
+  options = {
+    "permissive_yaml": True,
+    "goal": "Pick_and_Mix",
+    "pick_and_mix": {"a_starry_eyed_encounter": 1},
+    "skip_jobs": ["A Starry Eyed Encounter - Operation: Hippo Drop"],
+  }
+
+  def test_goal_job_dropped(self) -> None:
+    self.assertEqual(self.world.options.skip_jobs.value, set())
+
+  def test_strict_raises(self) -> None:
+    self.assert_option_error({**self.options, "permissive_yaml": False})
+
+
+class TestSkipJobsOtherGoal(OptionTestBase):
+  options = {
+    "goal": "Clockwerk_Hunt",
+    "skip_jobs": [
+      "Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la"
+    ],
+  }
+
+  def test_finale_kept(self) -> None:
+    self.assertEqual(
+      self.world.options.skip_jobs.value,
+      {"Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la"}
+    )

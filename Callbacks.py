@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING, Optional
+from dataclasses import dataclass, field
 from time import time
 from random import choice, randint
 from math import ceil
@@ -31,7 +32,9 @@ from .data.Constants import (
   MENU_ICON_THEMES,
   episode_key,
   episode_name,
-  episode_number
+  episode_number,
+  goal_job_locations,
+  job_skip_steps
 )
 from .data.Names import (
   ItemCategory,
@@ -56,6 +59,30 @@ from .Sly2Options import PickpocketCheckMode, RingLinkBehavior, ScoutThiefnet
 if TYPE_CHECKING:
   from .Sly2Client import Sly2Context
 
+# Seconds the game must stay free of cutscenes, transitions and the
+# job-complete screen before the next job skip step, so each step's ending
+# (and the chalk talk or map load the game starts after it) gets going first.
+SKIP_SETTLE = 3.0
+# Seconds of that quiet a skip may wait for its next step's node to become
+# available before giving up.
+SKIP_STALL = 60.0
+
+# Job location -> (episode number, chapter index, job index)
+JOB_INDICES = {
+  job_location(episode, job): (i+1, j, k)
+  for i, (episode, chapters) in enumerate(EPISODES.items())
+  for j, chapter in enumerate(chapters)
+  for k, job in enumerate(chapter)
+}
+
+@dataclass
+class JobSkip:
+  """A job being skipped, with the steps still to run"""
+  location: str
+  episode: int
+  steps: list[tuple[str, int]]
+  stalled_since: Optional[float] = field(default=None)
+
 async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
   """Called every tick"""
   if ctx.current_episode is None:
@@ -77,8 +104,11 @@ async def update(ctx: 'Sly2Context', ap_connected: bool) -> None:
       if ctx.text_dirty:
         replace_text(ctx)
         ctx.text_dirty = False
+      if ctx.job_skip is not None:
+        run_job_skip(ctx, ctx.job_skip)
     else:
       handle_episode_state(ctx, in_hub)
+      handle_job_skips(ctx)
 
       if not in_safehouse:
         if ctx.slot_data["include_vaults"]:
@@ -359,6 +389,7 @@ async def init(ctx: 'Sly2Context', ap_connected: bool) -> None:
       return
 
     mark_dirty(ctx)
+    ctx.job_skip_ready_at = time() + SKIP_SETTLE
     fix_mega_jump(ctx)
     ctx.game_interface.install_cave()
     ctx.game_interface.set_vault_marker()
@@ -782,7 +813,6 @@ def set_jobs(ctx: 'Sly2Context') -> None:
   episode_index = ctx.current_episode.value-1
   episode_jobs = ctx.game_interface.addresses["jobs"][episode_index]
   available = ctx.available_episodes[ctx.current_episode]
-  completed_jobs = ctx.jobs_completed[ctx.current_episode-1]
   ctx.game_interface.logger.debug(
     f"set_jobs: episode {episode_index+1}, {available} episode item(s)"
   )
@@ -791,14 +821,189 @@ def set_jobs(ctx: 'Sly2Context') -> None:
       if isinstance(job, tuple):
         job = job[0]
 
-      prerequisites = [
-        j for chapter in completed_jobs[:i]
-        for j in chapter
-      ]
-      if available > i and all(prerequisites):
+      if chapter_unlocked(ctx, ctx.current_episode, i):
         ctx.game_interface.activate_job(job)
       else:
         ctx.game_interface.deactivate_job(job)
+
+def chapter_unlocked(
+  ctx: 'Sly2Context', episode: Sly2Episode, chapter: int
+) -> bool:
+  """Whether the client lets the chapter's jobs be available"""
+  completed = ctx.jobs_completed[episode-1]
+  return (
+    ctx.available_episodes[episode] > chapter and
+    all(job for jobs in completed[:chapter] for job in jobs)
+  )
+
+def pending_skip_steps(
+  ctx: 'Sly2Context', location: str
+) -> list[tuple[str, int]]:
+  """The steps a skip of the job (in the current episode) still has to run,
+  empty once the job is done"""
+  episode, chapter, k = JOB_INDICES[location]
+  job = ctx.game_interface.addresses["jobs"][episode-1][chapter][k]
+  steps = job_skip_steps(episode, job)
+  statuses = ctx.game_interface.job_statuses([node for _, node in steps])
+  while steps and statuses[0] == 3:
+    steps, statuses = steps[1:], statuses[1:]
+  # An ending trigger isn't marked done once it has played, so it only runs
+  # right after the skip finishes the job's last mission
+  if steps and steps[0][0] == "end":
+    return []
+  return steps
+
+def skip_blocker(ctx: 'Sly2Context', location: str) -> Optional[str]:
+  """Why the job can't start being skipped right now, or None if it can"""
+  episode, chapter, _ = JOB_INDICES[location]
+  if ctx.current_episode != episode:
+    return f"enter {episode_name(episode)} first"
+  if not ctx.game_interface.in_hub():
+    return "return to the hub first"
+  if ctx.game_interface.current_mission():
+    return "finish or quit the job in progress first"
+  steps = pending_skip_steps(ctx, location)
+  if not steps:
+    return "it is already done"
+  if (
+    not chapter_unlocked(ctx, Sly2Episode(episode), chapter) or
+    ctx.game_interface.job_statuses([steps[0][1]])[0] != 1
+  ):
+    return "it isn't available yet"
+  if time() < ctx.job_skip_ready_at:
+    return "wait for the current scene to finish"
+  return None
+
+def start_job_skip(ctx: 'Sly2Context', location: str) -> Optional[str]:
+  """Starts skipping the job; returns why it can't instead"""
+  blocker = skip_blocker(ctx, location)
+  if blocker is not None:
+    return blocker
+  ctx.job_skip = JobSkip(
+    location, JOB_INDICES[location][0], pending_skip_steps(ctx, location)
+  )
+  ctx.game_interface.logger.info(f"Skipping {location}")
+  ctx.notification(f"Skipping {location.split(' - ', 1)[1]}")
+  return None
+
+def run_job_skip(ctx: 'Sly2Context', skip: JobSkip) -> None:
+  """Runs the skip's next step once the game is ready for it"""
+  interface = ctx.game_interface
+  if ctx.current_episode != skip.episode:
+    if skip.steps:
+      interface.logger.info(
+        f"Stopped skipping {skip.location}: left the episode"
+      )
+    else:
+      interface.logger.info(f"Skipped {skip.location}")
+    ctx.job_skip = None
+    return
+
+  now = time()
+  if now < ctx.job_skip_ready_at:
+    skip.stalled_since = None
+    return
+  if not skip.steps:
+    interface.logger.info(f"Skipped {skip.location}")
+    ctx.job_skip = None
+    return
+
+  kind, node = skip.steps[0]
+  status = interface.job_statuses([node])[0]
+  if kind == "skip" and status == 3:
+    skip.steps.pop(0)
+    return
+  # A later part of an operation may already be running: the game starts
+  # some of them by itself once the previous part is done
+  if status == 1 or (kind == "skip" and status == 2):
+    run = {
+      "skip": interface.skip_mission,
+      "go": interface.go_to_job,
+      "end": interface.fire_ending_trigger,
+    }[kind]
+    if run(node):
+      interface.logger.debug(f"Job skip step: {kind} node {node}")
+      skip.steps.pop(0)
+      skip.stalled_since = None
+      ctx.job_skip_ready_at = now + SKIP_SETTLE
+    return
+
+  if skip.stalled_since is None:
+    skip.stalled_since = now
+  elif now - skip.stalled_since > SKIP_STALL:
+    interface.logger.warning(
+      f"Gave up skipping {skip.location}: DAG node {node} never became "
+      f"available (status {status})"
+    )
+    ctx.job_skip = None
+
+def handle_job_skips(ctx: 'Sly2Context') -> None:
+  """Runs the job skip in progress, else starts the one asked for with
+  /skip_job or the next of the yaml's skip_jobs that is available"""
+  if ctx.slot_data is None:
+    return
+
+  request, ctx.job_skip_request = ctx.job_skip_request, None
+  pending = [
+    location for location in ctx.slot_data["skip_jobs"]
+    if JOB_INDICES[location][0] == ctx.current_episode and
+    not job_done(ctx, location)
+  ]
+  if ctx.job_skip is None and request is None and not pending:
+    return
+
+  interface = ctx.game_interface
+  if (
+    interface.get_current_map() == 0xffffffff or
+    interface.in_cutscene() or
+    interface.job_screen_showing()
+  ):
+    ctx.job_skip_ready_at = time() + SKIP_SETTLE
+
+  if ctx.job_skip is None and request is not None:
+    blocker = start_job_skip(ctx, request)
+    if blocker is not None:
+      interface.logger.info(f"Can't skip {request}: {blocker}")
+  elif ctx.job_skip is None:
+    for location in pending:
+      if start_job_skip(ctx, location) is None:
+        break
+  elif request is not None:
+    interface.logger.info(
+      f"Can't skip {request}: another job is being skipped"
+    )
+
+  if ctx.job_skip is not None:
+    run_job_skip(ctx, ctx.job_skip)
+
+def job_done(ctx: 'Sly2Context', location: str) -> bool:
+  episode, chapter, k = JOB_INDICES[location]
+  return ctx.jobs_completed[episode-1][chapter][k]
+
+def skip_command_target(
+  ctx: 'Sly2Context', name: str
+) -> tuple[Optional[str], str]:
+  """The job location /skip_job asks for, or None and why not"""
+  if ctx.slot_data is None or ctx.current_episode is None:
+    return None, "connect to the server and the game first"
+  if not 1 <= ctx.current_episode <= len(EPISODES):
+    return None, "enter an episode first"
+  episode = episode_name(int(ctx.current_episode))
+  matches = [
+    job_location(episode, job)
+    for chapter in EPISODES[episode]
+    for job in chapter
+    if name.lower() in (job.lower(), job_location(episode, job).lower())
+  ]
+  if not matches:
+    return None, f"{episode} has no job called \"{name}\""
+  location = matches[0]
+  goal = goal_job_locations(
+    ctx.slot_data["goal"], ctx.slot_data["pick_and_mix"]
+  )
+  if location in goal:
+    return None, "your goal needs it"
+  return location, ""
 
 def handle_episode_hint(ctx: 'Sly2Context') -> None:
   """Hint what unlocks the next jobs when the available ones are all done"""
