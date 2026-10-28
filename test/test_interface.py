@@ -40,6 +40,8 @@ from ..data.Constants import (
   THIEFNET_TEXT_VANILLA,
   THIEFNET_NAME_COLOR,
   THIEFNET_NAME_COLOR_RELOC,
+  THIEFNET_COST_LAYOUT_WIDE,
+  THIEFNET_COST_LAYOUT_VANILLA,
   GLYPH_TABLE_ALT,
   MENU_ICON_TABLE
 )
@@ -565,6 +567,71 @@ class TestThiefNetColors(InterfaceTestBase):
     self.interface.clear_thiefnet_colors()
     slot = self.addr["cave patches"]
     self.assertEqual(self.pine.peek32(slot), 0)
+
+
+class TestThiefNetCostLayout(InterfaceTestBase):
+  def _install(self) -> None:
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG)
+    self.interface.install_cave()
+    self.pine.poke32(THIEFNET_COLORS_SITE, THIEFNET_COLORS_ORIG)
+    self.interface.clear_cache()
+    self.pine.clear_writes()
+
+  def _layouts(self) -> tuple[float, ...]:
+    return struct.unpack(
+      "<6f", self.pine.peek_bytes(self.addr["thiefnet cost layouts"], 24)
+    )
+
+  def test_wide_writes_both_layouts(self) -> None:
+    self._install()
+    self.interface.set_thiefnet_cost_layout(True)
+    expected = THIEFNET_COST_LAYOUT_WIDE + THIEFNET_COST_LAYOUT_VANILLA
+    for got, want in zip(self._layouts(), expected):
+      self.assertAlmostEqual(got, want, places=5)
+
+  def test_wide_redirects_scroll_through_cave(self) -> None:
+    self._install()
+    self.interface.set_thiefnet_cost_layout(True)
+    slot = self.addr["cave patches"]
+    self.assertEqual(self.pine.peek32(slot), THIEFNET_COLORS_SITE)
+    self.assertEqual(
+      self.pine.peek32(slot + 4), 0x0C000000 | (CAVE_THIEFNET_COLORS >> 2)
+    )
+
+  def test_narrow_clears_layouts_without_hook(self) -> None:
+    self._install()
+    self.interface.set_thiefnet_cost_layout(False)
+    self.assertEqual(self._layouts(), (0.0,) * 6)
+    self.assertEqual(self.pine.peek32(self.addr["cave patches"]), 0)
+
+  def test_clearing_colors_keeps_hook_for_wide_costs(self) -> None:
+    self._install()
+    self.interface.set_thiefnet_cost_layout(True)
+    self.pine.poke32(
+      THIEFNET_COLORS_SITE, 0x0C000000 | (CAVE_THIEFNET_COLORS >> 2)
+    )
+    self.pine.poke32(self.addr["cave patches"], 0)
+    self.interface.clear_cache()
+    self.interface.clear_thiefnet_colors()
+    self.assertEqual(self.pine.peek32(self.addr["cave patches"]), 0)
+
+  def test_narrow_unhooks_without_colors(self) -> None:
+    self._install()
+    self.pine.poke32(
+      THIEFNET_COLORS_SITE, 0x0C000000 | (CAVE_THIEFNET_COLORS >> 2)
+    )
+    self.interface.clear_cache()
+    self.interface.set_thiefnet_cost_layout(False)
+    slot = self.addr["cave patches"]
+    self.assertEqual(self.pine.peek32(slot), THIEFNET_COLORS_SITE)
+    self.assertEqual(self.pine.peek32(slot + 4), THIEFNET_COLORS_ORIG)
+
+  def test_without_cave_writes_no_patch(self) -> None:
+    self.pine.poke32(THIEFNET_COLORS_SITE, THIEFNET_COLORS_ORIG)
+    self.pine.clear_writes()
+    self.interface.set_thiefnet_cost_layout(True)
+    self.assertFalse(self.pine.written(THIEFNET_COLORS_SITE))
+    self.assertEqual(self.pine.peek32(self.addr["cave patches"]), 0)
 
 
 class TestThiefnetPrefs(InterfaceTestBase):

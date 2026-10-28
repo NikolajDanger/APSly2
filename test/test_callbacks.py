@@ -1472,6 +1472,22 @@ class TestSetThiefnet(ClientTestBase):
     )
     self.assertEqual(self.ctx.sent, [])
 
+  async def test_four_digit_costs_keep_vanilla_cost_cells(self) -> None:
+    self.slot_data["scout_thiefnet"] = ScoutThiefnet.option_show_only
+    self.slot_data["thiefnet_costs"] = [9999] * 24
+    await set_thiefnet(self.ctx)
+    self.assertEqual(
+      self.pine.peek_bytes(self.addr["thiefnet cost layouts"], 24), bytes(24)
+    )
+
+  async def test_five_digit_cost_widens_cost_cells(self) -> None:
+    self.slot_data["scout_thiefnet"] = ScoutThiefnet.option_show_only
+    self.slot_data["thiefnet_costs"] = [500] * 23 + [10000]
+    await set_thiefnet(self.ctx)
+    self.assertNotEqual(
+      self.pine.peek_bytes(self.addr["thiefnet cost layouts"], 24), bytes(24)
+    )
+
   async def test_foreign_item_keeps_owner_prefix(self) -> None:
     self.slot_data["scout_thiefnet"] = ScoutThiefnet.option_show_only
     self.ctx.slot = 2  # the items belong to player 1, so they are foreign

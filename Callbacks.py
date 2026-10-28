@@ -557,6 +557,9 @@ async def set_thiefnet(ctx: 'Sly2Context') -> None:
 
   for i, cost in enumerate(ctx.slot_data["thiefnet_costs"]):
     ctx.game_interface.set_thiefnet_cost(i, cost)
+  ctx.game_interface.set_thiefnet_cost_layout(
+    max(ctx.slot_data["thiefnet_costs"], default=0) > 9999
+  )
   write_thiefnet_names(ctx)
 
   load_thiefnet_prefs(ctx)

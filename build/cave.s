@@ -45,6 +45,9 @@
 #   guards: when the remove-guards flag is set, despawns every guard in the
 #     world through the game's own removal (remove_guards below) and clears
 #     the flag.
+#   costs: while ThiefNet is open and the client has set the cost layouts,
+#     lays out each visible cost cell for the cost it shows, so five-digit
+#     costs fit (tn_costs below).
 #   call: when a function pointer is set, calls it with the four argument words
 #     that follow it, stores the return value, clears the pointer and bumps a
 #     completion counter, so the client can run any game function.
@@ -93,8 +96,9 @@ menu_icons:
 	lui   $k1, 0x003d
 	ori   $k1, $k1, 0xa160      # ThiefNet UI control block
 	lw    $t9, 0($k1)
-	beq   $t9, $zero, mi_teardown  # ThiefNet closed: restore the global
-	nop
+	b     tn_costs              # closed: mi_teardown; open: widen the cost
+	nop                         # column, then come back
+tc_return:
 	lui   $k0, 0x0042
 	ori   $k0, $k0, 0xcfb0      # menu-icon params
 	lw    $k1, 0($k0)
@@ -497,6 +501,8 @@ tncolors_store:
 	bne   $t3, $zero, tncolors_loop
 	addiu $t2, $t2, 0x80
 tncolors_done:
+	bal   tc_layout             # the scroll changed which cost each cell
+	nop                         # shows: lay them out before this frame draws
 	lui   $k0, 0x0042
 	ori   $k0, $k0, 0xcfa0
 	lw    $ra, 0($k0)
@@ -583,3 +589,104 @@ rg_next:
 	lw    $ra, 0($sp)
 	jr    $ra
 	addiu $sp, $sp, 0x20
+
+# Per-frame part of menu_icons, kept at the end so the extra functions above
+# stay at their addresses. The cost cells only fit four digits: the text is
+# right-anchored in a box that grows from its left x, so a five-digit cost
+# needs a wider box, moved left and squeezed. Each visible cell takes the
+# client's wide layout (width, x scale, x at 0x0042CFD0; width 0 = off) when
+# the row it shows costs over 9999, and the vanilla one (at +0xc) otherwise,
+# so a scroll moves the layout with the cost. The rows come from the menu's
+# row array, as in mi_colors. The scroll hook (thiefnet_colors) runs the
+# same pass, since this per-frame one runs before the scroll in its frame
+# and would leave one frame drawn with the previous rows' layouts. The box width lives in each cell's draw item
+# (vanilla glyph table, and its relocated copy once the menu icons are
+# wired); scale and x live in two template transforms the game copies into a
+# live transform every frame. Draw items and templates are built together on
+# the first open and kept across reopens, so the draw item's element id
+# guards both. The live transforms are a shared pool, only written while
+# they point at a cost cell.
+tn_costs:
+	beq   $t9, $zero, mi_teardown  # ThiefNet closed: restore the global
+	nop
+	bal   tc_layout
+	nop
+	b     tc_return
+	nop
+tc_layout:
+	lui   $t0, 0x0042
+	ori   $t0, $t0, 0xcfd0      # cost layouts: wide, then vanilla
+	lw    $t1, 0($t0)
+	beq   $t1, $zero, tc_done   # no layout set
+	nop
+	lui   $t1, 0x003d
+	ori   $t1, $t1, 0xa3a0      # scroll offset = first visible row
+	lw    $t1, 0($t1)
+	sltiu $at, $t1, 27          # 24-row list, 6 visible rows
+	beq   $at, $zero, tc_done   # implausible scroll: bail
+	sll   $t1, $t1, 3
+	lui   $t2, 0x003d
+	ori   $t2, $t2, 0xa19c      # menu row array {item entry, element id}
+	addu  $t1, $t1, $t2         # &rows[scroll]
+	lui   $t4, 0x003e
+	ori   $t4, $t4, 0x30a0      # cost cell 0's draw item (stride 0x80)
+	lui   $t5, 0x0043
+	ori   $t5, $t5, 0x6f24      # the same in the relocated glyph table
+	lui   $t6, 0x003e
+	ori   $t6, $t6, 0x7990      # live transform pool (stride 0xe0)
+	lui   $t7, 0x003e
+	ori   $t7, $t7, 0x8e60      # first template (stride 0x80), second +0x1830
+	addiu $t8, $zero, 0x442     # cost cell 0's element id
+tc_loop:
+	lw    $at, 0x18($t4)
+	bne   $at, $t8, tc_next     # not built yet
+	nop
+	lw    $t2, 0($t1)           # the row's item entry
+	sltiu $at, $t2, 0x2b        # the item table's size; past the end: -1
+	beq   $at, $zero, tc_narrow
+	sll   $t2, $t2, 5
+	lui   $t3, 0x002c
+	addu  $t3, $t3, $t2
+	lw    $t3, -0x32f8($t3)     # the item's cost (0x2BCD08 + entry * 0x20)
+	sltiu $at, $t3, 10000
+	bne   $at, $zero, tc_narrow
+	nop
+	b     tc_apply
+	move  $t2, $t0              # wide layout
+tc_narrow:
+	addiu $t2, $t0, 12          # vanilla layout
+tc_apply:
+	lw    $t3, 0($t2)           # width
+	sw    $t3, 0x24($t4)
+	lw    $at, 0x18($t5)
+	bne   $at, $t8, tc_templates
+	nop
+	sw    $t3, 0x24($t5)
+tc_templates:
+	lw    $t3, 4($t2)           # x scale
+	lw    $t9, 8($t2)           # x
+	sw    $t3, 0($t7)
+	sw    $t9, 0x10($t7)
+	sw    $t3, 0x1830($t7)
+	sw    $t9, 0x1840($t7)
+	lw    $at, 0x20($t6)        # the live transform's draw item
+	beq   $at, $t4, tc_live
+	nop
+	bne   $at, $t5, tc_next
+	nop
+tc_live:
+	sw    $t3, 0($t6)
+	sw    $t9, 0x10($t6)
+tc_next:
+	addiu $t1, $t1, 8
+	addiu $t4, $t4, 0x80
+	addiu $t5, $t5, 0x80
+	addiu $t6, $t6, 0xe0
+	addiu $t7, $t7, 0x80
+	addiu $t8, $t8, 1
+	sltiu $at, $t8, 0x448
+	bne   $at, $zero, tc_loop
+	nop
+tc_done:
+	jr    $ra
+	nop

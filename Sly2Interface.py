@@ -53,6 +53,8 @@ from .data.Constants import (
   THIEFNET_NAME_COLOR,
   THIEFNET_NAME_COLOR_RELOC,
   THIEFNET_COLORS_FLAG,
+  THIEFNET_COST_LAYOUT_WIDE,
+  THIEFNET_COST_LAYOUT_VANILLA,
   GLYPH_TABLE_ALT,
   MENU_ICON_CAVE,
   MENU_ICON_TABLE,
@@ -1556,11 +1558,7 @@ class Sly2Interface(GameInterface):
     table = self.addresses["thiefnet color table"]
     self._batch_write32([(table + i*4, padded[i]) for i in range(32)])
     self._write32(THIEFNET_COLORS_FLAG, 1)
-    self.safe_patch(
-      THIEFNET_COLORS_SITE,
-      0x0C000000 | (CAVE_THIEFNET_COLORS >> 2),
-      THIEFNET_COLORS_ORIG,
-    )
+    self._sync_thiefnet_scroll_hook()
     shown = visible[:6] + [THIEFNET_TEXT_VANILLA] * (6 - len(visible))
     self._batch_write32(
       [(slots + i*0x80, shown[i]) for i in range(6)
@@ -1571,15 +1569,33 @@ class Sly2Interface(GameInterface):
     """Undo set_thiefnet_colors: restore the scroll handler's own call and put
     the visible rows' name text back to the vanilla blue."""
     self._write32(THIEFNET_COLORS_FLAG, 0)
-    self.safe_patch(
-      THIEFNET_COLORS_SITE,
-      THIEFNET_COLORS_ORIG,
-      0x0C000000 | (CAVE_THIEFNET_COLORS >> 2),
-    )
+    self._sync_thiefnet_scroll_hook()
     self._batch_write32(
       [(slots + i*0x80, THIEFNET_TEXT_VANILLA) for i in range(6)
        for slots in (THIEFNET_NAME_COLOR, THIEFNET_NAME_COLOR_RELOC)]
     )
+
+  def set_thiefnet_cost_layout(self, wide: bool) -> None:
+    """Have the cave widen each ThiefNet cost cell showing a five-digit
+    cost, or leave every cell vanilla."""
+    layouts = THIEFNET_COST_LAYOUT_WIDE + THIEFNET_COST_LAYOUT_VANILLA
+    self._write_bytes(
+      self.addresses["thiefnet cost layouts"],
+      struct.pack("<6f", *layouts) if wide else bytes(24)
+    )
+    self._sync_thiefnet_scroll_hook()
+
+  def _sync_thiefnet_scroll_hook(self) -> None:
+    """Route the ThiefNet scroll handler through the cave while the text
+    colors or the cost layouts need redoing on a scroll."""
+    if not self.cave_live():
+      return
+    hook = 0x0C000000 | (CAVE_THIEFNET_COLORS >> 2)
+    if (self._read32(THIEFNET_COLORS_FLAG) or
+        self._read32(self.addresses["thiefnet cost layouts"])):
+      self.safe_patch(THIEFNET_COLORS_SITE, hook, THIEFNET_COLORS_ORIG)
+    else:
+      self.safe_patch(THIEFNET_COLORS_SITE, THIEFNET_COLORS_ORIG, hook)
 
   def kill_player(self, damage_type: int = 0x200) -> None:
     if self.in_safehouse() or self.get_current_episode() == 0:

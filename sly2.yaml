@@ -315,9 +315,12 @@ requires:
 
   # The minimum number of coins items on ThiefNet will cost.
   #
+  # Disclaimer: having ThiefNet costs higher than 9,999 is a bad idea,
+  # reserved exclusively for maniacs.
+  #
   # You can define additional values between the minimum and maximum values.
   # Minimum value is 0
-  # Maximum value is 9999
+  # Maximum value is 99999
   thiefnet_minimum:
     200: 100
     random: 0
@@ -326,9 +329,12 @@ requires:
 
   # The maximum number of coins items on ThiefNet will cost.
   #
+  # Disclaimer: having ThiefNet costs higher than 9,999 is a bad idea,
+  # reserved exclusively for maniacs.
+  #
   # You can define additional values between the minimum and maximum values.
   # Minimum value is 0
-  # Maximum value is 9999
+  # Maximum value is 99999
   thiefnet_maximum:
     2000: 100
     random: 0

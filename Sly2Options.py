@@ -215,22 +215,28 @@ class CoinsMaximum(Range):
 class ThiefNetCostMinimum(Range):
   """
   The minimum number of coins items on ThiefNet will cost.
+
+  Disclaimer: having ThiefNet costs higher than 9,999 is a bad idea,
+  reserved exclusively for maniacs.
   """
 
   display_name = "ThiefNet Cost Minimum"
   range_start = 0
-  range_end = 9999
+  range_end = 99999
   default = 200
 
 
 class ThiefNetCostMaximum(Range):
   """
   The maximum number of coins items on ThiefNet will cost.
+
+  Disclaimer: having ThiefNet costs higher than 9,999 is a bad idea,
+  reserved exclusively for maniacs.
   """
 
   display_name = "ThiefNet Cost Maximum"
   range_start = 0
-  range_end = 9999
+  range_end = 99999
   default = 2000
 
 class IncludeVaults(DefaultOnToggle):
