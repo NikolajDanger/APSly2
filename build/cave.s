@@ -771,7 +771,11 @@ skip_job:
 #     presses from the next, so the trap locks every action but walking.
 #   pace: the player character's vjoy gets a fixed magnitude after the
 #     fill, and with the stick released keeps the character's heading, so
-#     the hypnotized walk can only be steered, like the game's own.
+#     the hypnotized walk can only be steered, like the game's own. A
+#     character hanging from a ledge, or Sly perched (tightrope, spire,
+#     narrow ledge) or on a pole, would stay put for the whole trap, so
+#     they are dropped into a fall through the game's own jump states,
+#     without the jump's push (see hypno_ledge for the regrab).
 # The EE's float compare is funct 0x34, not the 0x3c the assembler emits,
 # hence the .word.
 hypno_vjoy:
@@ -864,6 +868,29 @@ hv_latch:
 hv_pace:
 	lwc1  $f5, 0($t1)
 	swc1  $f5, 0x1c($a0)        # fixed magnitude
+	lw    $t4, 0x2dc($t3)       # jump sub-state
+	addiu $t5, $zero, 0x11      # hanging from a ledge
+	beq   $t4, $t5, hv_fall
+	lui   $t4, 0x003d
+	lw    $t4, 0x4a6c($t4)      # character id
+	addiu $t5, $zero, 7         # Sly
+	bne   $t4, $t5, hv_done
+	lw    $t4, 0x18c8($t3)      # Sly's state
+	addiu $t4, $t4, -7
+	sltiu $t4, $t4, 2           # perched (7) or on a pole (8)
+	beq   $t4, $zero, hv_done
+	sw    $t3, 0x18($sp)
+	addiu $a0, $t3, 0x2c0
+	addiu $a1, $zero, 4         # airborne, without a jump
+	move  $a2, $zero
+	jal   0x195a00
+	move  $a3, $zero
+	lw    $t3, 0x18($sp)
+hv_fall:
+	addiu $a0, $t3, 0x2c0
+	addiu $a1, $zero, 2         # falling
+	jal   0x195fb8
+	move  $a2, $zero
 hv_done:
 	ld    $ra, 0x20($sp)
 	jr    $ra
@@ -952,3 +979,65 @@ hl_out:
 	ld    $ra, 0x10($sp)
 	j     0x117d50              # the original call
 	addiu $sp, $sp, 0x20
+
+# Extra function, not part of the per-frame routine: patched over the
+# stack store just before the game's "enemy in attack range" test loads the
+# range level (HYPNOSIS_STANCE_SITE, `swc1 $f20, 0x50($sp)`; the call's
+# delay slot is that load into $v1). Sly and Murray drop into their combat
+# stance when it passes, and the stance's walk replaces the hypnotized one,
+# so while the pace is on the player character is reported out of range.
+# The guards, the music and the alert icon read the level themselves and
+# are unaffected.
+hypno_stance:
+	swc1  $f20, 0x50($sp)       # the instruction the call replaced
+	lui   $at, 0x0043
+	lw    $at, -0x32f8($at)     # pace on (0x0042CD08)
+	beq   $at, $zero, hs_out
+	lui   $at, 0x002e
+	lw    $at, -0x1d10($at)     # active character
+	bne   $at, $s0, hs_out
+	nop
+	move  $v1, $zero            # out of range
+hs_out:
+	jr    $ra
+	nop
+
+# Extra function, not part of the per-frame routine: patched over Sly's load
+# of the guard proximity level that picks his walk (HYPNOSIS_NEAR_SITE,
+# `lw $v1, 0x10e4($s1)`). At level 3 he swaps his walk for a close-to-guard
+# sneak, whose walk also replaces the hypnotized one, so while the pace is on
+# the player character reads level 0 there. The other level-3 test in that
+# state needs a button the trap's latch already blocks.
+hypno_near:
+	lw    $v1, 0x10e4($s1)      # the instruction the call replaced
+	lui   $at, 0x0043
+	lw    $at, -0x32f8($at)     # pace on (0x0042CD08)
+	beq   $at, $zero, hn_out
+	lui   $at, 0x002e
+	lw    $at, -0x1d10($at)     # active character
+	bne   $at, $s1, hn_out
+	nop
+	move  $v1, $zero            # no guard near
+hn_out:
+	jr    $ra
+	nop
+
+# Extra function, not part of the per-frame routine: patched over the jump
+# states' call to the ledge search (HYPNOSIS_LEDGE_SITE, `jal 0x199d48`;
+# a0 is the character's jump state, whose first word is the character).
+# A character dropped from a ledge by hypno_vjoy would catch it again on
+# the way down, so while the pace is on the player character finds none.
+hypno_ledge:
+	lui   $at, 0x0043
+	lw    $at, -0x32f8($at)     # pace on (0x0042CD08)
+	beq   $at, $zero, hg_out
+	lui   $at, 0x002e
+	lw    $at, -0x1d10($at)     # active character
+	lw    $t9, 0($a0)
+	bne   $at, $t9, hg_out
+	nop
+	jr    $ra
+	move  $v0, $zero            # no ledge
+hg_out:
+	j     0x199d48              # the original call
+	nop

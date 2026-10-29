@@ -11,11 +11,17 @@ from ..data.Constants import (
   CAVE_HOOK_ORIG,
   CAVE_HOOK_ORIG_WORD,
   CAVE_HYPNOSIS_LEVEL_UNLOAD,
+  CAVE_HYPNOSIS_LEDGE,
+  CAVE_HYPNOSIS_NEAR,
+  CAVE_HYPNOSIS_STANCE,
   CAVE_HYPNOSIS_VJOY,
   CAVE_VAULT_MARKER,
   HYPNOSIS_BANK_SITE,
   HYPNOSIS_SITE,
   HYPNOSIS_SITE_ORIG,
+  HYPNOSIS_LEDGE_SITE,
+  HYPNOSIS_NEAR_SITE,
+  HYPNOSIS_STANCE_SITE,
   COIN_POP_INTERVAL,
   LOOT,
   LOOT_IDS,
@@ -307,6 +313,18 @@ class TestCave(InterfaceTestBase):
       self.pine.peek32(HYPNOSIS_BANK_SITE),
       0x0C000000 | (CAVE_HYPNOSIS_LEVEL_UNLOAD >> 2)
     )
+    self.assertEqual(
+      self.pine.peek32(HYPNOSIS_STANCE_SITE),
+      0x0C000000 | (CAVE_HYPNOSIS_STANCE >> 2)
+    )
+    self.assertEqual(
+      self.pine.peek32(HYPNOSIS_NEAR_SITE),
+      0x0C000000 | (CAVE_HYPNOSIS_NEAR >> 2)
+    )
+    self.assertEqual(
+      self.pine.peek32(HYPNOSIS_LEDGE_SITE),
+      0x0C000000 | (CAVE_HYPNOSIS_LEDGE >> 2)
+    )
     self.assertEqual(self.pine.peek_bytes(state, 0x20), bytes(0x20))
     # A bank a stopped client left loaded stays known, so it is unloaded
     self.assertEqual(self.pine.peek32(state + 0x74), 0x1CBD00)
@@ -394,8 +412,7 @@ class TestCave(InterfaceTestBase):
     self.assertFalse(self.pine.written(self.addr["cave patches"]))
 
   def test_code_patch_deferred_when_slots_full(self) -> None:
-    self._prime_hook()
-    self.interface.install_cave()
+    self.install_cave()
     slots = self.addr["cave patches"]
     for i in range(4):
       self.pine.poke32(slots + 8*i, 0x100000 + 4*i)

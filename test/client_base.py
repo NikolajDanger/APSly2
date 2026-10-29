@@ -156,12 +156,17 @@ class InterfaceTestBase(unittest.TestCase):
 
   def install_cave(self) -> None:
     """Installs the cave with its hook site primed, then has the fake game
-    service the install's own patch requests as the cave would next frame"""
+    service the install's own patch requests as the cave would over the
+    next frames, with the client retrying those the slots couldn't hold"""
     self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG)
     self.interface.install_cave()
-    patched = self.pine.service_cave_patches()
     slots = self.addr["cave patches"]
+    patched = self.pine.service_cave_patches()
     self.interface.invalidate(slots, 8 * CAVE_PATCH_SLOTS)
+    while self.interface._pending_patches:
+      self.interface.flush_patches()
+      patched += self.pine.service_cave_patches()
+      self.interface.invalidate(slots, 8 * CAVE_PATCH_SLOTS)
     self.interface.prefetch(
       [(4, address) for address in patched] +
       [(4, slots + 4*i) for i in range(2 * CAVE_PATCH_SLOTS)]
