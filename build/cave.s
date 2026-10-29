@@ -750,3 +750,205 @@ skip_job:
 	lw    $ra, 0($sp)
 	jr    $ra
 	addiu $sp, $sp, 0x20
+
+# Extra function, not part of the per-frame routine: the Hypnosis trap's
+# hook, patched over the world loop's per-vjoy fill call (HYPNOSIS_SITE,
+# `jal 0x1c4468`). It runs the original fill, with three effects around it
+# that the client switches on and off through the state block at
+# 0x0042CD00 (+0 pace magnitude, +4 stick dead zone, +8 pace on, +c button
+# latch mask, +10 overlay object, +14/+18/+1c the overlay's start/loop/end
+# clip lengths less a frame and a half):
+#   overlay: the ported hypnosis overlay is a level-script state machine
+#     whose start and end clips only advance by script, so a ported copy
+#     loops them forever; when the object sits in its start (3) or end (4)
+#     state past the clip's length, it is moved on to the loop (2) or idle
+#     (1) state. The loop clip's last key draws nothing, so the loop (2)
+#     is restarted just before it. The block outlives the map that owned
+#     the object, so the object is only trusted while it still carries the
+#     class and the trap's object id.
+#   latch: the mask is OR'd into the pad latch before the fill, which
+#     masks those buttons out of this frame's vjoy and blocks them as new
+#     presses from the next, so the trap locks every action but walking.
+#   pace: the player character's vjoy gets a fixed magnitude after the
+#     fill, and with the stick released keeps the character's heading, so
+#     the hypnotized walk can only be steered, like the game's own.
+# The EE's float compare is funct 0x34, not the 0x3c the assembler emits,
+# hence the .word.
+hypno_vjoy:
+	addiu $sp, $sp, -0x30
+	sd    $ra, 0x20($sp)
+	sw    $a0, 0x10($sp)
+	lui   $t1, 0x0042
+	ori   $t1, $t1, 0xcd00      # the state block
+	lw    $t6, 0x10($t1)        # overlay object
+	beq   $t6, $zero, hv_latch
+	nop
+	lw    $t7, 0xc($t6)
+	lui   $t8, 0x002d
+	ori   $t8, $t8, 0xaf30      # its class vtable
+	bne   $t7, $t8, hv_latch
+	nop
+	lw    $t7, 0x18($t6)
+	ori   $t8, $zero, 0xfee0    # the trap's object id
+	bne   $t7, $t8, hv_latch
+	nop
+	lw    $t7, 0x58($t6)        # state
+	addiu $t8, $zero, 3
+	beq   $t7, $t8, hv_start
+	addiu $t8, $zero, 2
+	beq   $t7, $t8, hv_loop
+	addiu $t8, $zero, 4
+	bne   $t7, $t8, hv_latch
+	nop
+	lwc1  $f4, 0x1c($t1)        # end clip length
+	b     hv_clip
+	addiu $a1, $zero, 1         # -> idle
+hv_loop:
+	lwc1  $f4, 0x18($t1)        # loop clip length
+	lw    $t9, 0x84($t6)
+	lw    $t9, 8($t9)
+	lwc1  $f0, 0xc($t9)         # clip time
+	.word 0x46040034            # c.lt.s $f0, $f4
+	bc1t  hv_latch              # clip still running
+	nop
+	move  $a0, $t6
+	jal   0x213830              # play the loop clip again (the set-state
+	lw    $a1, 0x70($t6)        # function ignores the state it is in)
+	b     hv_latch
+	nop
+hv_start:
+	lwc1  $f4, 0x14($t1)        # start clip length
+	addiu $a1, $zero, 2         # -> loop
+hv_clip:
+	lw    $t9, 0x84($t6)
+	lw    $t9, 8($t9)
+	lwc1  $f0, 0xc($t9)         # clip time
+	.word 0x46040034            # c.lt.s $f0, $f4
+	bc1t  hv_latch              # clip still running
+	nop
+	move  $a0, $t6
+	jal   0x212a70              # set state + play its clip
+	nop
+hv_latch:
+	lui   $t1, 0x0042
+	ori   $t1, $t1, 0xcd00
+	lw    $t3, 0xc($t1)         # latch mask
+	lui   $t4, 0x002e
+	lw    $t5, 0x0cbc($t4)      # pad latch
+	or    $t5, $t5, $t3
+	sw    $t5, 0x0cbc($t4)
+	lw    $a0, 0x10($sp)
+	jal   0x1c4468              # the original vjoy fill
+	nop
+	lui   $t1, 0x0042
+	ori   $t1, $t1, 0xcd00
+	lw    $t2, 8($t1)           # pace on
+	beq   $t2, $zero, hv_done
+	lw    $a0, 0x10($sp)
+	lui   $t3, 0x002e
+	lw    $t3, -0x1d10($t3)     # active character
+	lw    $t5, 0x7c($a0)        # the vjoy's owner
+	bne   $t5, $t3, hv_done
+	nop
+	lw    $t6, 0x80($a0)        # vjoy mode: 1 = player pad
+	addiu $t7, $zero, 1
+	bne   $t6, $t7, hv_done
+	nop
+	lwc1  $f0, 0x1c($a0)        # stick magnitude
+	lwc1  $f4, 4($t1)           # dead zone
+	.word 0x46040034            # c.lt.s $f0, $f4
+	bc1f  hv_pace               # stick pushed: keep its angle
+	nop
+	lwc1  $f1, 0x1a8($t3)       # the character's heading
+	swc1  $f1, 0x18($a0)
+hv_pace:
+	lwc1  $f5, 0($t1)
+	swc1  $f5, 0x1c($a0)        # fixed magnitude
+hv_done:
+	ld    $ra, 0x20($sp)
+	jr    $ra
+	addiu $sp, $sp, 0x30
+
+# Extra function, not part of the per-frame routine, run through the call
+# slot: loads a sound bank from EE memory (a0) into the IOP sound driver
+# through the game's loader RPC and returns its handle, -1 if the driver
+# refused it, or -2 when the RPC client is busy (retry). The EE side of
+# the driver's library was stripped from the game, so the bank-from-EE
+# command is issued straight through the SIF RPC with the loader's client
+# and command number. The send and reply buffers are the block at
+# 0x0042CD50; the RPC blocks until the IOP replies.
+hypno_bank_load:
+	addiu $sp, $sp, -0x40
+	sd    $ra, 0x30($sp)
+	sd    $s0, 0x20($sp)
+	lui   $s0, 0x0042
+	ori   $s0, $s0, 0xcd50      # send buffer; reply at +0x10
+	sw    $a0, 0($s0)
+	addiu $v0, $zero, -1
+	sw    $v0, 0x10($s0)
+	lui   $a0, 0x0044
+	jal   0x237488              # sceSifCheckStatRpc
+	ori   $a0, $a0, 0x8440      # the loader's RPC client
+	bne   $v0, $zero, hb_busy
+	nop
+	lui   $a0, 0x0044
+	ori   $a0, $a0, 0x8440
+	addiu $a1, $zero, 0x57      # bank from EE memory
+	move  $a2, $zero            # blocking
+	move  $a3, $s0
+	addiu $t0, $zero, 4
+	addiu $t1, $s0, 0x10
+	addiu $t2, $zero, 4
+	move  $t3, $zero
+	sw    $zero, 0($sp)
+	jal   0x237288              # sceSifCallRpc
+	nop
+	b     hb_out
+	lw    $v0, 0x10($s0)
+hb_busy:
+	addiu $v0, $zero, -2
+hb_out:
+	ld    $ra, 0x30($sp)
+	ld    $s0, 0x20($sp)
+	jr    $ra
+	addiu $sp, $sp, 0x40
+
+# Extra function, not part of the per-frame routine: the callback the
+# sound driver's looping play takes, which stores the new voice handle
+# (a0) where the play call's argument (a1) points, so the client can stop
+# the voice later.
+hypno_voice_cb:
+	jr    $ra
+	sw    $a0, 0($a1)
+
+# Extra function, not part of the per-frame routine: patched over the
+# level sound-bank load's call between dropping the old level bank and
+# loading the new one (HYPNOSIS_BANK_SITE, `jal 0x117d50`, reached on every
+# level load). A trap bank still loaded there leaves the sound driver no
+# room for the next level's bank, which then fails to load and silences
+# every sound in it, so the trap's bank (+74 of the state block) is unloaded
+# first and its handle and voice words cleared, then the original call runs.
+hypno_level_unload:
+	addiu $sp, $sp, -0x20
+	sd    $ra, 0x10($sp)
+	sw    $a0, 0($sp)
+	lui   $t0, 0x0042
+	ori   $t0, $t0, 0xcd00      # the state block
+	lw    $a0, 0x74($t0)        # the trap's bank
+	beq   $a0, $zero, hl_out
+	nop
+	sw    $zero, 0x70($t0)
+	jal   0x2321b8              # unload it
+	sw    $zero, 0x74($t0)
+hl_wait:
+	jal   0x231c48              # until the driver has taken it
+	nop
+	nop
+	nop
+	bne   $v0, $zero, hl_wait
+	nop
+hl_out:
+	lw    $a0, 0($sp)
+	ld    $ra, 0x10($sp)
+	j     0x117d50              # the original call
+	addiu $sp, $sp, 0x20

@@ -757,6 +757,12 @@ ADDRESSES = {
     # Two ThiefNet cost-cell layouts (width, x scale, x as floats): the one
     # for costs over 9999, then vanilla. Read by the cave (tn_costs).
     "thiefnet cost layouts": 0x42CFD0,
+    # The Hypnosis trap's cave state (build/cave.s hypno_vjoy): +0 pace
+    # magnitude, +4 stick dead zone (floats), +8 pace on, +C button latch
+    # mask, +10 overlay object, +14/+18/+1C start/loop/end clip lengths
+    # (floats), +20 sound play params (0x30), +50 bank-load RPC buffers
+    # (0x20), +70 voice handle, +74 sound bank handle.
+    "hypnosis state": 0x42CD00,
     "heap bottom": 0x2F6384,
     "loot pool": 0x3E0930,
     "loot pool last": 0x3E0934,
@@ -1530,7 +1536,24 @@ CAVE_BLOB = (
   "0800e00300000000e0ffbd270000bfaf6800888c0400a4af0800a8af5000898c"+
   "0c00a9af5000098d1000a9af500080ac500000ad252000017c93050c03000524"+
   "0400a48f0800a88f0c00a98f500089ac1000a98f500009ad0000bf8f0800e003"+
-  "2000bd27"
+  "2000bd27d0ffbd272000bfff1000a4af4200093c00cd293510002e8d2c00c011"+
+  "000000000c00cf8d2d00183c30af18372700f815000000001800cf8de0fe1834"+
+  "2300f815000000005800cf8d030018241400f811020018240600f81104001824"+
+  "1b00f815000000001c0024c50f00001001000524180024c58400d98d0800398f"+
+  "0c0020c73400044611000145000000002520c0010c4e080c7000c58d0c000010"+
+  "00000000140024c5020005248400d98d0800398f0c0020c73400044604000145"+
+  "000000002520c0019c4a080c000000004200093c00cd29350c002b8d2e000c3c"+
+  "bc0c8d8d2568ab01bc0c8dad1000a48f1a11070c000000004200093c00cd2935"+
+  "08002a8d130040111000a48f2e000b3cf0e26b8d7c008d8c0e00ab1500000000"+
+  "80008e8c01000f240a00cf15000000001c0080c4040024c53400044603000045"+
+  "00000000a80161c5180081e4000025c51c0085e42000bfdf0800e0033000bd27"+
+  "c0ffbd273000bfff2000b0ff4200103c50cd1036000004aeffff0224100002ae"+
+  "4400043c22dd080c408484340f004014000000004400043c4084843457000524"+
+  "2530000025380002040008241000092604000a24255800000000a0afa2dc080c"+
+  "00000000020000101000028efeff02243000bfdf2000b0df0800e0034000bd27"+
+  "0800e0030000a4ace0ffbd271000bfff0000a4af4200083c00cd08357400048d"+
+  "0a00801000000000700000ad6ec8080c740000ad12c7080c0000000000000000"+
+  "00000000fbff4014000000000000a48f1000bfdf545f04082000bd27"
 )
 CAVE_VAULT_MARKER = 0x0042B520
 VAULT_MARKER_PATCH_SITE = 0x0022AACC
@@ -1584,6 +1607,22 @@ CAVE_HEAP_ALLOC = 0x0042B610
 # Completes the job of the mission in CALL_A0 with its ending, run through
 # the call slot (build/cave.s skip_job).
 CAVE_SKIP_JOB = 0x0042B828
+# The Hypnosis trap (build/cave.s hypno_*): the vjoy hook that the world
+# loop's per-vjoy fill call is patched to (installed with the cave; every
+# effect is gated by ADDRESSES["hypnosis state"]), the sound-bank loader
+# run through the call slot (bank address in CALL_A0; CALL_RESULT = the
+# bank handle, -1 refused, -2 RPC busy), the voice-handle callback for
+# the driver's looping play, and the hook a call in the level sound-bank
+# load is patched to (installed with the cave), which unloads a trap bank
+# left loaded before the next level bank loads.
+CAVE_HYPNOSIS_VJOY = 0x0042B884
+CAVE_HYPNOSIS_BANK_LOAD = 0x0042B9E0
+CAVE_HYPNOSIS_VOICE_CB = 0x0042BA60
+CAVE_HYPNOSIS_LEVEL_UNLOAD = 0x0042BA68
+HYPNOSIS_SITE = 0x002265E0
+HYPNOSIS_SITE_ORIG = 0x0C07111A      # jal 0x1c4468, the vjoy fill
+HYPNOSIS_BANK_SITE = 0x001FD220
+HYPNOSIS_BANK_SITE_ORIG = 0x0C045F54  # jal 0x117d50
 # damage_info struct; +0x00/+0x04 skeleton, +0x08 entity and +0x0C damage
 # type are patched from the live character at kill time. +0x10 = -2000
 # (lethal), +0x20.. a location/dir, +0x44 = 8.

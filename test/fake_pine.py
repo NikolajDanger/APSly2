@@ -1,10 +1,16 @@
 import struct
+from typing import Callable
 
 from ..data.Constants import (
   ADDRESSES,
   CAVE_HEAP_ALLOC,
   CAVE_HOOK_ORIG,
   CAVE_HOOK_ORIG_WORD,
+  CAVE_PATCH_SLOTS,
+  HYPNOSIS_BANK_SITE,
+  HYPNOSIS_BANK_SITE_ORIG,
+  HYPNOSIS_SITE,
+  HYPNOSIS_SITE_ORIG,
 )
 from ..pcsx2_interface.pine import Pine
 
@@ -23,8 +29,11 @@ class FakePine(Pine):
     self.reads = 0
     self.batches = 0
     self.serve_cave_calls = True
+    self.cave_functions: dict[int, Callable[[list[int]], int]] = {}
     if game_id in ADDRESSES:
       self.poke32(CAVE_HOOK_ORIG, CAVE_HOOK_ORIG_WORD)
+      self.poke32(HYPNOSIS_SITE, HYPNOSIS_SITE_ORIG)
+      self.poke32(HYPNOSIS_BANK_SITE, HYPNOSIS_BANK_SITE_ORIG)
 
   def connect(self) -> None:
     self.connected = True
@@ -92,19 +101,44 @@ class FakePine(Pine):
     self._service_cave_call(address)
 
   def _service_cave_call(self, address: int) -> None:
-    """Models the cave servicing a heap_alloc call the moment its function
-    word is armed, like the game thread would next frame."""
+    """Models the cave servicing a heap_alloc call, or one of the game
+    functions a test registered in `cave_functions`, the moment its
+    function word is armed, like the game thread would next frame."""
     if not self.serve_cave_calls or self.game_id not in ADDRESSES:
       return
     slot = ADDRESSES[self.game_id]["cave call"]
-    if address != slot or self.peek32(slot) != CAVE_HEAP_ALLOC:
+    if address != slot:
       return
-    bottom = ADDRESSES[self.game_id]["heap bottom"]
-    claim = (self.peek32(bottom) + 15) & ~15
-    self.poke32(bottom, claim + self.peek32(slot + 4))
-    self.poke32(slot + 0x14, claim)
+    function = self.peek32(slot)
+    if function == CAVE_HEAP_ALLOC:
+      bottom = ADDRESSES[self.game_id]["heap bottom"]
+      claim = (self.peek32(bottom) + 15) & ~15
+      self.poke32(bottom, claim + self.peek32(slot + 4))
+      result = claim
+    elif function in self.cave_functions:
+      result = self.cave_functions[function](
+        [self.peek32(slot + 4 + 4*i) for i in range(4)]
+      )
+    else:
+      return
+    self.poke32(slot + 0x14, result & 0xFFFFFFFF)
     self.poke32(slot, 0)
     self.poke32(slot + 0x18, self.peek32(slot + 0x18) + 1)
+
+  def service_cave_patches(self) -> list[int]:
+    """Applies and clears every pending patch-slot request, as the cave
+    would next frame; returns the patched addresses."""
+    if self.game_id not in ADDRESSES:
+      return []
+    slots = ADDRESSES[self.game_id]["cave patches"]
+    patched = []
+    for i in range(CAVE_PATCH_SLOTS):
+      address = self.peek32(slots + 8*i)
+      if address:
+        self.poke32(address, self.peek32(slots + 8*i + 4))
+        self.poke32(slots + 8*i, 0)
+        patched.append(address)
+    return patched
 
   def read_int8(self, address: int) -> int:
     self.reads += 1

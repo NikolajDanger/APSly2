@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Optional
 from dataclasses import dataclass, field
 from time import time
 from random import choice, randint
-from math import ceil
+from math import ceil, inf
 
 from NetUtils import ClientStatus
 
@@ -1246,8 +1246,12 @@ def activate_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
     return
 
   # Timed traps: (re)start the timer. The per-tick effect is applied in
-  # handle_traps, since map reloads reset the underlying memory.
+  # handle_traps, since map reloads reset the underlying memory. The
+  # hypnosis waits for a state it can take hold in before its timer starts.
   duration = ctx.slot_data["trap_duration"][trap.key]
+  if trap is Items.Trap.HYPNOSIS and trap not in ctx.active_traps:
+    ctx.active_traps[trap] = inf
+    return
   ctx.active_traps[trap] = time() + duration
   if trap is Items.Trap.NOISE:
     ctx.game_interface.alert_guards()
@@ -1279,11 +1283,28 @@ def apply_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
     ctx.game_interface.set_clock_speed(1.5)
   elif trap is Items.Trap.ICE:
     ctx.game_interface.set_friction(0.2)
+  elif trap is Items.Trap.HYPNOSIS:
+    apply_hypnosis(ctx)
   elif trap in TRAP_SOUNDS and not ctx.game_interface.sound_playing():
     # A map reload clears the cave's request; re-arm without resetting the
     # rhythm of a sound that is still going. Two sound traps share the one
     # slot, so the other takes over once the newer one ends.
     ctx.game_interface.play_sound(*TRAP_SOUNDS[trap])
+
+def apply_hypnosis(ctx: 'Sly2Context') -> None:
+  """Keeps the hypnosis on while the player is on foot as a character,
+  suspending it elsewhere (the safehouse, vehicles); the timer starts the
+  first time it takes hold"""
+  if ctx.slot_data is None:
+    return
+  game = ctx.game_interface
+  if not game.hypnosis_ready():
+    game.end_hypnosis()
+    return
+  if game.apply_hypnosis() and ctx.active_traps[Items.Trap.HYPNOSIS] == inf:
+    ctx.active_traps[Items.Trap.HYPNOSIS] = (
+      time() + ctx.slot_data["trap_duration"][Items.Trap.HYPNOSIS.key]
+    )
 
 def end_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
   """Restores default state when a timed trap expires"""
@@ -1291,6 +1312,8 @@ def end_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
     ctx.game_interface.set_clock_speed(1.0)
   elif trap is Items.Trap.ICE:
     ctx.game_interface.set_friction(1.5)
+  elif trap is Items.Trap.HYPNOSIS:
+    ctx.game_interface.end_hypnosis()
   elif trap in TRAP_SOUNDS:
     if trap is Items.Trap.NOISE:
       ctx.game_interface.release_guards()
@@ -1309,6 +1332,7 @@ def reset_traps(ctx: 'Sly2Context') -> None:
   ctx.game_interface.set_friction(1.5)
   ctx.game_interface.release_guards()
   ctx.game_interface.stop_sound()
+  ctx.game_interface.reset_hypnosis()
 
 def track_loot(ctx: 'Sly2Context') -> int:
   """Add loot stock rises to the saved lifetime total and collected mask,

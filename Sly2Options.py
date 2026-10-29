@@ -515,6 +515,8 @@ class TrapWeights(OptionCounter):
   - Noise Trap: sounds an alarm and alerts nearby guards.
   - Debt Trap: takes a percentage of your coins (see Debt Trap Percentage).
   - Bottle Sound Trap: plays the clink of a nearby bottle that isn't there.
+  - Hypnosis Trap: hypnotizes the current character like the Contessa
+    does.
   """
 
   display_name = "Trap Weights"

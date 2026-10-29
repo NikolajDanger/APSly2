@@ -9,8 +9,18 @@ from typing import Callable
 
 from NetUtils import NetworkItem
 
-from ..data.Constants import ALARM_INTERVAL, ALARM_SOUND_ID
+from ..data.Constants import (
+  ALARM_INTERVAL,
+  ALARM_SOUND_ID,
+  CAVE_HYPNOSIS_VJOY,
+  HYPNOSIS_SITE,
+)
 from ..data.Items import Trap, item_dict
+from ..HypnosisInstall import (
+  DRAW_IN_FRONT, OVERLAY_OBJECT_ID, PAD_MASK, STATE_MASK, STATE_OVERLAY,
+  STATE_PACE_ON, STATE_VOICE
+)
+from ..LootInstall import HIDDEN_FLAG
 from ..Sly2Client import _handle_game_ready
 from .harness import POLL_INTERVAL, E2ETestBase
 from .tick_base import TickTestBase
@@ -131,6 +141,79 @@ class TestTraps(E2ETestBase):
     self.assertEqual(self.pine.read_int32(coins), 0)
 
 
+class TestHypnosis(E2ETestBase):
+  """The Hypnosis trap built in the Paris hub: the cave's vjoy hook,
+  the overlay stepped by the cave, the walk, eyes and sound, and the
+  restore"""
+  state = "ep1_hub"
+  episode = 1
+  map_id = 2
+
+  def setUp(self) -> None:
+    super().setUp()
+    self.mutated = True
+
+  def tearDown(self) -> None:
+    if self.mutated:
+      self.reload()
+
+  def overlay_state(self) -> int:
+    obj = self.interface.hypnosis_installer.overlay
+    assert obj is not None
+    return self.pine.read_int32(obj + 0x58)
+
+  def test_on_and_off(self) -> None:
+    self.interface.install_cave()
+    hook = 0x0C000000 | (CAVE_HYPNOSIS_VJOY >> 2)
+    self.assertTrue(
+      wait_for(lambda: self.pine.read_int32(HYPNOSIS_SITE) == hook, 2.0),
+      "the vjoy fill was not hooked"
+    )
+    self.interface.clear_cache()
+    entity = self.interface.get_active_character()
+    installer = self.interface.hypnosis_installer
+    self.assertTrue(self.interface.apply_hypnosis())
+    obj = installer.overlay
+    assert obj is not None
+    self.assertEqual(self.pine.read_int32(obj + 0xC), 0x2DAF30)
+    self.assertEqual(self.pine.read_int32(obj + 0x18), OVERLAY_OBJECT_ID)
+    state = self.addr["hypnosis state"]
+    self.assertEqual(self.pine.read_int32(state + STATE_PACE_ON), 1)
+    self.assertEqual(self.pine.read_int32(state + STATE_MASK), PAD_MASK)
+    self.assertEqual(self.pine.read_int32(state + STATE_OVERLAY), obj)
+    self.assertTrue(
+      wait_for(lambda: self.overlay_state() == 2, 2.0),
+      "the cave never moved the overlay on to its loop"
+    )
+    # The loop is restarted before its last key, never left
+    time.sleep(2.5)
+    self.assertEqual(self.overlay_state(), 2)
+    self.assertNotEqual(self.pine.read_int32(state + STATE_VOICE), 0)
+    character = installer.active
+    assert character is not None
+    for slot, _, new in character.swaps:
+      self.assertEqual(self.pine.read_int32(slot), new)
+    self.assertEqual(len(character.eyes), 2)
+    for entry in character.eyes:
+      self.assertEqual(self.pine.read_int32(entry + 0xC) & HIDDEN_FLAG, 0)
+    self.assertTrue(self.pine.read_int32(entity + 0xD4) & DRAW_IN_FRONT)
+    self.assertGreaterEqual(len(character.front), 1)
+
+    self.interface.end_hypnosis()
+    self.assertTrue(
+      wait_for(lambda: self.overlay_state() == 1, 2.0),
+      "the cave never moved the overlay back to idle"
+    )
+    self.assertEqual(self.pine.read_int32(state + STATE_PACE_ON), 0)
+    self.assertEqual(self.pine.read_int32(state + STATE_MASK), 0)
+    self.assertEqual(self.pine.read_int32(state + STATE_VOICE), 0)
+    for slot, old, _ in character.swaps:
+      self.assertEqual(self.pine.read_int32(slot), old)
+    for entry in character.eyes:
+      self.assertTrue(self.pine.read_int32(entry + 0xC) & HIDDEN_FLAG)
+    self.assertFalse(self.pine.read_int32(entity + 0xD4) & DRAW_IN_FRONT)
+
+
 class TestTrapTick(TickTestBase):
   """Traps received after connecting fire, re-apply and expire"""
 
@@ -181,6 +264,30 @@ class TestTrapTick(TickTestBase):
     self.assertEqual(self.read_float(addresses["friction"]), DEFAULT_FRICTION)
     self.interface.clear_cache()
     self.assertFalse(self.interface.sound_playing())
+
+  async def test_hypnosis_trap(self) -> None:
+    await self.run_ticks()
+    self.ctx.items_received.append(
+      NetworkItem(item_dict[Trap.HYPNOSIS.item_name].code, -1, 1)
+    )
+    await self.tick()
+    await self.tick()
+    expiry = self.ctx.active_traps[Trap.HYPNOSIS]
+    self.assertLess(expiry, time.time() + 20)
+    installer = self.interface.hypnosis_installer
+    self.assertIsNotNone(installer.active)
+    obj = installer.overlay
+    assert obj is not None
+    self.assertTrue(
+      wait_for(lambda: self.pine.read_int32(obj + 0x58) == 2, 2.0)
+    )
+    self.ctx.active_traps[Trap.HYPNOSIS] = time.time() - 1
+    await self.tick()
+    self.assertEqual(self.ctx.active_traps, {})
+    self.assertIsNone(installer.active)
+    self.assertTrue(
+      wait_for(lambda: self.pine.read_int32(obj + 0x58) == 1, 2.0)
+    )
 
   async def test_debt_trap(self) -> None:
     self.ctx.ring_link_enabled = True

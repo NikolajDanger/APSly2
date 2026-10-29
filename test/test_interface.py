@@ -10,7 +10,12 @@ from ..data.Constants import (
   CAVE_HOOK_ENTRY,
   CAVE_HOOK_ORIG,
   CAVE_HOOK_ORIG_WORD,
+  CAVE_HYPNOSIS_LEVEL_UNLOAD,
+  CAVE_HYPNOSIS_VJOY,
   CAVE_VAULT_MARKER,
+  HYPNOSIS_BANK_SITE,
+  HYPNOSIS_SITE,
+  HYPNOSIS_SITE_ORIG,
   COIN_POP_INTERVAL,
   LOOT,
   LOOT_IDS,
@@ -288,9 +293,36 @@ class TestCave(InterfaceTestBase):
     )
     self.assertTrue(self.interface.cave_live())
 
-  def test_install_is_idempotent(self) -> None:
+  def test_install_hooks_vjoy_fill_and_clears_hypnosis(self) -> None:
+    state = self.addr["hypnosis state"]
+    self.pine.poke32(state + 0x8, 1)
+    self.pine.poke32(state + 0xC, 0xFF)
+    self.pine.poke32(state + 0x10, 0x1234560)
+    self.pine.poke32(state + 0x74, 0x1CBD00)
+    self.install_cave()
+    self.assertEqual(
+      self.pine.peek32(HYPNOSIS_SITE), 0x0C000000 | (CAVE_HYPNOSIS_VJOY >> 2)
+    )
+    self.assertEqual(
+      self.pine.peek32(HYPNOSIS_BANK_SITE),
+      0x0C000000 | (CAVE_HYPNOSIS_LEVEL_UNLOAD >> 2)
+    )
+    self.assertEqual(self.pine.peek_bytes(state, 0x20), bytes(0x20))
+    # A bank a stopped client left loaded stays known, so it is unloaded
+    self.assertEqual(self.pine.peek32(state + 0x74), 0x1CBD00)
+    self.assertEqual(self.interface.refused_patches, set())
+
+  def test_install_leaves_unknown_vjoy_site_alone(self) -> None:
     self._prime_hook()
-    self.interface.install_cave()
+    self.pine.poke32(HYPNOSIS_SITE, 0x12345678)
+    with self.assertLogs("Sly2Test", "WARNING"):
+      self.interface.install_cave()
+    self.assertEqual(self.pine.peek32(HYPNOSIS_SITE), 0x12345678)
+    self.assertIn(HYPNOSIS_SITE, self.interface.refused_patches)
+    self.assertNotEqual(HYPNOSIS_SITE_ORIG, 0x12345678)
+
+  def test_install_is_idempotent(self) -> None:
+    self.install_cave()
     self.pine.clear_writes()
     self.interface.install_cave()
     self.assertEqual(self.pine.writes, [])
@@ -302,9 +334,10 @@ class TestCave(InterfaceTestBase):
     self.interface.install_cave()
     self.assertFalse(self.pine.written(self.addr["cave"]))
     self.assertTrue(self.interface.cave_live())
-    self.assertEqual(self.pine.writes[-1], (
-      "bw32", self.addr["cave hook"], CAVE_HOOK_ENTRY.to_bytes(4, "little")
-    ))
+    self.assertIn(
+      ("bw32", self.addr["cave hook"], CAVE_HOOK_ENTRY.to_bytes(4, "little")),
+      self.pine.writes
+    )
 
   def test_install_resets_menu_icon_arm_state(self) -> None:
     # install_cave zeroes the cave's armed flag; if the installer's flags
@@ -339,8 +372,7 @@ class TestCave(InterfaceTestBase):
     self.assertFalse(self.pine.written(GLYPH_TABLE_ALT))
 
   def test_code_patch_goes_through_cave(self) -> None:
-    self._prime_hook()
-    self.interface.install_cave()
+    self.install_cave()
     self.pine.clear_writes()
     code, data = 0x200000, 0x300000
     self.pine.poke32(code, 0xAA)
@@ -467,8 +499,7 @@ class TestCave(InterfaceTestBase):
 
 class TestVaultMarker(InterfaceTestBase):
   def _install(self) -> None:
-    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG)
-    self.interface.install_cave()
+    self.install_cave()
 
   def test_install_writes_vault_table(self) -> None:
     self._install()
@@ -505,8 +536,7 @@ class TestVaultMarker(InterfaceTestBase):
 
 class TestThiefNetColors(InterfaceTestBase):
   def _install(self) -> None:
-    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG)
-    self.interface.install_cave()
+    self.install_cave()
     self.pine.poke32(THIEFNET_COLORS_SITE, THIEFNET_COLORS_ORIG)
     self.interface.clear_cache()
     self.pine.clear_writes()
@@ -589,8 +619,7 @@ class TestThiefNetColors(InterfaceTestBase):
 
 class TestThiefNetCostLayout(InterfaceTestBase):
   def _install(self) -> None:
-    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG)
-    self.interface.install_cave()
+    self.install_cave()
     self.pine.poke32(THIEFNET_COLORS_SITE, THIEFNET_COLORS_ORIG)
     self.interface.clear_cache()
     self.pine.clear_writes()
@@ -1052,6 +1081,12 @@ class TestCharacter(InterfaceTestBase):
     self.interface.set_current_gadget_power(0)
     self.assertEqual(self.pine.peek32(self.pine.peek32(active + 0xe00)), 1)
     self.assertEqual(self.pine.peek32(self.pine.peek32(active + 0x12fc)), 0)
+
+  def test_gadget_power_skips_vehicles(self) -> None:
+    active = set_active_character(self.pine, self.addr)
+    self.pine.poke32(active + 0x12fc, 0x140005c4)
+    self.interface.set_current_gadget_power(0)
+    self.assertEqual(self.pine.peek32(active + 0x12fc), 0x140005c4)
 
   def test_damage_type(self) -> None:
     self.assertEqual(self.interface.get_damage_type(), 0)

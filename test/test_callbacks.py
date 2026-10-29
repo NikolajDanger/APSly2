@@ -2,6 +2,7 @@ import asyncio
 import json
 import unittest
 from types import SimpleNamespace
+from math import inf
 from unittest.mock import patch
 
 from NetUtils import ClientStatus, NetworkItem
@@ -349,6 +350,51 @@ class TestHandleReceived(ClientTestBase):
     with patch.object(Sly2Callbacks, "time", return_value=1000.0):
       await handle_received(self.ctx, False)
     self.assertIn(Trap.ICE, self.ctx.active_traps)
+
+
+class TestHypnosisTrap(ClientTestBase):
+  async def test_waits_for_a_character_then_times(self) -> None:
+    game = self.ctx.game_interface
+    self.give(Trap.HYPNOSIS.item_name)
+    with patch.object(Sly2Callbacks, "time", return_value=1000.0):
+      await handle_received(self.ctx, False)
+    self.assertEqual(self.ctx.active_traps, {Trap.HYPNOSIS: inf})
+
+    with (
+      patch.object(game, "hypnosis_ready", return_value=False),
+      patch.object(game, "end_hypnosis") as end,
+      patch.object(Sly2Callbacks, "time", return_value=1001.0)
+    ):
+      handle_traps(self.ctx)
+    end.assert_called_once()
+    self.assertEqual(self.ctx.active_traps, {Trap.HYPNOSIS: inf})
+
+    with (
+      patch.object(game, "hypnosis_ready", return_value=True),
+      patch.object(game, "apply_hypnosis", return_value=True) as apply,
+      patch.object(Sly2Callbacks, "time", return_value=1002.0)
+    ):
+      handle_traps(self.ctx)
+    apply.assert_called_once()
+    self.assertEqual(self.ctx.active_traps, {Trap.HYPNOSIS: 1017.0})
+
+    self.give(Trap.HYPNOSIS.item_name)
+    with patch.object(Sly2Callbacks, "time", return_value=1010.0):
+      await handle_received(self.ctx, False)
+    self.assertEqual(self.ctx.active_traps, {Trap.HYPNOSIS: 1025.0})
+
+    with (
+      patch.object(game, "end_hypnosis") as end,
+      patch.object(Sly2Callbacks, "time", return_value=1026.0)
+    ):
+      handle_traps(self.ctx)
+    end.assert_called_once()
+    self.assertEqual(self.ctx.active_traps, {})
+
+  def test_reset_traps_cleans_a_stranded_hypnosis(self) -> None:
+    with patch.object(self.ctx.game_interface, "reset_hypnosis") as reset:
+      reset_traps(self.ctx)
+    reset.assert_called_once()
 
 
 class TestHandleChecks(ClientTestBase):

@@ -9,6 +9,7 @@ import time
 from typing import Callable
 
 from ..data.Constants import (
+  CAVE_PATCH_SLOTS,
   GLYPH_SET_PTR,
   MENU_ICON_CAVE,
   MENU_ICON_CHARS,
@@ -33,6 +34,12 @@ class TestMenuIcons(E2ETestBase):
     super().setUp()
     self.interface.install_cave()
     self._wait(self.interface.cave_live)
+    # The chooser's three code patches only all find a cave slot once the
+    # cave has applied its own.
+    slots = self.interface.addresses["cave patches"]
+    self.assertTrue(self._wait(lambda: not any(
+      self.pine.read_int32(slots + 8*i) for i in range(CAVE_PATCH_SLOTS)
+    )))
     installer = self.interface.menu_icon_installer
     self.interface.install_menu_icons()
     self.assertTrue(self._wait(installer.built))

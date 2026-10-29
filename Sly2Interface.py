@@ -14,6 +14,7 @@ import traceback
 from .pcsx2_interface.pine import (
   Pine, PineConnectionError, DuplicateConnectionError
 )
+from .HypnosisInstall import HypnosisInstaller
 from .LootInstall import LootInstaller
 from .MenuIcons import MenuIconInstaller
 from .data.Constants import (
@@ -55,6 +56,12 @@ from .data.Constants import (
   CAVE_HOOK_ORIG_WORD,
   CAVE_PATCH_SLOTS,
   CAVE_VAULT_MARKER,
+  CAVE_HYPNOSIS_VJOY,
+  CAVE_HYPNOSIS_LEVEL_UNLOAD,
+  HYPNOSIS_SITE,
+  HYPNOSIS_SITE_ORIG,
+  HYPNOSIS_BANK_SITE,
+  HYPNOSIS_BANK_SITE_ORIG,
   VAULT_MARKER_PATCH_SITE,
   VAULT_MARKER_ORIG,
   CAVE_THIEFNET_COLORS,
@@ -578,6 +585,7 @@ class Sly2Interface(GameInterface):
     self.last_skip = time()
     self.loot_installer = LootInstaller(self, logger)
     self.menu_icon_installer = MenuIconInstaller(self, logger)
+    self.hypnosis_installer = HypnosisInstaller(self, logger)
     self._dag_key: Optional[tuple[int, int]] = None
     self._dag_nodes: list[int] = []
     self._dag_parents: dict[int, list[int]] = {}
@@ -1474,6 +1482,25 @@ class Sly2Interface(GameInterface):
   def poll_loot_textures(self) -> bool:
     return self.loot_installer.poll()
 
+  def hypnosis_ready(self) -> bool:
+    """Whether the player is on foot as Sly, Bentley or Murray, so the
+    hypnosis can take hold"""
+    entity = self._read32(self.addresses["active character pointer"])
+    return self.hypnosis_installer.character_of(entity) is not None
+
+  def apply_hypnosis(self) -> bool:
+    """Puts the hypnosis on the current character; True once it is on"""
+    entity = self._read32(self.addresses["active character pointer"])
+    return self.hypnosis_installer.apply(entity)
+
+  def end_hypnosis(self) -> None:
+    self.hypnosis_installer.remove()
+
+  def reset_hypnosis(self) -> None:
+    """Undoes a stranded hypnosis on the current character"""
+    entity = self._read32(self.addresses["active character pointer"])
+    self.hypnosis_installer.clean(entity)
+
   def install_menu_icons(self) -> None:
     # Needs the cave for the chooser patch, and ThiefNet open for the glyph
     # set (reshaping it otherwise crashes the game). The build writes only
@@ -1600,9 +1627,12 @@ class Sly2Interface(GameInterface):
       self._write32(self.addresses[name], 0)
     self.loot_installer.reset()
     self._write32(self.addresses["coin interval"], COIN_POP_INTERVAL)
-    self._write_bytes(
-      self.addresses["cave patches"], bytes(8 * CAVE_PATCH_SLOTS)
-    )
+    # Only the address words arm a slot; the cave leaves the value words
+    # behind once it has applied them.
+    self._batch_write32([
+      (self.addresses["cave patches"] + 8*i, 0)
+      for i in range(CAVE_PATCH_SLOTS)
+    ])
     self._write_bytes(
       self.addresses["vault marker table"],
       b"".join(a.to_bytes(4, "little") for a in self.addresses["vaults"])
@@ -1618,8 +1648,18 @@ class Sly2Interface(GameInterface):
         self._write32(GLYPH_TABLE_ALT, base)
     self._write_bytes(MENU_ICON_CAVE, bytes(16))
     self.menu_icon_installer.reset()
+    self._write_bytes(self.addresses["hypnosis state"], bytes(0x20))
+    self.hypnosis_installer.reset()
     self.safe_patch(
       self.addresses["cave hook"], CAVE_HOOK_ENTRY, CAVE_HOOK_ORIG
+    )
+    self.safe_patch(
+      HYPNOSIS_SITE, 0x0C000000 | (CAVE_HYPNOSIS_VJOY >> 2),
+      HYPNOSIS_SITE_ORIG
+    )
+    self.safe_patch(
+      HYPNOSIS_BANK_SITE, 0x0C000000 | (CAVE_HYPNOSIS_LEVEL_UNLOAD >> 2),
+      HYPNOSIS_BANK_SITE_ORIG
     )
 
   def cave_live(self) -> bool:
@@ -1811,10 +1851,17 @@ class Sly2Interface(GameInterface):
     if active_character == 0:
       return
 
+    # Vehicles have no gadget power; their +0x12fc is not a pointer.
     gadget_power = self._read32(active_character + 0x12fc)
-    if gadget_power != 0:
-      self._write32(gadget_power, value)
-      self.logger.debug(f"New gadget power value: {self._read32(gadget_power)}")
+    if not in_ee_ram(gadget_power):
+      self.logger.debug(
+        f"Not setting gadget power to {value}: character "
+        f"{active_character:#010x} has no gadget power pointer "
+        f"({gadget_power:#010x})"
+      )
+      return
+    self._write32(gadget_power, value)
+    self.logger.debug(f"New gadget power value: {self._read32(gadget_power)}")
 
   def set_clock_speed(self, speed: float) -> None:
     # The game zeroes the clock while it scripts a sequence (a pickpocket

@@ -9,6 +9,7 @@ from NetUtils import NetworkItem, NetworkPlayer, NetworkSlot, SlotType
 from test.general import setup_multiworld
 
 from .. import Sly2World
+from ..data.Constants import CAVE_HOOK_ORIG, CAVE_PATCH_SLOTS
 from ..data.Items import item_dict
 from ..data.Locations import location_dict
 from ..Sly2Client import Sly2Context
@@ -152,6 +153,19 @@ class InterfaceTestBase(unittest.TestCase):
     self.addr = self.interface.addresses
     self.pine.poke_float(self.addr["clock speed"], 1.0)
     self.pine.clear_counts()
+
+  def install_cave(self) -> None:
+    """Installs the cave with its hook site primed, then has the fake game
+    service the install's own patch requests as the cave would next frame"""
+    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG)
+    self.interface.install_cave()
+    patched = self.pine.service_cave_patches()
+    slots = self.addr["cave patches"]
+    self.interface.invalidate(slots, 8 * CAVE_PATCH_SLOTS)
+    self.interface.prefetch(
+      [(4, address) for address in patched] +
+      [(4, slots + 4*i) for i in range(2 * CAVE_PATCH_SLOTS)]
+    )
 
 
 class RecordingContext(Sly2Context):

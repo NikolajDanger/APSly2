@@ -2,7 +2,6 @@ import struct
 import unittest
 
 from ..data.Constants import (
-  CAVE_HOOK_ORIG,
   GLYPH_SET_PTR,
   MENU_ICON_CAVE,
   MENU_ICON_CHARS,
@@ -54,8 +53,7 @@ class MenuIconTestBase(InterfaceTestBase):
     return self.interface.menu_icon_installer
 
   def _install_cave(self) -> None:
-    self.pine.poke32(self.addr["cave hook"], CAVE_HOOK_ORIG)
-    self.interface.install_cave()
+    self.install_cave()
 
   def _prime_glyphs(self) -> None:
     """Writing a small glyph set to memory for testing."""
