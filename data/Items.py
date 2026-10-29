@@ -195,6 +195,7 @@ item_groups.update({
   "Episodes":          item_groups[ItemCategory.EPISODE],
   "Gadgets":           item_groups[ItemCategory.POWER_UP],
   "Clockwerk Parts":   item_groups[ItemCategory.CLOCKWERK_PART],
+  "Traps":             item_groups[ItemCategory.TRAP],
   "Sly's Gadgets":     {name for name, _ in sly_powerups},
   "Bentley's Gadgets": {name for name, _ in bentley_powerups},
   "Murray's Gadgets":  {name for name, _ in murray_powerups},
