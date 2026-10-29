@@ -626,7 +626,9 @@ rg_next:
 # so a scroll moves the layout with the cost. The rows come from the menu's
 # row array, as in mi_colors. The scroll hook (thiefnet_colors) runs the
 # same pass, since this per-frame one runs before the scroll in its frame
-# and would leave one frame drawn with the previous rows' layouts. The box width lives in each cell's draw item
+# and would leave one frame drawn with the previous rows' layouts. The sell
+# page's price cells are drawn through the same two templates, so that page
+# always gets the vanilla layout. The box width lives in each cell's draw item
 # (vanilla glyph table, and its relocated copy once the menu icons are
 # wired); scale and x live in two template transforms the game copies into a
 # live transform every frame. Draw items and templates are built together on
@@ -669,6 +671,9 @@ tc_loop:
 	bne   $at, $t8, tc_next     # not built yet
 	nop
 	lw    $t2, 0($t1)           # the row's item entry
+	lui   $t3, 0x003e
+	lw    $t3, -0x5e70($t3)     # the page shown (0x3DA190): 0 buy, 1 sell
+	bne   $t3, $zero, tc_narrow # sell: rows are loot, prices fit
 	sltiu $at, $t2, 0x2b        # the item table's size; past the end: -1
 	beq   $at, $zero, tc_narrow
 	sll   $t2, $t2, 5
