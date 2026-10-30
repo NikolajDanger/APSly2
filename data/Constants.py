@@ -1424,12 +1424,12 @@ STALE_JOB_TRIGGERS: dict[int, list[tuple[int, int]]] = {
   7: [(40, 42)],
 }
 
-# Special jobs. Keyed by (episode, first node)
+# Special jobs. Keyed by (episode, first node).
 JOB_SKIP_STEPS: dict[tuple[int, int], list[tuple[str, int]]] = {
   (1, 83): [("skip", 83), ("skip", 94)],
   (2, 37): [("skip", 36), ("skip", 37)],
   (2, 65): [("skip", 65), ("skip", 87), ("skip", 90)],
-  (7, 62): [("go", 62), ("skip", 62)],
+  (7, 62): [("go", 62), ("skip", 62), ("reload", 62)],
   (8, 1): [("skip", 1), ("go", 23)],
   (8, 86): [("skip", 86), ("skip", 89), ("end", 98)],
 }

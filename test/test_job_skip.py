@@ -30,6 +30,7 @@ SCREEN = 0x0190_0000
 SATELLITE = "The Black Chateau - Satellite Sabotage"
 THUNDER_BEAK = "The Black Chateau - Operation: Thunder Beak"
 FINALE = "Anatomy for Disaster - Carmelita's Gunner/Defeat Clock-la"
+OLD_GRIZZLE_FACE = "Menace from the North, Eh! - Old Grizzle Face"
 
 
 class JobSkipTestBase(ClientTestBase):
@@ -205,6 +206,25 @@ class TestEpisode8Steps(JobSkipTestBase):
     self.assertEqual(
       pending_skip_steps(self.ctx, FINALE), [("skip", 89), ("end", 98)]
     )
+
+
+class TestEpisode7Steps(JobSkipTestBase):
+  async def asyncSetUp(self) -> None:
+    await super().asyncSetUp()
+    self.enter(7, 32)
+
+  async def test_reloads_the_hub_once_the_job_is_done(self) -> None:
+    set_job_status(self.pine, 62, 3)
+    self.ctx.job_skip = JobSkip(OLD_GRIZZLE_FACE, 7, [("reload", 62)])
+    self.tick()
+    self.assertEqual(self.pine.peek32(self.addr["reload"]), 1)
+    self.assertEqual(self.ctx.job_skip.steps, [])
+
+  async def test_no_reload_while_the_job_runs(self) -> None:
+    set_job_status(self.pine, 62, 2)
+    self.ctx.job_skip = JobSkip(OLD_GRIZZLE_FACE, 7, [("reload", 62)])
+    self.tick()
+    self.assertEqual(self.pine.peek32(self.addr["reload"]), 0)
 
 
 class TestSkipCommand(JobSkipTestBase):

@@ -915,11 +915,16 @@ def run_job_skip(ctx: 'Sly2Context', skip: JobSkip) -> None:
     return
   # A later part of an operation may already be running: the game starts
   # some of them by itself once the previous part is done
-  if status == 1 or (kind == "skip" and status == 2):
+  if (
+    status == 1 and kind != "reload" or
+    kind == "skip" and status == 2 or
+    kind == "reload" and status == 3
+  ):
     run = {
       "skip": interface.skip_mission,
       "go": interface.go_to_job,
       "end": interface.fire_ending_trigger,
+      "reload": lambda _: interface.reload_map(),
     }[kind]
     if run(node):
       interface.logger.debug(f"Job skip step: {kind} node {node}")

@@ -893,6 +893,10 @@ class Sly2Interface(GameInterface):
     if job is None:
       return False
     self.logger.info(f"Fixing job {job}")
+    self.reload_map()
+    return True
+
+  def reload_map(self) -> bool:
     self._reload(self._read_bytes(self.addresses["world record"], 0x40))
     return True
 
