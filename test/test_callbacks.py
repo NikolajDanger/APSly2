@@ -1284,14 +1284,20 @@ class TestTraps(ClientTestBase):
 
   async def test_instant_traps(self) -> None:
     activate_trap(self.ctx, Trap.SLY_1)
+    handle_traps(self.ctx)
     self.assertEqual(self.health(), 1)
     activate_trap(self.ctx, Trap.ENERGY_DRAIN)
+    handle_traps(self.ctx)
     self.assertEqual(self.power(), 0)
     self.assertEqual(self.ctx.active_traps, {})
 
   async def test_sly_1_trap_logs_health_next_tick(self) -> None:
     with self.assertLogs("Client.Sly2", "DEBUG") as logs:
       activate_trap(self.ctx, Trap.SLY_1)
+      handle_traps(self.ctx)
+      self.assertFalse(
+        any("Health a tick after" in r for r in logs.output)
+      )
       self.pine.poke32(self.pine.peek32(self.active + 0xe00), 3)
       handle_traps(self.ctx)
     self.assertTrue(any("-> 1" in r for r in logs.output))
@@ -1299,6 +1305,23 @@ class TestTraps(ClientTestBase):
       any("Health a tick after Sly 1 trap: 3" in r for r in logs.output)
     )
     self.assertIsNone(self.ctx.health_trap_check)
+
+  async def test_character_traps_wait_for_active_character(self) -> None:
+    self.pine.poke32(self.addr["active character pointer"], 0)
+    activate_trap(self.ctx, Trap.SLY_1)
+    activate_trap(self.ctx, Trap.ENERGY_DRAIN)
+    handle_traps(self.ctx)
+    handle_traps(self.ctx)
+    self.assertEqual(
+      self.ctx.character_traps, {Trap.SLY_1, Trap.ENERGY_DRAIN}
+    )
+    self.assertNotEqual(self.health(), 1)
+    self.assertNotEqual(self.power(), 0)
+    self.pine.poke32(self.addr["active character pointer"], self.active)
+    handle_traps(self.ctx)
+    self.assertEqual(self.ctx.character_traps, set())
+    self.assertEqual(self.health(), 1)
+    self.assertEqual(self.power(), 0)
 
   async def test_timed_trap_lifecycle(self) -> None:
     clock = self.addr["clock speed"]

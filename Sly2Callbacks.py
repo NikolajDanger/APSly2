@@ -1240,10 +1240,8 @@ def activate_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
   """Fires a trap when its item is received"""
   ctx.game_interface.logger.debug(f"Activating trap: {trap}")
   if trap.duration is None:
-    if trap is Items.Trap.SLY_1:
-      ctx.health_trap_check = ctx.game_interface.set_current_health(1)
-    elif trap is Items.Trap.ENERGY_DRAIN:
-      ctx.game_interface.set_current_gadget_power(0)
+    if trap in (Items.Trap.SLY_1, Items.Trap.ENERGY_DRAIN):
+      ctx.character_traps.add(trap)
     elif trap is Items.Trap.DEBT:
       ctx.pending_debt_traps += 1
     return
@@ -1263,14 +1261,38 @@ def activate_trap(ctx: 'Sly2Context', trap: Items.Trap) -> None:
   if trap in TRAP_SOUNDS:
     ctx.game_interface.play_sound(*TRAP_SOUNDS[trap])
 
+def apply_character_traps(ctx: 'Sly2Context') -> None:
+  """Applies the pending Sly 1 and Energy Drain traps once the active
+  character can take them"""
+  # Recon photos, pickpockets and treasure pickups clear the active
+  # character, and a trap found by one arrives while it is still playing
+  interface = ctx.game_interface
+  for trap in list(ctx.character_traps):
+    if trap is Items.Trap.SLY_1:
+      health_pointer = interface.set_current_health(1)
+      applied = health_pointer is not None
+      if applied:
+        ctx.health_trap_check = health_pointer
+    else:
+      applied = interface.set_current_gadget_power(0)
+    if applied:
+      ctx.character_traps.discard(trap)
+  if not ctx.character_traps:
+    ctx.character_traps_deferred = False
+  elif not ctx.character_traps_deferred:
+    names = ", ".join(trap.item_name for trap in ctx.character_traps)
+    interface.logger.debug(f"Waiting for a character to apply: {names}")
+    ctx.character_traps_deferred = True
+
 def handle_traps(ctx: 'Sly2Context') -> None:
   """Applies active timed traps each tick and expires finished ones"""
-  # The Sly 1 trap intermittently fails to stick; tell a write that never
-  # landed apart from one the game undid
+  # Checked a tick after the Sly 1 trap, to tell a write that never landed
+  # apart from one the game undid
   if ctx.health_trap_check is not None:
     health = ctx.game_interface.read_health(ctx.health_trap_check)
     ctx.game_interface.logger.debug(f"Health a tick after Sly 1 trap: {health}")
     ctx.health_trap_check = None
+  apply_character_traps(ctx)
 
   for trap, expiry in list(ctx.active_traps.items()):
     if time() >= expiry:

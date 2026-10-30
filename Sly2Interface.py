@@ -1822,19 +1822,9 @@ class Sly2Interface(GameInterface):
     written, or None when there was no character or health to set"""
     active_character = self.get_active_character()
     if active_character == 0:
-      pointer = self._read32(self.addresses["active character pointer"])
-      self.logger.debug(
-        f"Not setting health to {value}: no active character "
-        f"(pointer {pointer:#010x})"
-      )
       return None
-
     health_pointer = self._read32(active_character + 0xe00)
     if health_pointer == 0:
-      self.logger.debug(
-        f"Not setting health to {value}: character {active_character:#010x} "
-        "has no health pointer"
-      )
       return None
 
     before = self.read_health(health_pointer)
@@ -1870,23 +1860,22 @@ class Sly2Interface(GameInterface):
       operations.append((sly + 0x1180 + 0xC*slot, gadget))
     self._batch_write32(operations)
 
-  def set_current_gadget_power(self, value: int) -> None:
-    self.logger.debug(f"Setting gadget power to {value}")
+  def set_current_gadget_power(self, value: int) -> bool:
+    """Set the active character's gadget power; False when there was no
+    character or gadget power to set"""
     active_character = self.get_active_character()
     if active_character == 0:
-      return
-
+      return False
     # Vehicles have no gadget power; their +0x12fc is not a pointer.
     gadget_power = self._read32(active_character + 0x12fc)
     if not in_ee_ram(gadget_power):
-      self.logger.debug(
-        f"Not setting gadget power to {value}: character "
-        f"{active_character:#010x} has no gadget power pointer "
-        f"({gadget_power:#010x})"
-      )
-      return
+      return False
     self._write32(gadget_power, value)
-    self.logger.debug(f"New gadget power value: {self._read32(gadget_power)}")
+    self.logger.debug(
+      f"Set gadget power of character {active_character:#010x}: "
+      f"{self._read32(gadget_power)}"
+    )
+    return True
 
   def set_clock_speed(self, speed: float) -> None:
     # The game zeroes the clock while it scripts a sequence (a pickpocket

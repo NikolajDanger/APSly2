@@ -1102,7 +1102,7 @@ class TestCharacter(InterfaceTestBase):
   def test_gadget_power_skips_vehicles(self) -> None:
     active = set_active_character(self.pine, self.addr)
     self.pine.poke32(active + 0x12fc, 0x140005c4)
-    self.interface.set_current_gadget_power(0)
+    self.assertFalse(self.interface.set_current_gadget_power(0))
     self.assertEqual(self.pine.peek32(active + 0x12fc), 0x140005c4)
 
   def test_damage_type(self) -> None:

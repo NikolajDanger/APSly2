@@ -426,6 +426,9 @@ class Sly2Context(CommonContext): # type: ignore[misc]
   last_checked_locations: set[int]  # Track what was already sent
   goal_sent: bool = False
   active_traps: dict[Items.Trap, float]  # Active trap -> time it expires
+  # Instant traps on the active character wait until there is one to hit
+  character_traps: set[Items.Trap]
+  character_traps_deferred: bool = False
   health_trap_check: Optional[int] = None
   job_skip: Optional[JobSkip] = None
   # A job location /skip_job asked to skip, picked up by the next tick
@@ -443,6 +446,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
 
     self.notification_queue = deque(maxlen=200)
     self.active_traps = {}
+    self.character_traps = set()
     self.trap_cursor = 0
     self.trap_baseline_pending = False
     self.tick_stats = []
@@ -501,6 +505,8 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     self.episode_sent = None
     self.guards_despawned_episode = None
     self.active_traps.clear()
+    self.character_traps.clear()
+    self.character_traps_deferred = False
     self.health_trap_check = None
     self.job_skip = None
     self.job_skip_request = None
