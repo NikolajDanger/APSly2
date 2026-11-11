@@ -12,10 +12,12 @@ from ..Sly2Callbacks import (
   activate_trap,
   apply_thiefnet_text,
   boot_from_invalid_episode,
+  JOB_INDICES,
   load_thiefnet_prefs,
   reveal_thiefnet,
   check_clockla,
   check_jobs,
+  check_tasks,
   collect_debt,
   compute_available_episodes,
   dynamic_loot_odds,
@@ -1201,6 +1203,33 @@ class TestSetJobs(ClientTestBase):
     activate, check = self.addr["jobs"][2][3][0]
     self.assertEqual(job_status(self.pine, activate), 1)
     self.assertEqual(job_status(self.pine, check), 0)
+
+
+class TestCheckTasks(ClientTestBase):
+  options = {"tasksanity": True}
+
+  async def asyncSetUp(self) -> None:
+    await super().asyncSetUp()
+    build_dag(self.pine, self.addr)
+
+  async def test_reads_task_nodes(self) -> None:
+    self.enter(3, 12)
+    set_job_status(self.pine, 47, 2)
+    check_tasks(self.ctx)
+    done = self.ctx.tasks_completed[2]
+    self.assertEqual([done[i] for i in (47, 48, 49, 50)], [True] + [False]*3)
+
+  async def test_finished_job_finishes_its_tasks(self) -> None:
+    self.enter(3, 12)
+    location = job_location(
+      EpisodeName.THE_PREDATOR_AWAKENS, "Spice Grinder Destruction"
+    )
+    _, j, k = JOB_INDICES[location]
+    self.ctx.jobs_completed[2][j][k] = True
+    check_tasks(self.ctx)
+    done = self.ctx.tasks_completed[2]
+    self.assertEqual([done[i] for i in (47, 48, 49, 50)], [True]*4)
+    self.assertFalse(done[30])
 
 
 class TestEpisodeHint(ClientTestBase):

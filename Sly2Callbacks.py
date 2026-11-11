@@ -797,6 +797,16 @@ def check_tasks(ctx: 'Sly2Context') -> None:
     return
 
   done = ctx.tasks_completed[episode-1]
+  # Skipping a job can finish it without its task nodes (Spice Grinder
+  # Destruction), and every task is required to finish a job
+  ep_name = episode_name(int(episode))
+  completed = ctx.jobs_completed[episode-1]
+  for job_name, tasks in TASKS.get(ep_name, {}).items():
+    _, j, k = JOB_INDICES[job_location(ep_name, job_name)]
+    if completed[j][k]:
+      for idx, _ in tasks:
+        done[idx] = True
+
   to_check = [i for i, finished in done.items() if not finished]
   if not to_check:
     return
