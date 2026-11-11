@@ -5,9 +5,6 @@ Archipelago-logo packets per theme. These assert the memory reshaping over the
 live game (the ThiefNet is already open in this state, so the icons render
 live); visuals are confirmed by eye."""
 
-import time
-from typing import Callable
-
 from ..data.Constants import (
   CAVE_PATCH_SLOTS,
   GLYPH_SET_PTR,
@@ -54,15 +51,6 @@ class TestMenuIcons(E2ETestBase):
 
   def tearDown(self) -> None:
     self.reload()
-
-  def _wait(self, cond: Callable[[], bool], timeout: float = 6.0) -> bool:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-      self.interface.clear_cache()
-      if cond():
-        return True
-      time.sleep(0.05)
-    return False
 
   def _glyph_set(self) -> int:
     return self.pine.read_int32(GLYPH_SET_PTR)

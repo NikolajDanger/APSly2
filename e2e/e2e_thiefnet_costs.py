@@ -6,7 +6,6 @@ already open, showing items 0, 8 and 16); the look is confirmed by eye."""
 
 import struct
 import time
-from typing import Callable
 
 from ..data.Constants import (
   MENU_ICON_CAVE,
@@ -37,15 +36,6 @@ class TestThiefnetCosts(E2ETestBase):
 
   def tearDown(self) -> None:
     self.reload()
-
-  def _wait(self, cond: Callable[[], bool], timeout: float = 6.0) -> bool:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-      self.interface.clear_cache()
-      if cond():
-        return True
-      time.sleep(0.05)
-    return False
 
   def _float(self, address: int) -> float:
     return struct.unpack("<f", self.pine.read_bytes(address, 4))[0]

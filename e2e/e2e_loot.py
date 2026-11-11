@@ -4,8 +4,6 @@ despawn, and the client's loot tick (tables, odds, prices and a pickpocket
 location check)."""
 
 import struct
-import time
-from typing import Callable
 
 from ..data.Constants import (
   LOOT, LOOT_IDS, LOOT_PRICES, PICKPOCKET_LOOT_TABLE_CHANCES, TREASURE_PRICES
@@ -85,15 +83,6 @@ class TestLoot(LootReads, E2ETestBase):
   def tearDown(self) -> None:
     if self.mutated:
       self.reload()
-
-  def _wait(self, cond: Callable[[], bool], timeout: float = 6.0) -> bool:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-      self.interface.clear_cache()
-      if cond():
-        return True
-      time.sleep(0.05)
-    return False
 
   def test_vanilla_config(self) -> None:
     self.mutated = False

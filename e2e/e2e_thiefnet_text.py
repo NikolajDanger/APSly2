@@ -4,9 +4,6 @@ client-written per-item table, repainting them as the list scrolls. These assert
 the memory reshaping over the live game (the ThiefNet is already open, showing
 three rows here); the colors are confirmed by eye."""
 
-import time
-from typing import Callable
-
 from ..data.Constants import (
   CAVE_THIEFNET_COLORS,
   THIEFNET_NAME_COLOR,
@@ -35,15 +32,6 @@ class TestThiefnetText(E2ETestBase):
 
   def tearDown(self) -> None:
     self.reload()
-
-  def _wait(self, cond: Callable[[], bool], timeout: float = 6.0) -> bool:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-      self.interface.clear_cache()
-      if cond():
-        return True
-      time.sleep(0.05)
-    return False
 
   def test_redirect_through_cave(self) -> None:
     self.interface.set_thiefnet_colors(self.colors, self.colors[:6])

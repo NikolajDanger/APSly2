@@ -21,7 +21,7 @@ import time
 import unittest
 from logging import getLogger
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 from ..data.Constants import CAVE_HOOK_ORIG, CAVE_HOOK_ORIG_WORD
 from ..pcsx2_interface.pine import DEFAULT_SLOT, Pine, PineConnectionError
@@ -360,6 +360,18 @@ class E2ETestBase(unittest.TestCase):
   def setUp(self) -> None:
     self.interface.clear_cache()
     self.addr = self.interface.addresses
+
+  def _wait(self, cond: Callable[[], bool], timeout: float = 6.0) -> bool:
+    """Poll `cond` until it holds, flushing deferred patches as a client
+    tick would."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+      self.interface.clear_cache()
+      self.interface.flush_patches()
+      if cond():
+        return True
+      time.sleep(0.05)
+    return False
 
 
 if TYPE_CHECKING:

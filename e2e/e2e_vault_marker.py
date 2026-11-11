@@ -4,9 +4,6 @@ vault instead of the gadget. The marker only renders after the vault-reveal
 job, so these test the mechanism (pointer table, redirected call site, cave
 function returning the current vault flag), not the visuals."""
 
-import time
-from typing import Callable
-
 from ..data.Constants import (
   CAVE_VAULT_MARKER, VAULT_MARKER_ORIG, VAULT_MARKER_PATCH_SITE
 )
@@ -29,15 +26,6 @@ class TestVaultMarker(E2ETestBase):
 
   def tearDown(self) -> None:
     self.reload()
-
-  def _wait(self, cond: Callable[[], bool], timeout: float = 6.0) -> bool:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-      self.interface.clear_cache()
-      if cond():
-        return True
-      time.sleep(0.05)
-    return False
 
   def _site(self) -> int:
     return self.pine.read_int32(VAULT_MARKER_PATCH_SITE)
