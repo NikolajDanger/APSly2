@@ -440,7 +440,7 @@ class Sly2Context(CommonContext): # type: ignore[misc]
     self, server_address: Optional[str], password: Optional[str]
   ) -> None:
     super().__init__(server_address, password)
-    self.version = [1,1,2]
+    self.version = [1,2,0]
     self.game_interface = Sly2Interface(logger)
     self.ring_link_source = int(time() * 1234)
 
